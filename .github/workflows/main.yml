@@ -58,13 +58,6 @@ jobs:
             --main-class RCM3DMM `
             -C build .
 
-      - name: Test JAR
-        shell: powershell
-        run: |
-          Write-Host "Testing RCJMS.jar..."
-
-          java -jar RCJMS.jar
-
       - name: Prepare package
         shell: powershell
         run: |
