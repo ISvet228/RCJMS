@@ -23,16 +23,29 @@ jobs:
           java-version: "21"
           architecture: x64
 
-      - name: Compile
+      - name: Clean previous build
+        shell: powershell
+        run: |
+          Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force package -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
+          Remove-Item -Force RCJMS.jar -ErrorAction SilentlyContinue
+
+      - name: Compile Java sources
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force build
 
-          $files = Get-ChildItem -Path src -Filter *.java -Recurse
+          $files = @(Get-ChildItem -Path src -Filter *.java -Recurse)
 
           if ($files.Count -eq 0) {
             Write-Error "No Java source files found in src/"
             exit 1
+          }
+
+          Write-Host "Compiling:"
+          $files | ForEach-Object {
+            Write-Host $_.FullName
           }
 
           javac -encoding UTF-8 -d build $files.FullName
@@ -44,6 +57,13 @@ jobs:
             --file RCJMS.jar `
             --main-class RCM3DMM `
             -C build .
+
+      - name: Test JAR
+        shell: powershell
+        run: |
+          Write-Host "Testing RCJMS.jar..."
+
+          java -jar RCJMS.jar
 
       - name: Prepare package
         shell: powershell
@@ -73,7 +93,15 @@ jobs:
             --win-shortcut `
             --win-per-user-install
 
-      - name: Publish Latest tested Release
+      - name: Remove old Latest tested release
+        shell: powershell
+        run: |
+          gh release delete latest-tested --yes --cleanup-tag 2>$null
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Publish Latest tested
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-tested
