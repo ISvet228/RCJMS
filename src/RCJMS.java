@@ -4,8 +4,8 @@ import java.awt.geom.AffineTransform;
 import java.util.ArrayList;
 import java.util.Random;
 
-public class RCM3DMM extends JFrame {
-    public RCM3DMM() {
+public class RCJMS extends JFrame {
+    public RCJMS() {
         setTitle("Main Menu");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(GamePanel.SCREEN_WIDTH, GamePanel.SCREEN_HEIGHT);
@@ -15,7 +15,7 @@ public class RCM3DMM extends JFrame {
         setVisible(true);
     }
     static void main(String[] args) {
-        SwingUtilities.invokeLater(RCM3DMM::new);
+        SwingUtilities.invokeLater(RCJMS::new);
     }
 }
 class StarPanel extends JPanel {

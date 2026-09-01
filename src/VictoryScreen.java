@@ -40,7 +40,7 @@ class VictoryPanel extends JPanel {
 
         restartButton = new JButton("RESTART");
         restartButton.setFont(new Font("Arial", Font.BOLD, 32));
-        restartButton.addActionListener(e -> { frame.dispose(); new RCM3DMM(); });
+        restartButton.addActionListener(e -> { frame.dispose(); new RCJMS(); });
         add(restartButton);
 
         exitButton = new JButton("EXIT");
