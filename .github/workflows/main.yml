@@ -1,0 +1,76 @@
+name: Build RCJMS
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          architecture: x64
+
+      - name: Compile
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force build
+
+          $files = Get-ChildItem -Path src -Filter *.java -Recurse
+
+          if ($files.Count -eq 0) {
+            Write-Error "No Java source files found in src/"
+            exit 1
+          }
+
+          javac -d build $files.FullName
+
+      - name: Create JAR
+        shell: powershell
+        run: |
+          jar --create `
+            --file RCJMS.jar `
+            --main-class Main `
+            -C build .
+
+      - name: Prepare application files
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force package
+
+          Copy-Item RCJMS.jar package/
+
+          if (Test-Path assets) {
+            Copy-Item assets package/assets -Recurse
+          }
+
+      - name: Create Windows EXE
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force dist
+
+          jpackage `
+            --input package `
+            --name "RCJMS - RayCast Java Labyrinth Simulator" `
+            --main-jar RCJMS.jar `
+            --main-class Main `
+            --type exe `
+            --dest dist `
+            --win-menu `
+            --win-shortcut `
+            --app-version 1.0.0
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: RCJMS-Windows
+          path: dist/*.exe
