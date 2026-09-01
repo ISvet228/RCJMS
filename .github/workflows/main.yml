@@ -13,19 +13,16 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      # Получаем исходники
       - name: Checkout
         uses: actions/checkout@v5
 
-      # Устанавливаем JDK 21
-      - name: Setup Java
+      - name: Setup Java 21
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
           architecture: x64
 
-      # Компиляция всех .java файлов
       - name: Compile
         shell: powershell
         run: |
@@ -38,18 +35,16 @@ jobs:
             exit 1
           }
 
-          javac -d build $files.FullName
+          javac -encoding UTF-8 -d build $files.FullName
 
-      # Создание JAR
       - name: Create JAR
         shell: powershell
         run: |
           jar --create `
             --file RCJMS.jar `
-            --main-class Main `
+            --main-class RCM3DMM `
             -C build .
 
-      # Подготовка папки с приложением и assets
       - name: Prepare package
         shell: powershell
         run: |
@@ -61,7 +56,6 @@ jobs:
             Copy-Item assets package/assets -Recurse
           }
 
-      # Создание Windows EXE с встроенной Java Runtime
       - name: Create EXE
         shell: powershell
         run: |
@@ -71,19 +65,19 @@ jobs:
             --input package `
             --name "RCJMS - RayCast Java Maze Simulator" `
             --main-jar RCJMS.jar `
-            --main-class Main `
+            --main-class RCM3DMM `
             --type exe `
             --dest dist `
+            --app-version "1.0.${{ github.run_number }}" `
             --win-menu `
             --win-shortcut `
-            --app-version 1.0.${{ github.run_number }}
+            --win-per-user-install
 
-      # Обновление релиза Latest tested
       - name: Publish Latest tested Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-tested
-          name: "Latest tested"
+          name: Latest tested
           body: |
             🟢 Latest successfully built version of RCJMS.
 
