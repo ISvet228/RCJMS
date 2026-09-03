@@ -130,9 +130,23 @@ public class GamePanel extends JPanel implements Runnable, KeyListener, MouseMot
             playerY = nextY;
 
         } else {
-            if (map[(int) nextY][(int) nextX] != 1) {
+            if (map[(int)Math.floor(playerY)][(int)Math.floor(nextX)] != 1) {
                 playerX = nextX;
+            } else {
+                if (playerX < nextX) {
+                    playerX = Math.ceil(playerX) - 0.0001;
+                } else {
+                    playerX = Math.floor(playerX);
+                }
+            }
+            if (map[(int)Math.floor(nextY)][(int)Math.floor(playerX)] != 1) {
                 playerY = nextY;
+            } else {
+                if (playerY < nextY) {
+                    playerY = Math.ceil(playerY) - 0.0001;
+                } else {
+                    playerY = Math.floor(playerY);
+                }
             }
         }
 
