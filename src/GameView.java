@@ -1,17 +1,16 @@
+import Helpers.MazeGenerator;
+
 import javax.swing.*; //Frame Library
 import java.awt.*; //Graphics Library
 import java.awt.event.*; //Input Library
 import java.awt.image.BufferedImage; //Buffer Library
 import java.awt.image.DataBufferInt;
 
-public class GamePanel extends JPanel implements Runnable, KeyListener, MouseMotionListener {
+public class GameView extends JPanel implements Runnable, KeyListener, MouseMotionListener {
     //region Variables
-    public static final int SCREEN_WIDTH = 960;
-    public static final int SCREEN_HEIGHT = 540;
     public static int MAZE_WIDTH = 51;
     public static int MAZE_HEIGHT = 51;
     public static MazeGenerator.FinishMode MAZE_MODE = MazeGenerator.FinishMode.RANDOM_EDGE;
-    private static JFrame frame;
 
     //region Dependencies
     private MazeGenerator mazeGenerator;
@@ -53,12 +52,11 @@ public class GamePanel extends JPanel implements Runnable, KeyListener, MouseMot
     //endregion
 
     //region Helpers
-    public GamePanel(JFrame frame, int mazeWidth, int mazeHeight, int mazeMode) {
-        GamePanel.frame = frame;
-        setPreferredSize(new Dimension(SCREEN_WIDTH, SCREEN_HEIGHT));
+    public GameView(int mazeWidth, int mazeHeight, int mazeMode) {
+        setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setFocusable(true); requestFocus();
 
-        bufferedImage = new BufferedImage(SCREEN_WIDTH, SCREEN_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        bufferedImage = new BufferedImage(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT, BufferedImage.TYPE_INT_RGB);
         pixels = ((DataBufferInt) bufferedImage.getRaster().getDataBuffer()).getData();
 
         mazeGenerator = new MazeGenerator(MAZE_WIDTH = mazeWidth, MAZE_HEIGHT = mazeHeight);
@@ -156,8 +154,11 @@ public class GamePanel extends JPanel implements Runnable, KeyListener, MouseMot
             playerY = 1.5;
             cameraAngle = 0;
             cameraPitch = 0;
-            frame.dispose();
-            new VictoryScreen(elapsedSeconds);
+            RCJMS.instance.remove(RCJMS.instance.gameView);
+            RCJMS.instance.add(RCJMS.instance.victoryPanel = new VictoryView(elapsedSeconds));
+            RCJMS.instance.setTitle("Victory!");
+            RCJMS.instance.pack();
+            RCJMS.instance.revalidate();
             gameThread.interrupt();
         }
     }
@@ -165,61 +166,140 @@ public class GamePanel extends JPanel implements Runnable, KeyListener, MouseMot
 
     //region Rendering
     private void render() {
-        int ceilingColor = 0x816E1E, floorColor = 0xD3AF63;
-        int horizon = SCREEN_HEIGHT / 2 + (int)(cameraPitch * 220);
+        final int width = RCJMS.SCREEN_WIDTH;
+        final int height = RCJMS.SCREEN_HEIGHT;
 
-        for (int y = 0; y < SCREEN_HEIGHT; y++) {
+        int ceilingColor = 0x816E1E;
+        int floorColor = 0xD3AF63;
+
+        double FOV = Math.PI / 3.0;
+
+        double dirX = Math.cos(cameraAngle);
+        double dirY = Math.sin(cameraAngle);
+
+        double planeLength = Math.tan(FOV / 2.0);
+
+        double planeX = -dirY * planeLength;
+        double planeY =  dirX * planeLength;
+
+        double horizon = height / 2.0 + cameraPitch * height / 2.0;
+
+        for (int y = 0; y < height; y++) {
             boolean isCeiling = y < horizon;
             int baseColor = isCeiling ? ceilingColor : floorColor;
 
             double distanceFromCenter = Math.abs(y - horizon);
-            double distance = (distanceFromCenter / (SCREEN_HEIGHT / 2.0)) * flashlightDistance;
+            double distance = (distanceFromCenter / (height / 2.0)) * flashlightDistance;
+            double brightness = distance / (flashlightDistance * (flashlightDistance * flashlightDistance - 20 * flashlightDistance + 83) / 8.0);
 
-            double brightness = distance / (flashlightDistance *
-                    (flashlightDistance * flashlightDistance - 20 * flashlightDistance + 83) / 8.0); //flashlight 3 multiple by 4, flashlight 5 multiple by 1, flashlight 1 multiple by 8
             brightness = Math.clamp(brightness, 0.05, 1.0);
+
             int shadedColor = applyBrightness(baseColor, brightness);
+            int offset = y * width;
 
-            for (int x = 0; x < SCREEN_WIDTH; x++) {
-                pixels[x + y * SCREEN_WIDTH] = shadedColor;
-            }
+            for (int x = 0; x < width; x++) pixels[offset + x] = shadedColor;
         }
-        for (int x = 0; x < SCREEN_WIDTH; x++) { //RAY RENDER
 
-            double FOV = Math.PI / 3.0;
-            double rayAngle = cameraAngle - FOV / 2 + (x / (double) SCREEN_WIDTH) * FOV;
-            double rayX = playerX, rayY = playerY, step = 0.02, distance = 0;
+        for (int x = 0; x < width; x++) {
+            double cameraX = 2.0 * x / (double) width - 1.0;
+
+            double rayDirX = dirX + planeX * cameraX;
+            double rayDirY = dirY + planeY * cameraX;
+
+            int mapX = (int) playerX;
+            int mapY = (int) playerY;
+
+            double deltaDistX = rayDirX == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / rayDirX);
+            double deltaDistY = rayDirY == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / rayDirY);
+
+            int stepX, stepY;
+
+            double sideDistX, sideDistY;
+
+            if (rayDirX < 0) {
+                stepX = -1;
+                sideDistX = (playerX - mapX) * deltaDistX;
+            } else {
+                stepX = 1;
+                sideDistX = (mapX + 1.0 - playerX) * deltaDistX;
+            }
+
+            if (rayDirY < 0) {
+                stepY = -1;
+                sideDistY = (playerY - mapY) * deltaDistY;
+            } else {
+                stepY = 1;
+                sideDistY = (mapY + 1.0 - playerY) * deltaDistY;
+            }
+
+            boolean hit = false;
+            int side = 0;
             int hitType = 0;
 
-            while (distance < (Math.max(MAZE_WIDTH, MAZE_HEIGHT))) {
-                rayX += Math.cos(rayAngle) * step;
-                rayY += Math.sin(rayAngle) * step;
-                distance += step;
-                if (rayX < 0 || rayY < 0 || rayX >= map[0].length || rayY >= map.length) break;
+            while (!hit) {
+                if (sideDistX < sideDistY) {
+                    sideDistX += deltaDistX;
+                    mapX += stepX;
 
-                hitType = map[(int) rayY][(int) rayX];
-                if (hitType == 1 || hitType == 2) break;
+                    side = 0;
+                } else {
+                    sideDistY += deltaDistY;
+                    mapY += stepY;
+
+                    side = 1;
+                }
+
+                if (mapX < 0 || mapY < 0 || mapX >= map[0].length || mapY >= map.length) break;
+                hitType = map[mapY][mapX];
+
+                if (hitType == 1 || hitType == 2) hit = true;
             }
 
-            double correctedDistance = distance * Math.cos(rayAngle - cameraAngle);
-            correctedDistance = Math.max(correctedDistance, 0.0001);
-            int wallHeight = (int) (SCREEN_HEIGHT  / correctedDistance);
+            if (!hit) continue;
 
-            int start = horizon - wallHeight / (hitType == 2 ? 32 : 2);
-            int end = horizon + wallHeight / 2;
+            double perpendicularDistance;
+            if (side == 0) perpendicularDistance = sideDistX - deltaDistX;
+            else perpendicularDistance = sideDistY - deltaDistY;
+            perpendicularDistance = Math.max(perpendicularDistance, 0.0001);
 
-            if (start < 0) start = 0;
-            if (end >= SCREEN_HEIGHT) end = SCREEN_HEIGHT - 1;
+            int wallHeight = (int) (height / perpendicularDistance);
 
-            int wallColor = hitType == 2 ? 0x33FF66 : 0xECD485;
-            double brightness = 1.0 - (correctedDistance / flashlightDistance);
+            int start, end;
 
+            if (hitType == 2) {
+                start = (int) horizon;
+                end = (int) (horizon + wallHeight / 2.0);
+            } else {
+                start = (int) (horizon - wallHeight / 2.0);
+                end = (int) (horizon + wallHeight / 2.0);
+            }
+
+            int drawStart = Math.max(start, 0);
+            int drawEnd = Math.min(end, height - 1);
+
+            if (drawStart >= drawEnd) continue;
+
+            int wallColor;
+            if (hitType == 2) wallColor = 0x33FF66;
+            else wallColor = 0xECD485;
+
+            double brightness = 1.0 - (perpendicularDistance / flashlightDistance);
             brightness = Math.clamp(brightness, 0.03, 1.0);
+
+            if (side == 1) brightness *= 0.85;
+
             wallColor = applyBrightness(wallColor, brightness);
-            for (int y = start; y < end; y++) pixels[x + y * SCREEN_WIDTH] = wallColor;
+
+            int offset = drawStart * width;
+
+            for (int y = drawStart; y <= drawEnd; y++) {
+                pixels[offset + x] = wallColor;
+                offset += width;
+            }
         }
 
         drawTimer();
+
         if (isDebugMode && !isPaused) drawMiniMap();
         if (isPaused) drawPauseMenu();
     }
@@ -234,8 +314,8 @@ public class GamePanel extends JPanel implements Runnable, KeyListener, MouseMot
                     for (int xx = 0; xx < scale; xx++) {
                         int px = x * scale + xx;
                         int py = y * scale + yy;
-                        if (px >= 0 && py >= 0 && px < SCREEN_WIDTH && py < SCREEN_HEIGHT)
-                            pixels[px + py * SCREEN_WIDTH] = color;
+                        if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT)
+                            pixels[px + py * RCJMS.SCREEN_WIDTH] = color;
                     }
                 }
             }
@@ -247,8 +327,8 @@ public class GamePanel extends JPanel implements Runnable, KeyListener, MouseMot
             for (int xx = -2; xx <= 2; xx++) {
                 int px = playerPixelX + xx;
                 int py = playerPixelY + yy;
-                if (px >= 0 && py >= 0 && px < SCREEN_WIDTH && py < SCREEN_HEIGHT)
-                    pixels[px + py * SCREEN_WIDTH] = 0xFF0000;
+                if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT)
+                    pixels[px + py * RCJMS.SCREEN_WIDTH] = 0xFF0000;
             }
         }
     }
@@ -266,29 +346,29 @@ public class GamePanel extends JPanel implements Runnable, KeyListener, MouseMot
 
         g.setFont(new Font("Consolas", Font.BOLD, 24));
         g.setColor(Color.BLACK);
-        g.drawString(timerText, SCREEN_WIDTH - 156, 34);
+        g.drawString(timerText, RCJMS.SCREEN_WIDTH - 156, 34);
 
         g.setColor(Color.WHITE);
-        g.drawString(timerText, SCREEN_WIDTH - 158, 32);
+        g.drawString(timerText, RCJMS.SCREEN_WIDTH - 158, 32);
         g.dispose();
     }
 
     private void drawPauseMenu() {
         Graphics2D g = bufferedImage.createGraphics();
         g.setColor(new Color(0,0,0,180));
-        g.fillRect(0,0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        g.fillRect(0,0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
 
         g.setColor(Color.WHITE);
         g.setFont(new Font("Arial", Font.BOLD, 42));
-        g.drawString("PAUSED", SCREEN_WIDTH / 2 - 100, SCREEN_HEIGHT / 2 - 20);
+        g.drawString("PAUSED", RCJMS.SCREEN_WIDTH / 2 - 100, RCJMS.SCREEN_HEIGHT / 2 - 20);
 
         g.setFont(new Font("Arial", Font.PLAIN, 20));
-        g.drawString("ESC - Continue", SCREEN_WIDTH / 2 - 90, SCREEN_HEIGHT / 2 + 20);
-        g.drawString("R - Restart", SCREEN_WIDTH / 2 - 90, SCREEN_HEIGHT / 2 + 50);
-        g.drawString("SHIFT - Run", SCREEN_WIDTH / 2 - 90, SCREEN_HEIGHT / 2 + 80);
-        g.drawString("Movement Speed = " + ((shift) ? runSpeed : moveSpeed), SCREEN_WIDTH / 2 - 90, SCREEN_HEIGHT / 2 + 110);
-        g.drawString("Mouse Sensitivity = " + mouseSensitivity, SCREEN_WIDTH / 2 - 90, SCREEN_HEIGHT / 2 + 140);
-        g.drawString("NoColip = " + noClip, SCREEN_WIDTH / 2 - 90, SCREEN_HEIGHT / 2 + 170);
+        g.drawString("ESC - Continue", RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 20);
+        g.drawString("R - Restart", RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 50);
+        g.drawString("SHIFT - Run", RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 80);
+        g.drawString("Movement Speed = " + ((shift) ? runSpeed : moveSpeed), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 110);
+        g.drawString("Mouse Sensitivity = " + mouseSensitivity, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 140);
+        g.drawString("NoColip = " + noClip, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 170);
 
         g.dispose();
     }
@@ -352,8 +432,8 @@ public class GamePanel extends JPanel implements Runnable, KeyListener, MouseMot
         }
 
         Point panelLocation = getLocationOnScreen();
-        int centerX = panelLocation.x + SCREEN_WIDTH / 2;
-        int centerY = panelLocation.y + SCREEN_HEIGHT / 2;
+        int centerX = panelLocation.x + RCJMS.SCREEN_WIDTH / 2;
+        int centerY = panelLocation.y + RCJMS.SCREEN_HEIGHT / 2;
         int dx = e.getXOnScreen() - centerX;
         int dy = e.getYOnScreen() - centerY;
 
