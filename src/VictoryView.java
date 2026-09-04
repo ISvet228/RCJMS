@@ -4,7 +4,7 @@ import java.awt.geom.AffineTransform;
 import java.util.ArrayList;
 import java.util.Random;
 
-class VictoryView extends JPanel {
+public class VictoryView extends JPanel {
     private final ArrayList<Firework> fireworks = new ArrayList<>();
     private final Random random = new Random();
     private final AnimatedCongrats title;
@@ -33,7 +33,7 @@ class VictoryView extends JPanel {
         restartButton.addActionListener(e -> {
             MainMenuView panel = RCJMS.instance.mainMenuView = new MainMenuView();
             RCJMS.instance.add(panel);
-            RCJMS.instance.remove(RCJMS.instance.victoryPanel);
+            RCJMS.instance.remove(RCJMS.instance.victoryView);
             RCJMS.instance.setTitle("Main Menu");
             RCJMS.instance.pack();
             RCJMS.instance.revalidate();

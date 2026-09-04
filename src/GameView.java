@@ -8,6 +8,8 @@ import java.awt.image.DataBufferInt;
 
 public class GameView extends JPanel implements Runnable, KeyListener, MouseMotionListener {
     //region Variables
+    public static int MINI_MAP_WIDTH = 250;
+    public static int MINI_MAP_HEIGHT = 250;
     public static int MAZE_WIDTH = 51;
     public static int MAZE_HEIGHT = 51;
     public static MazeGenerator.FinishMode MAZE_MODE = MazeGenerator.FinishMode.RANDOM_EDGE;
@@ -155,7 +157,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             cameraAngle = 0;
             cameraPitch = 0;
             RCJMS.instance.remove(RCJMS.instance.gameView);
-            RCJMS.instance.add(RCJMS.instance.victoryPanel = new VictoryView(elapsedSeconds));
+            RCJMS.instance.add(RCJMS.instance.victoryView = new VictoryView(elapsedSeconds));
             RCJMS.instance.setTitle("Victory!");
             RCJMS.instance.pack();
             RCJMS.instance.revalidate();
@@ -304,16 +306,32 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (isPaused) drawPauseMenu();
     }
     private void drawMiniMap() {
-        int scale = 7;
-        for (int y = 0; y < map.length; y++) {
-            for (int x = 0; x < map[0].length; x++) {
+        int mapWidth = map[0].length;
+        int mapHeight = map.length;
+
+        double scaleX = (double) MINI_MAP_WIDTH / mapWidth;
+        double scaleY = (double) MINI_MAP_HEIGHT / mapHeight;
+        double scale = Math.min(scaleX, scaleY);
+
+        int actualWidth = (int) (mapWidth * scale);
+        int actualHeight = (int) (mapHeight * scale);
+
+        int offsetX = 10 + (MINI_MAP_WIDTH - actualWidth) / 2;
+        int offsetY = 10 + (MINI_MAP_HEIGHT - actualHeight) / 2;
+
+        for (int y = 0; y < mapHeight; y++) {
+            for (int x = 0; x < mapWidth; x++) {
                 int color = 0x000000;
                 if (map[y][x] == 1) color = 0xFFFFFF;
                 if (map[y][x] == 2) color = 0x00FF00;
-                for (int yy = 0; yy < scale; yy++) {
-                    for (int xx = 0; xx < scale; xx++) {
-                        int px = x * scale + xx;
-                        int py = y * scale + yy;
+
+                int startX = offsetX + (int) (x * scale);
+                int startY = offsetY + (int) (y * scale);
+                int endX = offsetX + (int) ((x + 1) * scale);
+                int endY = offsetY + (int) ((y + 1) * scale);
+
+                for (int py = startY; py < endY; py++) {
+                    for (int px = startX; px < endX; px++) {
                         if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT)
                             pixels[px + py * RCJMS.SCREEN_WIDTH] = color;
                     }
@@ -321,12 +339,15 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             }
         }
 
-        int playerPixelX = (int)(playerX * scale);
-        int playerPixelY = (int)(playerY * scale);
-        for (int yy = -2; yy <= 2; yy++) {
-            for (int xx = -2; xx <= 2; xx++) {
+        int playerPixelX = offsetX + (int) (playerX * scale);
+        int playerPixelY = offsetY + (int) (playerY * scale);
+        int playerSize = Math.max(1, (int) Math.floor(scale * 0.25));
+
+        for (int yy = -playerSize; yy <= playerSize; yy++) {
+            for (int xx = -playerSize; xx <= playerSize; xx++) {
                 int px = playerPixelX + xx;
                 int py = playerPixelY + yy;
+
                 if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT)
                     pixels[px + py * RCJMS.SCREEN_WIDTH] = 0xFF0000;
             }
@@ -423,8 +444,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (key == KeyEvent.VK_D) d = false;
         if (key == KeyEvent.VK_SHIFT) shift = false;
     }
-    @Override public void mouseMoved(MouseEvent e) {
-
+    @Override
+    public void mouseMoved(MouseEvent e) {
         if (isPaused) return;
         if (isRecentering) {
             isRecentering = false;
@@ -432,14 +453,17 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         }
 
         Point panelLocation = getLocationOnScreen();
-        int centerX = panelLocation.x + RCJMS.SCREEN_WIDTH / 2;
-        int centerY = panelLocation.y + RCJMS.SCREEN_HEIGHT / 2;
+
+        int centerX = panelLocation.x + getWidth() / 2;
+        int centerY = panelLocation.y + getHeight() / 2;
+
         int dx = e.getXOnScreen() - centerX;
         int dy = e.getYOnScreen() - centerY;
 
         cameraAngle += dx * mouseSensitivity;
         cameraPitch -= dy * mouseSensitivity;
         cameraPitch = Math.clamp(cameraPitch, -1.2, 1.2);
+
         isRecentering = true;
         cursorRobot.mouseMove(centerX, centerY);
     }
@@ -450,7 +474,28 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     @Override public void mouseDragged(MouseEvent e){}
     @Override protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        g.drawImage(bufferedImage, 0, 0, null);
+        int panelWidth = getWidth();
+        int panelHeight = getHeight();
+        int imageWidth = bufferedImage.getWidth();
+        int imageHeight = bufferedImage.getHeight();
+
+        double scaleX = (double) panelWidth / imageWidth;
+        double scaleY = (double) panelHeight / imageHeight;
+        double scale = Math.min(scaleX, scaleY);
+
+        int drawWidth = (int) (imageWidth * scale);
+        int drawHeight = (int) (imageHeight * scale);
+
+        int drawX = (panelWidth - drawWidth) / 2;
+        int drawY = (panelHeight - drawHeight) / 2;
+
+        Graphics2D g2 = (Graphics2D) g.create();
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+        g2.setColor(Color.BLACK);
+        g2.fillRect(0, 0, panelWidth, panelHeight);
+        g2.drawImage(bufferedImage, drawX, drawY, drawWidth, drawHeight, null);
+        g2.dispose();
     }
     // endregion
 }

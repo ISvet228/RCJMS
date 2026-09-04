@@ -4,7 +4,7 @@ public class RCJMS extends JFrame {
     public static RCJMS instance;
     public MainMenuView mainMenuView = new MainMenuView();
     public GameView gameView;
-    public VictoryView victoryPanel;
+    public VictoryView victoryView;
 
     public static final int SCREEN_WIDTH = 960;
     public static final int SCREEN_HEIGHT = 540;
@@ -16,7 +16,6 @@ public class RCJMS extends JFrame {
         setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
         setLocationRelativeTo(null);
         add(mainMenuView);
-        setResizable(false);
         setVisible(true);
     }
     static void main(String[] args) {
