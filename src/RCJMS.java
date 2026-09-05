@@ -7,10 +7,11 @@ public class RCJMS extends JFrame {
     public GameView gameView;
     public VictoryView victoryView;
     public TextureEditorView textureEditorView;
+    public CreditsView creditsView;
     private JPanel currentView;
 
-    public static final int SCREEN_WIDTH = 960;
-    public static final int SCREEN_HEIGHT = 540;
+    public static final int SCREEN_WIDTH = 960;//DO NOT CHANGE UI WILL BE BROKEN
+    public static final int SCREEN_HEIGHT = 540;//DO NOT CHANGE UI WILL BE BROKEN
 
     public RCJMS() throws IOException {
         instance = this;

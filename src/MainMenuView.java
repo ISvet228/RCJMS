@@ -11,6 +11,8 @@ public class MainMenuView extends JPanel {
     private final ArrayList<Star> stars = new ArrayList<>();
     private final Random random = new Random();
 
+    private boolean fullscreen = false;
+
     private static final String[] modes = {"OPPOSITE CORNER", "CENTER", "RANDOM EDGE"};
 
     private final JComboBox<String> modeBox = new JComboBox<>(modes);
@@ -80,10 +82,20 @@ public class MainMenuView extends JPanel {
         textureEditorButton.addActionListener(e -> {
             try {RCJMS.instance.ChangeView(RCJMS.instance.textureEditorView = new TextureEditorView(), "Texture Editor");}
             catch (IOException ex) {throw new RuntimeException(ex);}});
+        creditsButton.addActionListener(e -> RCJMS.instance.ChangeView(RCJMS.instance.creditsView = new CreditsView(), "Credits"));
         exitButton.addActionListener(e -> System.exit(0));
-        settingsButton.addActionListener(e -> JOptionPane.showMessageDialog(this, "Settings",
-                "Settings", JOptionPane.INFORMATION_MESSAGE));
-        infoButton.addActionListener(e -> JOptionPane.showMessageDialog(this, "RayCast Me!\n3D Maze Game",
+
+        settingsButton.addActionListener(e -> {
+            JCheckBox fullscreenBox = new JCheckBox("Fullscreen");
+            fullscreenBox.setFont(new Font("Arial", Font.PLAIN, 16));
+            fullscreenBox.setSelected(fullscreen);
+            fullscreenBox.addActionListener(ev -> setFullscreen(fullscreenBox.isSelected()));
+            JPanel panel = new JPanel(new BorderLayout());
+            panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+            panel.add(fullscreenBox, BorderLayout.CENTER);
+            JOptionPane.showMessageDialog(this, panel, "Settings", JOptionPane.PLAIN_MESSAGE);
+        });
+        infoButton.addActionListener(e -> JOptionPane.showMessageDialog(this, "Controls:\nWASD - Move",
                 "Info", JOptionPane.INFORMATION_MESSAGE));
 
         Timer timer = new Timer(16, e -> {updateStars();repaint();});
@@ -107,6 +119,27 @@ public class MainMenuView extends JPanel {
         } catch (NumberFormatException | IOException ex) {
             JOptionPane.showMessageDialog(this, "Maze size must be a number.", "Invalid Input", JOptionPane.ERROR_MESSAGE);
         }
+    }
+    private void setFullscreen(boolean fullscreen) {
+        this.fullscreen = fullscreen;
+
+        JFrame frame = RCJMS.instance;
+
+        frame.dispose();
+
+        if (fullscreen) {
+            frame.setUndecorated(true);
+            frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+        } else {
+            frame.setUndecorated(false);
+            frame.setExtendedState(JFrame.NORMAL);
+            frame.setSize(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
+            frame.setLocationRelativeTo(null);
+        }
+
+        frame.setVisible(true);
+        frame.revalidate();
+        frame.repaint();
     }
 
     //region UI
