@@ -5,6 +5,8 @@ import java.awt.*; //Graphics Library
 import java.awt.event.*; //Input Library
 import java.awt.image.BufferedImage; //Buffer Library
 import java.awt.image.DataBufferInt;
+import java.io.IOException;
+import java.nio.file.Paths;
 
 public class GameView extends JPanel implements Runnable, KeyListener, MouseMotionListener {
     //region Variables
@@ -24,6 +26,15 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
     private final int[] pixels; //BRUH JUST PIXELS IN IMAGE
     private int[][] map;
+
+    private int[][] wallTexture = TextureEditorView.readTexture(Paths.get("tmp/walltexture.txt"));
+    private int[][] floorTexture = TextureEditorView.readTexture(Paths.get("tmp/floortexture.txt"));
+    private int[][] ceilingTexture = TextureEditorView.readTexture(Paths.get("tmp/ceilingtexture.txt"));
+
+    private final int wallBaseColor = 0xECD485;
+    private final int floorBaseColor = 0xD3AF63;
+    private final int ceilingBaseColor = 0x816E1E;
+    //endregion
 
     //region Dynamic Player Stats
     private double playerX = 1.5;
@@ -54,7 +65,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
 
     //region Helpers
-    public GameView(int mazeWidth, int mazeHeight, int mazeMode) {
+    public GameView(int mazeWidth, int mazeHeight, int mazeMode) throws IOException {
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setFocusable(true); requestFocus();
 
@@ -171,36 +182,17 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         final int width = RCJMS.SCREEN_WIDTH;
         final int height = RCJMS.SCREEN_HEIGHT;
 
-        int ceilingColor = 0x816E1E;
-        int floorColor = 0xD3AF63;
-
-        double FOV = Math.PI / 3.0;
+        final double FOV = Math.PI / 3.0;
 
         double dirX = Math.cos(cameraAngle);
         double dirY = Math.sin(cameraAngle);
 
         double planeLength = Math.tan(FOV / 2.0);
-
         double planeX = -dirY * planeLength;
         double planeY =  dirX * planeLength;
 
         double horizon = height / 2.0 + cameraPitch * height / 2.0;
-
-        for (int y = 0; y < height; y++) {
-            boolean isCeiling = y < horizon;
-            int baseColor = isCeiling ? ceilingColor : floorColor;
-
-            double distanceFromCenter = Math.abs(y - horizon);
-            double distance = (distanceFromCenter / (height / 2.0)) * flashlightDistance;
-            double brightness = distance / (flashlightDistance * (flashlightDistance * flashlightDistance - 20 * flashlightDistance + 83) / 8.0);
-
-            brightness = Math.clamp(brightness, 0.05, 1.0);
-
-            int shadedColor = applyBrightness(baseColor, brightness);
-            int offset = y * width;
-
-            for (int x = 0; x < width; x++) pixels[offset + x] = shadedColor;
-        }
+        renderHorizontalSurfaces(width, height, dirX, dirY, planeX, planeY, horizon);
 
         for (int x = 0; x < width; x++) {
             double cameraX = 2.0 * x / (double) width - 1.0;
@@ -214,9 +206,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             double deltaDistX = rayDirX == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / rayDirX);
             double deltaDistY = rayDirY == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / rayDirY);
 
-            int stepX, stepY;
+            int stepX;
+            int stepY;
 
-            double sideDistX, sideDistY;
+            double sideDistX;
+            double sideDistY;
 
             if (rayDirX < 0) {
                 stepX = -1;
@@ -242,16 +236,15 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 if (sideDistX < sideDistY) {
                     sideDistX += deltaDistX;
                     mapX += stepX;
-
                     side = 0;
                 } else {
                     sideDistY += deltaDistY;
                     mapY += stepY;
-
                     side = 1;
                 }
 
                 if (mapX < 0 || mapY < 0 || mapX >= map[0].length || mapY >= map.length) break;
+
                 hitType = map[mapY][mapX];
 
                 if (hitType == 1 || hitType == 2) hit = true;
@@ -260,6 +253,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             if (!hit) continue;
 
             double perpendicularDistance;
+
             if (side == 0) perpendicularDistance = sideDistX - deltaDistX;
             else perpendicularDistance = sideDistY - deltaDistY;
             perpendicularDistance = Math.max(perpendicularDistance, 0.0001);
@@ -267,35 +261,57 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             int wallHeight = (int) (height / perpendicularDistance);
 
             int start, end;
-
-            if (hitType == 2) {
-                start = (int) horizon;
-                end = (int) (horizon + wallHeight / 2.0);
-            } else {
-                start = (int) (horizon - wallHeight / 2.0);
-                end = (int) (horizon + wallHeight / 2.0);
-            }
+            start = hitType == 2 ? (int) horizon : (int) (horizon - wallHeight / 2.0);
+            end = (int) (horizon + wallHeight / 2.0);
 
             int drawStart = Math.max(start, 0);
             int drawEnd = Math.min(end, height - 1);
 
-            if (drawStart >= drawEnd) continue;
+            if (drawStart > drawEnd) continue;
 
-            int wallColor;
-            if (hitType == 2) wallColor = 0x33FF66;
-            else wallColor = 0xECD485;
+            double wallX;
+
+            wallX = side == 0 ?  playerY + perpendicularDistance * rayDirY : playerX + perpendicularDistance * rayDirX;
+            wallX -= Math.floor(wallX);
+
+            if (side == 0 && rayDirX > 0) wallX = 1.0 - wallX;
+            if (side == 1 && rayDirY < 0) wallX = 1.0 - wallX;
+
+            int baseColor = (hitType == 2) ? 0x33FF66 : wallBaseColor;
 
             double brightness = 1.0 - (perpendicularDistance / flashlightDistance);
             brightness = Math.clamp(brightness, 0.03, 1.0);
 
             if (side == 1) brightness *= 0.85;
 
-            wallColor = applyBrightness(wallColor, brightness);
+            int textureHeight = getTextureHeight(wallTexture);
+            int textureWidth = getTextureWidth(wallTexture);
 
             int offset = drawStart * width;
 
             for (int y = drawStart; y <= drawEnd; y++) {
-                pixels[offset + x] = wallColor;
+                double wallPosition;
+
+                if (hitType == 2) wallPosition = (y - horizon) / Math.max(wallHeight / 2.0, 1.0);
+                else wallPosition = (y - (horizon - wallHeight / 2.0)) / Math.max((double) wallHeight, 1.0);
+
+                wallPosition = Math.clamp(wallPosition, 0.0, 0.999999);
+
+                int color;
+
+                if (textureWidth > 0 && textureHeight > 0) {
+                    int texX = (int) (wallX * textureWidth);
+                    int texY = (int) (wallPosition * textureHeight);
+
+                    texX = Math.clamp(texX, 0, textureWidth - 1);
+                    texY = Math.clamp(texY, 0, textureHeight - 1);
+
+                    color = wallTexture[texY][texX];
+                } else {
+                    color = baseColor;
+                }
+
+                pixels[offset + x] = applyBrightness(color, brightness);
                 offset += width;
             }
         }
@@ -305,6 +321,125 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (isDebugMode && !isPaused) drawMiniMap();
         if (isPaused) drawPauseMenu();
     }
+    private void renderHorizontalSurfaces(int width, int height, double dirX, double dirY, double planeX, double planeY, double horizon) {
+        final double playerHeight = 1.0;
+        final double ceilingHeight = 1.0;
+        final double minDistance = 0.0001;
+
+        double leftRayX = dirX - planeX;
+        double leftRayY = dirY - planeY;
+        double rightRayX = dirX + planeX;
+        double rightRayY = dirY + planeY;
+
+        int firstFloorY = Math.max(0, (int) Math.ceil(horizon));
+
+        for (int y = firstFloorY; y < height; y++) {
+            double row = y - horizon;
+
+            if (row < minDistance) continue;
+
+            double rowDistance = playerHeight * height / (2.0 * row);
+
+            double floorStepX = rowDistance * (rightRayX - leftRayX) / width;
+            double floorStepY = rowDistance * (rightRayY - leftRayY) / width;
+
+            double floorX = playerX + rowDistance * leftRayX;
+            double floorY = playerY + rowDistance * leftRayY;
+
+            int offset = y * width;
+
+            for (int x = 0; x < width; x++) {
+                int color = sampleTexture(floorTexture, floorX, floorY, floorBaseColor);
+                double brightness = 1.0 - (rowDistance / flashlightDistance);
+
+                brightness = Math.clamp(brightness, 0.05, 1.0);
+                pixels[offset + x] = applyBrightness(color, brightness);
+
+                floorX += floorStepX;
+                floorY += floorStepY;
+            }
+        }
+        int lastCeilingY = Math.min(height - 1, (int) Math.floor(horizon) - 1);
+        for (int y = 0; y <= lastCeilingY; y++) {
+            double row = horizon - y;
+            if (row < minDistance) continue;
+            double rowDistance = ceilingHeight * height / (2.0 * row);
+
+            double ceilingStepX = rowDistance * (rightRayX - leftRayX) / width;
+            double ceilingStepY = rowDistance * (rightRayY - leftRayY) / width;
+            double ceilingX = playerX + rowDistance * leftRayX;
+            double ceilingY = playerY + rowDistance * leftRayY;
+
+            int offset = y * width;
+
+            for (int x = 0; x < width; x++) {
+                int color = sampleTexture(ceilingTexture, ceilingX, ceilingY, ceilingBaseColor);
+                double brightness = 1.0 - (rowDistance / flashlightDistance);
+                brightness = Math.clamp(brightness, 0.05, 1.0);
+                pixels[offset + x] = applyBrightness(color, brightness);
+
+                ceilingX += ceilingStepX;
+                ceilingY += ceilingStepY;
+            }
+        }
+    }
+    private int sampleTexture(int[][] texture, double worldX, double worldY, int baseColor) {
+        int textureHeight = getTextureHeight(texture);
+        int textureWidth = getTextureWidth(texture);
+
+        if (textureWidth <= 0 || textureHeight <= 0) return baseColor;
+
+        double localX = worldX - Math.floor(worldX);
+        double localY = worldY - Math.floor(worldY);
+
+        int texX = (int) (localX * textureWidth);
+        int texY = (int) (localY * textureHeight);
+
+        texX = Math.clamp(texX, 0, textureWidth - 1);
+        texY = Math.clamp(texY, 0, textureHeight - 1);
+
+        return texture[texY][texX];
+    }
+    private int getTextureWidth(int[][] texture) {
+        if (texture == null || texture.length == 0) return 0;
+        int width = texture[0] == null ? 0 : texture[0].length;
+
+        //if (width == 0) return 0;
+
+        return width;
+    }
+    private int getTextureHeight(int[][] texture) {
+        if (texture == null || texture.length == 0) return 0;
+        int width = getTextureWidth(texture);
+        if (width == 0) return 0;
+
+        for (int[] ints : texture) if (ints == null || ints.length != width) return 0;
+        return texture.length;
+    }
+    public void setWallTexture(int[][] texture) {
+        wallTexture = validateTexture(texture) ? texture : new int[0][0];
+    }
+    public void setFloorTexture(int[][] texture) {
+        floorTexture = validateTexture(texture) ? texture : new int[0][0];
+    }
+    public void setCeilingTexture(int[][] texture) {
+        ceilingTexture = validateTexture(texture) ? texture : new int[0][0];
+    }
+    private boolean validateTexture(int[][] texture) {
+        if (texture == null || texture.length == 0) return false;
+        if (texture.length > 32) return false;
+        if (texture[0] == null || texture[0].length == 0) return false;
+        if (texture[0].length > 32) return false;
+
+        int width = texture[0].length;
+
+        for (int y = 0; y < texture.length; y++) {
+            if (texture[y] == null || texture[y].length != width) return false;
+            for (int x = 0; x < width; x++) texture[y][x] &= 0xFFFFFF;
+        }
+        return true;
+    }
+    //endregion
     private void drawMiniMap() {
         int mapWidth = map[0].length;
         int mapHeight = map.length;

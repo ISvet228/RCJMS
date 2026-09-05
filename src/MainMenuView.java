@@ -1,210 +1,241 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.AffineTransform;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Random;
 
 public class MainMenuView extends JPanel {
+    //region Variables
     private final Color backgroundColor = new Color(15, 15, 35);
     private final ArrayList<Star> stars = new ArrayList<>();
     private final Random random = new Random();
+
     private static final String[] modes = {"OPPOSITE CORNER", "CENTER", "RANDOM EDGE"};
 
     private final JComboBox<String> modeBox = new JComboBox<>(modes);
+
     private final JTextField xField = new JTextField("25");
     private final JTextField yField = new JTextField("25");
+    private final JTextField seedField = new JTextField();
 
     private final AnimatedTitle title;
-    private static final int VIRTUAL_WIDTH = RCJMS.SCREEN_WIDTH;
-    private static final int VIRTUAL_HEIGHT = RCJMS.SCREEN_HEIGHT;
+
+    private final JButton playButton, textureEditorButton, mapEditorButton, creditsButton, exitButton, settingsButton, infoButton;
+    private final JLabel mazeDimensionsLabel, modeLabel, xLabel, yLabel, seedLabel;
+    //endregion
 
     public MainMenuView() {
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setLayout(null);
 
-        title = new AnimatedTitle("MAZE 3D");
-        add(title);
+        title = new AnimatedTitle("RCJMS");
 
-        JButton playButton = createPlayButton();
-        add(playButton);
-
-        JLabel modeLabel = new JLabel("MODE");
-        modeLabel.setForeground(Color.WHITE);
-        modeLabel.setFont(new Font("Arial", Font.BOLD, 20));
-        add(modeLabel);
-
+        modeLabel = createLabel("MODE", 18);
         modeBox.setFont(new Font("Arial", Font.PLAIN, 18));
-        add(modeBox);
+        modeBox.setFocusable(false);
 
-        JLabel xLabel = new JLabel("X");
-        xLabel.setForeground(Color.WHITE);
-        xLabel.setFont(new Font("Arial", Font.BOLD, 20));
-        add(xLabel);
-
+        mazeDimensionsLabel = createLabel("MAZE DIMENSIONS", 20);
+        xLabel = createLabel("X", 18);
         xField.setFont(new Font("Arial", Font.PLAIN, 20));
-        add(xField);
-
-        JLabel yLabel = new JLabel("Y");
-        yLabel.setForeground(Color.WHITE);
-        yLabel.setFont(new Font("Arial", Font.BOLD, 20));
-        add(yLabel);
-
+        xField.setHorizontalAlignment(JTextField.CENTER);
+        yLabel = createLabel("Y", 18);
         yField.setFont(new Font("Arial", Font.PLAIN, 20));
+        yField.setHorizontalAlignment(JTextField.CENTER);
+
+        seedLabel = createLabel("CUSTOM SEED", 18);
+        seedField.setFont(new Font("Arial", Font.PLAIN, 20));
+        seedField.setHorizontalAlignment(JTextField.CENTER);
+
+        playButton = createButton("PLAY", 22);
+        textureEditorButton = createButton("TEXTURE EDITOR", 17);
+        mapEditorButton = createButton("MAP EDITOR", 16);
+        creditsButton = createButton("CREDITS", 15);
+        exitButton = createButton("EXIT", 14);
+
+        settingsButton = createIconButton("…");
+        infoButton = createIconButton("i");
+
+        add(title);
+        add(modeLabel);
+        add(modeBox);
+        add(mazeDimensionsLabel);
+        add(xLabel);
+        add(xField);
+        add(yLabel);
         add(yField);
+        add(seedLabel);
+        add(seedField);
+        add(playButton);
+        add(textureEditorButton);
+        add(mapEditorButton);
+        add(creditsButton);
+        add(exitButton);
+        add(settingsButton);
+        add(infoButton);
 
         for (int i = 0; i < 80; i++) stars.add(createRandomStar());
 
-        Timer timer = new Timer(16, e -> {updateStars();repaint();});
-        timer.start();
-
-        addComponentListener(new ComponentAdapter() {@Override public void componentResized(ComponentEvent e) {updateLayout();}});
-        SwingUtilities.invokeLater(this::updateLayout);
-    }
-
-    private JButton createPlayButton() {
-        JButton playButton = new JButton("PLAY");
-
-        playButton.setFont(new Font("Arial", Font.BOLD, 32));
-        playButton.setFocusPainted(false);
-        playButton.addActionListener(e -> {
+        playButton.addActionListener(e -> StartGameView());
+        textureEditorButton.addActionListener(e -> {
             try {
-                int mazeWidth = Integer.parseInt(xField.getText());
-                int mazeHeight = Integer.parseInt(yField.getText());
-
-                int mode = modeBox.getSelectedIndex();
-
-                GameView panel = RCJMS.instance.gameView = new GameView(mazeWidth, mazeHeight, mode);
-                RCJMS.instance.add(panel);
-                RCJMS.instance.remove(RCJMS.instance.mainMenuView);
-                RCJMS.instance.setTitle("RayCast Me!");
-                //RCJMS.instance.pack();
-                RCJMS.instance.revalidate();
-                panel.start();
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Maze size must be a number.", "Invalid Input", JOptionPane.ERROR_MESSAGE);
+                StartTextureEditorView();
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
             }
         });
-        return playButton;
+        exitButton.addActionListener(e -> System.exit(0));
+        settingsButton.addActionListener(e -> JOptionPane.showMessageDialog(this, "Settings",
+                "Settings", JOptionPane.INFORMATION_MESSAGE));
+        infoButton.addActionListener(e -> JOptionPane.showMessageDialog(this, "RayCast Me!\n3D Maze Game",
+                "Info", JOptionPane.INFORMATION_MESSAGE));
+
+        Timer timer = new Timer(16, e -> {updateStars();repaint();});
+        timer.start();
     }
-    private void updateLayout() {
+
+    private void StartGameView() {
+        try {
+            int mazeWidth = Math.clamp(Integer.parseInt(xField.getText()), 5, 200);
+            int mazeHeight = Math.clamp(Integer.parseInt(yField.getText()), 5, 200);
+
+            int mode = modeBox.getSelectedIndex();
+
+            String seedText = seedField.getText().trim();
+
+            GameView panel;
+
+            if (seedText.isEmpty()) panel = RCJMS.instance.gameView = new GameView(mazeWidth, mazeHeight, mode);
+            else {
+                long seed;
+                try {seed = Long.parseLong(seedText);}
+                catch (NumberFormatException ex) {seed = seedText.hashCode();}
+                panel = RCJMS.instance.gameView = new GameView(mazeWidth, mazeHeight, mode/*, seed*/);
+            }
+
+            RCJMS.instance.add(panel);
+            RCJMS.instance.remove(RCJMS.instance.mainMenuView);
+            RCJMS.instance.setTitle("RayCast Me!");
+            RCJMS.instance.revalidate();
+            RCJMS.instance.repaint();
+            panel.start();
+
+        } catch (NumberFormatException | IOException ex) {
+            JOptionPane.showMessageDialog(this, "Maze size must be a number.", "Invalid Input", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    private void StartTextureEditorView() throws IOException {
+        TextureEditorView panel = RCJMS.instance.textureEditorView = new TextureEditorView();
+        RCJMS.instance.add(panel);
+        RCJMS.instance.remove(RCJMS.instance.mainMenuView);
+        RCJMS.instance.setTitle("Texture Editor");
+        RCJMS.instance.revalidate();
+        RCJMS.instance.repaint();
+    }
+
+    //region UI
+    private JLabel createLabel(String text, int fontSize) {
+        JLabel label = new JLabel(text);
+        label.setForeground(Color.WHITE);
+        label.setFont(new Font("Arial", Font.BOLD, fontSize));
+        label.setHorizontalAlignment(SwingConstants.CENTER);
+        return label;
+    }
+    private JButton createButton(String text, int fontSize) {
+        JButton button = new JButton(text);
+        button.setFont(new Font("Arial", Font.BOLD, fontSize));
+        button.setFocusPainted(false);
+        button.setFocusable(false);
+        return button;
+    }
+    private JButton createIconButton(String text) {
+        JButton button = new JButton(text);
+        button.setFont(new Font("Arial", Font.BOLD, 30));
+        button.setFocusPainted(false);
+        button.setFocusable(false);
+        return button;
+    }
+    @Override public void doLayout() {
         int width = getWidth();
         int height = getHeight();
 
         if (width <= 0 || height <= 0) return;
 
-        double scaleX = (double) width / VIRTUAL_WIDTH;
-        double scaleY = (double) height / VIRTUAL_HEIGHT;
-        double scale = Math.min(scaleX, scaleY);
+        double scale = Math.min((double) width / RCJMS.SCREEN_WIDTH, (double) height / RCJMS.SCREEN_HEIGHT);
 
-        int scaledWidth = (int) (VIRTUAL_WIDTH * scale);
-        int scaledHeight = (int) (VIRTUAL_HEIGHT * scale);
+        int backgroundX = (width - (int) (RCJMS.SCREEN_WIDTH * scale)) / 2;
+        int backgroundY = (height - (int) (RCJMS.SCREEN_HEIGHT * scale)) / 2;
 
-        int offsetX = (width - scaledWidth) / 2;
-        int offsetY = (height - scaledHeight) / 2;
+        setScaledBounds(title, 300, 45, 400, 130, scale, backgroundX, backgroundY);
 
-        setScaledBounds(title, 300, 40, 400, 100, scale, offsetX, offsetY);
+        setScaledBounds(modeLabel, 100, 270, 200, 30, scale, backgroundX, backgroundY);
+        setScaledBounds(modeBox, 90, 305, 220, 40, scale, backgroundX, backgroundY);
 
-        Component playButton = getComponentByName("PLAY");
+        setScaledBounds(mazeDimensionsLabel, 660, 270, 270, 30, scale, backgroundX, backgroundY);
 
-        if (playButton != null) setScaledBounds(playButton, 390, 300, 220, 80, scale, offsetX, offsetY);
-        Component modeLabel = getComponentByClass(JLabel.class, 0);
+        setScaledBounds(xLabel, 650, 315, 30, 35, scale, backgroundX, backgroundY);
+        setScaledBounds(xField, 680, 310, 90, 45, scale, backgroundX, backgroundY);
 
-        if (modeLabel != null) {
-            setScaledBounds(modeLabel, 170, 270, 100, 30, scale, offsetX, offsetY);
-            modeLabel.setFont(new Font("Arial", Font.BOLD, Math.max(1, (int) (20 * scale))));
-        }
+        setScaledBounds(yLabel, 790, 315, 30, 35, scale, backgroundX, backgroundY);
+        setScaledBounds(yField, 820, 310, 90, 45, scale, backgroundX, backgroundY);
 
-        setScaledBounds(modeBox, 100, 310, 200, 30, scale, offsetX, offsetY);
-        modeBox.setFont(new Font("Arial", Font.PLAIN, Math.max(1, (int) (18 * scale))));
+        setScaledBounds(seedLabel, 400, 180, 200, 30, scale, backgroundX, backgroundY);
+        setScaledBounds(seedField, 400, 220, 200, 40, scale, backgroundX, backgroundY);
 
-        Component xLabel = getComponentByClass(JLabel.class, 1);
-        if (xLabel != null) {
-            setScaledBounds(xLabel, 760, 250, 40, 30, scale, offsetX, offsetY);
-            xLabel.setFont(new Font("Arial", Font.BOLD, Math.max(1, (int) (20 * scale))));
-        }
-        setScaledBounds(xField, 720, 290, 120, 40, scale, offsetX, offsetY);
+        setScaledBounds(playButton, 390, 280, 220, 60, scale, backgroundX, backgroundY);
+        setScaledBounds(textureEditorButton, 395, 350, 210, 40, scale, backgroundX, backgroundY);
+        setScaledBounds(mapEditorButton, 400, 400, 200, 35, scale, backgroundX, backgroundY);
+        setScaledBounds(creditsButton, 405, 445, 190, 30, scale, backgroundX, backgroundY);
+        setScaledBounds(exitButton, 410, 485, 180, 28, scale, backgroundX, backgroundY);
 
-        xField.setFont(new Font("Arial", Font.PLAIN, Math.max(1, (int) (20 * scale))));
-        Component yLabel = getComponentByClass(JLabel.class, 2);
-
-        if (yLabel != null) {
-            setScaledBounds(yLabel, 760, 360, 40, 30, scale, offsetX, offsetY);
-            yLabel.setFont(new Font("Arial", Font.BOLD, Math.max(1, (int) (20 * scale))));
-        }
-        setScaledBounds(yField, 720, 400, 120, 40, scale, offsetX, offsetY);
-        yField.setFont(new Font("Arial", Font.PLAIN, Math.max(1, (int) (20 * scale))));
+        setScaledBounds(settingsButton, RCJMS.SCREEN_WIDTH - 80, 20, 60, 60, scale, backgroundX, backgroundY);
+        setScaledBounds(infoButton, 20, RCJMS.SCREEN_HEIGHT - 80, 60, 60, scale, backgroundX, backgroundY);
     }
-    private void setScaledBounds(Component component, int x, int y, int width, int height, double scale, int offsetX, int offsetY) {
-        component.setBounds(offsetX + (int) (x * scale), offsetY + (int) (y * scale), Math.max(1, (int) (width * scale)), Math.max(1, (int) (height * scale)));
-    }
-    private Component getComponentByName(String text) {
-        for (Component component : getComponents())
-            if (component instanceof JButton button)
-                if (button.getText().equals(text)) return component;
-        return null;
-    }
-    private Component getComponentByClass(Class<?> type, int index) {
-        int currentIndex = 0;
-        for (Component component : getComponents()) {
-            if (type.isInstance(component)) {
-                if (component == title) continue;
-                if (component == modeBox) continue;
-                if (component == xField) continue;
-                if (component == yField) continue;
-                if (currentIndex == index) return component;
-                currentIndex++;
-            }
-        }
-        return null;
-    }
-    private Star createRandomStar() {
-        int w = Math.max(getWidth(), VIRTUAL_WIDTH);
-        int h = Math.max(getHeight(), VIRTUAL_HEIGHT);
-
-        return new Star(random.nextInt(w), random.nextInt(h), 15 + random.nextInt(30), 1 + random.nextDouble() * 4,
-                random.nextDouble() * 360, -5 + random.nextDouble() * 10);
-    }
-    private void updateStars() {
-        for (Star star : stars) {
-            star.y += star.speed;
-            star.rotation += star.rotationSpeed;
-            if (star.y - star.size > getHeight()) {
-                star.y = -star.size;
-                star.x = getWidth() > 0 ? random.nextInt(getWidth()) : 0;
-                star.speed = 1 + random.nextDouble() * 4;
-            }
-        }
+    private void setScaledBounds(Component component, int x, int y, int width, int height, double scale, int backgroundX, int backgroundY) {
+        component.setBounds(backgroundX + (int) (x * scale), backgroundY + (int) (y * scale), Math.max(1, (int) (width * scale)), Math.max(1, (int) (height * scale)));
     }
     @Override protected void paintComponent(Graphics g) {
         super.paintComponent(g);
+
+        int width = getWidth();
+        int height = getHeight();
+        if (width <= 0 || height <= 0) return;
+
+        double scale = Math.min((double) width / RCJMS.SCREEN_WIDTH, (double) height / RCJMS.SCREEN_HEIGHT);
+
+        int offsetX = (width - (int) (RCJMS.SCREEN_WIDTH * scale)) / 2;
+        int offsetY = (height - (int) (RCJMS.SCREEN_HEIGHT * scale)) / 2;
+
         Graphics2D g2 = (Graphics2D) g.create();
 
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setColor(Color.BLACK);
+        g2.fillRect(0, 0, width, height);
+        g2.translate(offsetX, offsetY);
+        g2.scale(scale, scale);
         g2.setColor(backgroundColor);
-        g2.fillRect(0, 0, getWidth(), getHeight());
+        g2.fillRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
 
         for (Star star : stars) drawStar(g2, star);
+
         g2.dispose();
     }
+    //endregion
+
+    //region Decorations
     private void drawStar(Graphics2D g2d, Star star) {
         AffineTransform old = g2d.getTransform();
         g2d.translate(star.x, star.y);
         g2d.rotate(Math.toRadians(star.rotation));
 
         int s = star.size;
-        Polygon p = new Polygon();
 
+        Polygon p = new Polygon();
         p.addPoint(0, -s);
         p.addPoint(s / 4, -s / 4);
-
         p.addPoint(s, 0);
         p.addPoint(s / 4, s / 4);
-
         p.addPoint(0, s);
         p.addPoint(-s / 4, s / 4);
-
         p.addPoint(-s, 0);
         p.addPoint(-s / 4, -s / 4);
 
@@ -214,61 +245,63 @@ public class MainMenuView extends JPanel {
         g2d.fillPolygon(p);
         g2d.setTransform(old);
     }
-}
-class Star {
-    double x, y, speed, rotation, rotationSpeed;
-    int size;
-
-    public Star(double x, double y, int size, double speed, double rotation, double rotationSpeed) {
-        this.x = x;
-        this.y = y;
-        this.size = size;
-        this.speed = speed;
-        this.rotation = rotation;
-        this.rotationSpeed = rotationSpeed;
+    private Star createRandomStar() {
+        return new Star(random.nextInt(RCJMS.SCREEN_WIDTH), random.nextInt(RCJMS.SCREEN_HEIGHT), 15 + random.nextInt(30),
+                1 + random.nextDouble() * 4, random.nextDouble() * 360, -5 + random.nextDouble() * 10);
     }
-}
-class AnimatedTitle extends JComponent {
-    private final String text;
-    private double time = 0;
-
-    public AnimatedTitle(String text) {
-        this.text = text;
-        Timer timer = new Timer(16, e -> {
-            time += 0.05;
-            repaint();
-        });
-        timer.start();
+    private void updateStars() {
+        for (Star star : stars) {
+            star.y += star.speed;
+            star.rotation += star.rotationSpeed;
+            if (star.y - star.size > RCJMS.SCREEN_HEIGHT) {
+                star.y = -star.size;
+                star.x = random.nextInt(RCJMS.SCREEN_WIDTH);
+                star.speed = 1 + random.nextDouble() * 4;
+            }
+        }
     }
+    static class Star {
+        double x, y, speed, rotation, rotationSpeed;
+        int size;
 
-    @Override
-    protected void paintComponent(Graphics g) {
-        Graphics2D g2d = (Graphics2D) g.create();
-        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-        int centerX = getWidth() / 2;
-        int centerY = getHeight() / 2;
-
-        double scale = 1 + Math.sin(time) * 0.08;
-        double rotation = Math.sin(time * 0.7) * 0.08;
-
-        AffineTransform old = g2d.getTransform();
-
-        g2d.translate(centerX, centerY);
-        g2d.rotate(rotation);
-        g2d.scale(scale, scale);
-
-        Font font = new Font("Arial", Font.BOLD, 54);
-        g2d.setFont(font);
-        FontMetrics fm = g2d.getFontMetrics();
-
-        int width = fm.stringWidth(text);
-        g2d.setColor(new Color(120, 180, 255, 80));
-        for (int i = 8; i >= 1; i--) g2d.drawString(text, -width / 2 - i / 2, i);
-
-        g2d.setColor(Color.WHITE);
-        g2d.drawString(text, -width / 2, 0);
-        g2d.setTransform(old);
-        g2d.dispose();
+        public Star(double x, double y, int size, double speed, double rotation, double rotationSpeed) {
+            this.x = x;
+            this.y = y;
+            this.size = size;
+            this.speed = speed;
+            this.rotation = rotation;
+            this.rotationSpeed = rotationSpeed;
+        }
     }
+    static class AnimatedTitle extends JComponent {
+        private final String text;
+        private double time = 0;
+
+        public AnimatedTitle(String text) {
+            this.text = text;
+            Timer timer = new Timer(16, e -> {time += 0.05;repaint();});
+            timer.start();
+        }
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2d = (Graphics2D) g.create();
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            AffineTransform old = g2d.getTransform();
+
+            g2d.translate(getWidth() / 2, getHeight() / 2);
+            g2d.rotate(Math.sin(time * 0.7) * 0.08);
+            g2d.scale(1 + Math.sin(time) * 0.08, 1 + Math.sin(time) * 0.08);
+            g2d.setFont(new Font("Arial", Font.BOLD, 55));
+
+            int width = g2d.getFontMetrics().stringWidth(text);
+            g2d.setColor(new Color(120, 180, 255, 80));
+            for (int i = 8; i >= 1; i--) g2d.drawString(text, -width / 2 - i / 2, i);
+
+            g2d.setColor(Color.WHITE);
+            g2d.drawString(text, -width / 2, 0);
+            g2d.setTransform(old);
+            g2d.dispose();
+        }
+    }
+    //endregion
 }
