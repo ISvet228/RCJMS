@@ -78,12 +78,8 @@ public class MainMenuView extends JPanel {
 
         playButton.addActionListener(e -> StartGameView());
         textureEditorButton.addActionListener(e -> {
-            try {
-                StartTextureEditorView();
-            } catch (IOException ex) {
-                throw new RuntimeException(ex);
-            }
-        });
+            try {RCJMS.instance.ChangeView(RCJMS.instance.textureEditorView = new TextureEditorView(), "Texture Editor");}
+            catch (IOException ex) {throw new RuntimeException(ex);}});
         exitButton.addActionListener(e -> System.exit(0));
         settingsButton.addActionListener(e -> JOptionPane.showMessageDialog(this, "Settings",
                 "Settings", JOptionPane.INFORMATION_MESSAGE));
@@ -98,39 +94,19 @@ public class MainMenuView extends JPanel {
         try {
             int mazeWidth = Math.clamp(Integer.parseInt(xField.getText()), 5, 200);
             int mazeHeight = Math.clamp(Integer.parseInt(yField.getText()), 5, 200);
-
             int mode = modeBox.getSelectedIndex();
-
             String seedText = seedField.getText().trim();
-
-            GameView panel;
-
-            if (seedText.isEmpty()) panel = RCJMS.instance.gameView = new GameView(mazeWidth, mazeHeight, mode);
+            if (seedText.isEmpty()) RCJMS.instance.ChangeView(RCJMS.instance.gameView = new GameView(mazeWidth, mazeHeight, mode), "RayCast Me!");
             else {
                 long seed;
                 try {seed = Long.parseLong(seedText);}
                 catch (NumberFormatException ex) {seed = seedText.hashCode();}
-                panel = RCJMS.instance.gameView = new GameView(mazeWidth, mazeHeight, mode/*, seed*/);
+                RCJMS.instance.ChangeView(RCJMS.instance.gameView = new GameView(mazeWidth, mazeHeight, mode, seed), "RayCast Me!");
             }
-
-            RCJMS.instance.add(panel);
-            RCJMS.instance.remove(RCJMS.instance.mainMenuView);
-            RCJMS.instance.setTitle("RayCast Me!");
-            RCJMS.instance.revalidate();
-            RCJMS.instance.repaint();
-            panel.start();
-
+            RCJMS.instance.gameView.start();
         } catch (NumberFormatException | IOException ex) {
             JOptionPane.showMessageDialog(this, "Maze size must be a number.", "Invalid Input", JOptionPane.ERROR_MESSAGE);
         }
-    }
-    private void StartTextureEditorView() throws IOException {
-        TextureEditorView panel = RCJMS.instance.textureEditorView = new TextureEditorView();
-        RCJMS.instance.add(panel);
-        RCJMS.instance.remove(RCJMS.instance.mainMenuView);
-        RCJMS.instance.setTitle("Texture Editor");
-        RCJMS.instance.revalidate();
-        RCJMS.instance.repaint();
     }
 
     //region UI

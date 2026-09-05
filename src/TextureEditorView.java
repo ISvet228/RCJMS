@@ -5,9 +5,7 @@ import java.awt.event.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.util.ArrayDeque;
-import java.util.Arrays;
-import java.util.Deque;
+import java.util.*;
 
 public class TextureEditorView extends JPanel {
     //region Variables
@@ -25,7 +23,7 @@ public class TextureEditorView extends JPanel {
     private static final int ORIGINAL_FLOOR_COLOR = 0xD3AF63;
     private static final int ORIGINAL_CEILING_COLOR = 0x816E1E;
 
-    private static final int EMPTY_COLOR = 0x000000;
+    private static final int EMPTY_COLOR = -1;
     private static final int SAVED_EMPTY_COLOR = 0xFFFFFF;
 
     private final TextureCanvas textureCanvas = new TextureCanvas();
@@ -70,9 +68,9 @@ public class TextureEditorView extends JPanel {
     private int ceilingWidth = 8;
     private int ceilingHeight = 8;
 
-    private int[][] wallTexture = new int[wallHeight][wallWidth];
-    private int[][] floorTexture = new int[floorHeight][floorWidth];
-    private int[][] ceilingTexture = new int[ceilingHeight][ceilingWidth];
+    private int[][] wallTexture = createEmptyTexture(wallWidth, wallHeight);
+    private int[][] floorTexture = createEmptyTexture(floorWidth, floorHeight);
+    private int[][] ceilingTexture = createEmptyTexture(ceilingWidth, ceilingHeight);
 
     private int selectedX = -1;
     private int selectedY = -1;
@@ -97,6 +95,11 @@ public class TextureEditorView extends JPanel {
         updateToolSizeLabels();
         loadTexturesFromTmp();
         textureCanvas.rebuildGrid();
+    }
+    private static int[][] createEmptyTexture(int width, int height) {
+        int[][] texture = new int[height][width];
+        for (int[] row : texture) Arrays.fill(row, EMPTY_COLOR);
+        return texture;
     }
     private int[] sizeOf(int[][] texture) {
         if (isValidTexture(texture)) {
@@ -131,7 +134,9 @@ public class TextureEditorView extends JPanel {
         floorButton.addActionListener(e -> setMode(TextureMode.FLOOR));
         ceilingButton.addActionListener(e -> setMode(TextureMode.CEILING));
 
-        modePanel.add(new JLabel("Texture:"));
+        JLabel textureLabel = new JLabel("Texture");
+        textureLabel.setForeground(Color.WHITE);
+        modePanel.add(textureLabel);
         modePanel.add(wallsButton);
         modePanel.add(floorButton);
         modePanel.add(ceilingButton);
@@ -165,10 +170,7 @@ public class TextureEditorView extends JPanel {
         exitButton.setFocusable(false);
 
         exitButton.addActionListener(e -> {
-            Window window = SwingUtilities.getWindowAncestor(this);
-            if (window != null) {
-                window.dispose();
-            }
+            RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu");
         });
 
         JPanel exitPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 4));
@@ -196,6 +198,7 @@ public class TextureEditorView extends JPanel {
     private void configureSizeSlider(JSlider slider) {
         slider.setMajorTickSpacing(8);
         slider.setMinorTickSpacing(1);
+        slider.setForeground(Color.WHITE);
         slider.setPaintTicks(true);
         slider.setPaintLabels(true);
         slider.setOpaque(false);
@@ -227,7 +230,7 @@ public class TextureEditorView extends JPanel {
         JPanel right = new JPanel();
         right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
         right.setBorder(new EmptyBorder(20, 10, 10, 10));
-        right.setBackground(new Color(38, 38, 44));
+        right.setBackground(new Color(25, 25, 25));
 
         right.setPreferredSize(new Dimension(220, 700));
         right.setMinimumSize(new Dimension(220, 0));
@@ -351,6 +354,8 @@ public class TextureEditorView extends JPanel {
         centerWrapper.add(right);
 
         JScrollPane rightScroll = new JScrollPane(centerWrapper, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        rightScroll.getViewport().setBackground(new Color(12, 12, 15));
+        rightScroll.getVerticalScrollBar().setBackground(new Color(28, 28, 32));
         rightScroll.setBorder(BorderFactory.createEmptyBorder());
         rightScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         rightScroll.getVerticalScrollBar().setUnitIncrement(16);
@@ -479,7 +484,7 @@ public class TextureEditorView extends JPanel {
         eraserSizeLabel.setText("Eraser: " + eraserSizeSlider.getValue());
     }
     private int[][] resizePreservingData(int[][] source, int newWidth, int newHeight) {
-        int[][] result = new int[newHeight][newWidth];
+        int[][] result = createEmptyTexture(newWidth, newHeight);
         if (source == null) return result;
         int copyHeight = Math.min(source.length, newHeight);
         for (int y = 0; y < copyHeight; y++) {
@@ -586,6 +591,7 @@ public class TextureEditorView extends JPanel {
         final JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(this), "Choose Color", Dialog.ModalityType.APPLICATION_MODAL);
 
         JPanel panel = new JPanel();
+        panel.setBackground(new Color(28, 28, 32));
         panel.setBorder(new EmptyBorder(15, 15, 15, 15));
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
 
@@ -594,19 +600,26 @@ public class TextureEditorView extends JPanel {
         preview.setMinimumSize(new Dimension(220, 80));
         preview.setMaximumSize(new Dimension(220, 80));
         preview.setBackground(colorPreview.getBackground());
-        preview.setBorder(BorderFactory.createLineBorder(Color.BLACK, 2));
+        preview.setBorder(BorderFactory.createLineBorder(Color.WHITE, 2));
         preview.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         JPanel sliders = new JPanel(new GridLayout(3, 2, 8, 8));
+        sliders.setBackground(new Color(28, 28, 32));
         sliders.setMaximumSize(new Dimension(350, 100));
 
         JLabel redLabel = new JLabel("Red");
+        redLabel.setForeground(Color.WHITE);
         JLabel greenLabel = new JLabel("Green");
+        greenLabel.setForeground(Color.WHITE);
         JLabel blueLabel = new JLabel("Blue");
+        blueLabel.setForeground(Color.WHITE);
 
         JSlider r = new JSlider(0, 255, redSlider.getValue());
+        r.setBackground(new Color(28, 28, 32));
         JSlider g = new JSlider(0, 255, greenSlider.getValue());
+        g.setBackground(new Color(28, 28, 32));
         JSlider b = new JSlider(0, 255, blueSlider.getValue());
+        b.setBackground(new Color(28, 28, 32));
 
         JLabel rValue = new JLabel(String.valueOf(r.getValue()));
         JLabel gValue = new JLabel(String.valueOf(g.getValue()));
@@ -620,7 +633,10 @@ public class TextureEditorView extends JPanel {
         sliders.add(createSliderRow(b, bValue));
 
         JLabel hexLabel = new JLabel("Color code (RRGGBB):");
+        hexLabel.setForeground(Color.WHITE);
         JTextField pickerHex = new JTextField(hexField.getText());
+        pickerHex.setBackground(new Color(28, 28, 32));
+        pickerHex.setForeground(Color.WHITE);
         pickerHex.setMaximumSize(new Dimension(350, 28));
 
         Runnable updatePreview = () -> {
@@ -661,6 +677,7 @@ public class TextureEditorView extends JPanel {
         cancel.addActionListener(e -> dialog.dispose());
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttons.setBackground(new Color(28, 28, 32));
         buttons.add(cancel);
         buttons.add(apply);
 
@@ -837,7 +854,7 @@ public class TextureEditorView extends JPanel {
     //endregion
 
     private static int[][] normalizeTexture(int[][] source, int width, int height) {
-        int[][] result = new int[height][width];
+        int[][] result = createEmptyTexture(width, height);
         if (!isValidTexture(source)) return result;
         int copyHeight = Math.min(height, source.length);
         for (int y = 0; y < copyHeight; y++) {

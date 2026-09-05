@@ -27,6 +27,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private final int[] pixels; //BRUH JUST PIXELS IN IMAGE
     private int[][] map;
 
+    private final Long mazeSeed;
+
     private int[][] wallTexture = TextureEditorView.readTexture(Paths.get("tmp/walltexture.txt"));
     private int[][] floorTexture = TextureEditorView.readTexture(Paths.get("tmp/floortexture.txt"));
     private int[][] ceilingTexture = TextureEditorView.readTexture(Paths.get("tmp/ceilingtexture.txt"));
@@ -67,12 +69,35 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Helpers
     public GameView(int mazeWidth, int mazeHeight, int mazeMode) throws IOException {
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
+        setFocusable(true);
+        requestFocus();
+
+        bufferedImage = new BufferedImage(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        pixels = ((DataBufferInt) bufferedImage.getRaster().getDataBuffer()).getData();
+        mazeSeed = null;
+        mazeGenerator = new MazeGenerator(MAZE_WIDTH = mazeWidth, MAZE_HEIGHT = mazeHeight);
+        map = mazeGenerator.generate(MAZE_MODE = MazeGenerator.FinishMode.values()[mazeMode]);
+
+        addKeyListener(this);
+        addMouseMotionListener(this);
+
+        try {cursorRobot = new Robot();}
+        catch (Exception e) {e.printStackTrace();}
+
+        Toolkit toolkit = Toolkit.getDefaultToolkit();
+        Image img = toolkit.createImage(new byte[0]);
+        invisibleCursor = toolkit.createCustomCursor(img, new Point(0, 0), "hidden");
+        hideCursor();
+    }
+    public GameView(int mazeWidth, int mazeHeight, int mazeMode, Long seed) throws IOException {
+        setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setFocusable(true); requestFocus();
 
         bufferedImage = new BufferedImage(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT, BufferedImage.TYPE_INT_RGB);
         pixels = ((DataBufferInt) bufferedImage.getRaster().getDataBuffer()).getData();
 
-        mazeGenerator = new MazeGenerator(MAZE_WIDTH = mazeWidth, MAZE_HEIGHT = mazeHeight);
+        mazeSeed = seed;
+        mazeGenerator = new MazeGenerator(MAZE_WIDTH = mazeWidth, MAZE_HEIGHT = mazeHeight, mazeSeed);
         map = mazeGenerator.generate(MAZE_MODE = MazeGenerator.FinishMode.values()[mazeMode]);
 
         addKeyListener(this);
@@ -167,11 +192,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             playerY = 1.5;
             cameraAngle = 0;
             cameraPitch = 0;
-            RCJMS.instance.remove(RCJMS.instance.gameView);
-            RCJMS.instance.add(RCJMS.instance.victoryView = new VictoryView(elapsedSeconds));
-            RCJMS.instance.setTitle("Victory!");
-            RCJMS.instance.pack();
-            RCJMS.instance.revalidate();
+            RCJMS.instance.ChangeView(RCJMS.instance.victoryView = new VictoryView(elapsedSeconds), "Victory!");
             gameThread.interrupt();
         }
     }
@@ -299,7 +320,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
                 int color;
 
-                if (textureWidth > 0 && textureHeight > 0) {
+                if (textureWidth > 0 && textureHeight > 0 && hitType != 2) {
                     int texX = (int) (wallX * textureWidth);
                     int texY = (int) (wallPosition * textureHeight);
 
@@ -561,7 +582,9 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             }
         }
         if (key == KeyEvent.VK_R) {
-            mazeGenerator = new MazeGenerator(MAZE_WIDTH, MAZE_HEIGHT);
+            if (mazeSeed != null) mazeGenerator = new MazeGenerator(MAZE_WIDTH, MAZE_HEIGHT, mazeSeed);
+            else mazeGenerator = new MazeGenerator(MAZE_WIDTH, MAZE_HEIGHT);
+
             map = mazeGenerator.generate(MAZE_MODE);
             playerX = 1.5;
             playerY = 1.5;

@@ -6,19 +6,27 @@ public class RCJMS extends JFrame {
     public MainMenuView mainMenuView = new MainMenuView();
     public GameView gameView;
     public VictoryView victoryView;
-    public TextureEditorView textureEditorView = new TextureEditorView();
+    public TextureEditorView textureEditorView;
+    private JPanel currentView;
 
     public static final int SCREEN_WIDTH = 960;
     public static final int SCREEN_HEIGHT = 540;
 
     public RCJMS() throws IOException {
         instance = this;
-        setTitle("Main Menu");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
         setLocationRelativeTo(null);
-        add(mainMenuView);
+        ChangeView(mainMenuView, "Main Menu");
         setVisible(true);
+    }
+    public void ChangeView(JPanel nextView, String nextTitle) {
+        add(nextView);
+        if (currentView != null) remove(currentView);
+        currentView = nextView;
+        setTitle(nextTitle);
+        revalidate();
+        repaint();
     }
     static void main(String[] args) {
         SwingUtilities.invokeLater(() -> { try {new RCJMS();}

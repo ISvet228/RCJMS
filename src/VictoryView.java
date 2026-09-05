@@ -37,17 +37,7 @@ public class VictoryView extends JPanel {
         restartButton = new JButton("RESTART");
         restartButton.setFont(new Font("Arial", Font.BOLD, 32));
 
-        restartButton.addActionListener(e -> {
-            MainMenuView panel = RCJMS.instance.mainMenuView = new MainMenuView();
-
-            RCJMS.instance.add(panel);
-            RCJMS.instance.remove(RCJMS.instance.victoryView);
-
-            RCJMS.instance.setTitle("Main Menu");
-            RCJMS.instance.pack();
-            RCJMS.instance.revalidate();
-            RCJMS.instance.repaint();
-        });
+        restartButton.addActionListener(e -> {RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu");});
 
         add(restartButton);
 
