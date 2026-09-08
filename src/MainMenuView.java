@@ -1,7 +1,13 @@
+import StyleUI.*;
+
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionListener;
 import java.awt.geom.AffineTransform;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Random;
 
@@ -10,55 +16,77 @@ public class MainMenuView extends JPanel {
     private final Color backgroundColor = new Color(15, 15, 35);
     private final ArrayList<Star> stars = new ArrayList<>();
     private final Random random = new Random();
+    private Style currentStyle = loadTheme();
+    private static final Path THEME_DIR = Paths.get("tmp");
+    private static final Path THEME_FILE = THEME_DIR.resolve("theme.txt");
 
     private boolean fullscreen = false;
 
     private static final String[] modes = {"OPPOSITE CORNER", "CENTER", "RANDOM EDGE"};
+    private final StyledComboBox modeBox = new StyledComboBox(currentStyle, modes);
 
-    private final JComboBox<String> modeBox = new JComboBox<>(modes);
+    private final StyledTextField xField = new StyledTextField(currentStyle,"25");
+    private final StyledTextField yField = new StyledTextField(currentStyle, "25");
+    private final StyledTextField seedField = new StyledTextField(currentStyle, "");
 
-    private final JTextField xField = new JTextField("25");
-    private final JTextField yField = new JTextField("25");
-    private final JTextField seedField = new JTextField();
+    private Animated3DText title;
 
-    private final AnimatedTitle title;
+    private final StyledButton playButton, textureEditorButton, mapEditorButton, creditsButton, exitButton, settingsButton, infoButton;
+    private StyledButton settingsCloseButton, infoCloseButton;
 
-    private final JButton playButton, textureEditorButton, mapEditorButton, creditsButton, exitButton, settingsButton, infoButton;
-    private final JLabel mazeDimensionsLabel, modeLabel, xLabel, yLabel, seedLabel;
+    private final StyledLabel mazeDimensionsLabel, modeLabel, xLabel, yLabel, seedLabel;
+    private StyledLabel themesTitle;
+
+    private StyledToggle fullscreenToggle = new StyledToggle(currentStyle, "Fullscreen");
+    private JDialog settingsDialog, infoDialog;
+
+    private final Timer starTimer;
     //endregion
 
     public MainMenuView() {
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setLayout(null);
+        title = new Animated3DText(
+                "RCJMS",
+                Animated3DText.AnimationType.ROTATE
+        );
 
-        title = new AnimatedTitle("RCJMS");
+        title.setBaseFontSize(55f);
+        title.setAutoScale(true);
 
-        modeLabel = createLabel("MODE", 18);
-        modeBox.setFont(new Font("Arial", Font.PLAIN, 18));
-        modeBox.setFocusable(false);
+        title.setAnimationSpeed(1.0);
 
-        mazeDimensionsLabel = createLabel("MAZE DIMENSIONS", 20);
-        xLabel = createLabel("X", 18);
-        xField.setFont(new Font("Arial", Font.PLAIN, 20));
-        xField.setHorizontalAlignment(JTextField.CENTER);
-        yLabel = createLabel("Y", 18);
-        yField.setFont(new Font("Arial", Font.PLAIN, 20));
-        yField.setHorizontalAlignment(JTextField.CENTER);
+        title.setPulseAmount(0.06);
+        title.setRotationAmount(0.05);
 
-        seedLabel = createLabel("CUSTOM SEED", 18);
-        seedField.setFont(new Font("Arial", Font.PLAIN, 20));
-        seedField.setHorizontalAlignment(JTextField.CENTER);
+        title.setDepth(8);
 
-        playButton = createButton("PLAY", 22);
-        textureEditorButton = createButton("TEXTURE EDITOR", 17);
-        mapEditorButton = createButton("MAP EDITOR", 16);
-        creditsButton = createButton("CREDITS", 15);
-        exitButton = createButton("EXIT", 14);
-
-        settingsButton = createIconButton("…");
-        infoButton = createIconButton("i");
+        title.setTextColor(Color.WHITE);
+        title.setDepthColor(
+                new Color(255, 255, 120, 80)
+        );
+        title.addActionListener(e -> {title.setText(title.getText() == "RCJMS" ? "RayCasting Java Maze Simulator" : "RCJMS");
+        });
 
         add(title);
+
+        modeLabel = createLabel(currentStyle,"MODE");
+
+        mazeDimensionsLabel = createLabel(currentStyle,"MAZE DIMENSIONS");
+        xLabel = createLabel(currentStyle,"X");
+        yLabel = createLabel(currentStyle,"Y");
+
+        seedLabel = createLabel(currentStyle,"CUSTOM SEED");
+
+        playButton = createButton(currentStyle, "PLAY");
+        textureEditorButton = createButton(currentStyle, "TEXTURE EDITOR");
+        mapEditorButton = createButton(currentStyle, "MAP EDITOR");
+        creditsButton = createButton(currentStyle, "CREDITS");
+        exitButton = createButton(currentStyle, "EXIT");
+
+        settingsButton = createIconButton(currentStyle, "…");
+        infoButton = createIconButton(currentStyle, "i");
+
         add(modeLabel);
         add(modeBox);
         add(mazeDimensionsLabel);
@@ -82,26 +110,118 @@ public class MainMenuView extends JPanel {
         textureEditorButton.addActionListener(e -> {
             try {RCJMS.instance.ChangeView(RCJMS.instance.textureEditorView = new TextureEditorView(), "Texture Editor");}
             catch (IOException ex) {throw new RuntimeException(ex);}});
+        mapEditorButton.addActionListener(e -> RCJMS.instance.ChangeView(RCJMS.instance.mapEditorView = new MapEditorView(), "Map Editor"));
         creditsButton.addActionListener(e -> RCJMS.instance.ChangeView(RCJMS.instance.creditsView = new CreditsView(), "Credits"));
         exitButton.addActionListener(e -> System.exit(0));
 
         settingsButton.addActionListener(e -> {
-            JCheckBox fullscreenBox = new JCheckBox("Fullscreen");
-            fullscreenBox.setFont(new Font("Arial", Font.PLAIN, 16));
-            fullscreenBox.setSelected(fullscreen);
-            fullscreenBox.addActionListener(ev -> setFullscreen(fullscreenBox.isSelected()));
-            JPanel panel = new JPanel(new BorderLayout());
-            panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-            panel.add(fullscreenBox, BorderLayout.CENTER);
-            JOptionPane.showMessageDialog(this, panel, "Settings", JOptionPane.PLAIN_MESSAGE);
+            if (settingsDialog != null && settingsDialog.isVisible()) { settingsDialog.toFront(); return; }
+
+            fullscreenToggle = new StyledToggle(currentStyle, "Fullscreen");
+            fullscreenToggle.setSelected(fullscreen);
+            fullscreenToggle.addActionListener(ev -> setFullscreen(fullscreenToggle.isSelected()));
+
+            StyledButton flatButton = createButton(Style.FLAT, "Flat");
+            StyledButton neumorphicButton = createButton(Style.NEUMORPHIC, "Neumorphic");
+            StyledButton glassButton = createButton(Style.GLASS, "Glass");
+            for (StyledButton b : new StyledButton[]{flatButton, neumorphicButton, glassButton}) b.setPreferredSize(new Dimension(110, 40));
+
+            settingsCloseButton = createButton(currentStyle, "Close");
+
+            ActionListener themeListener = ev -> {
+                Style newStyle = ev.getSource() == flatButton ? Style.FLAT : ev.getSource() == neumorphicButton ? Style.NEUMORPHIC : Style.GLASS;
+                if (newStyle == currentStyle) return;
+                currentStyle = newStyle;
+                saveTheme(newStyle);
+                SyncAllUI(newStyle);
+            };
+            flatButton.addActionListener(themeListener);
+            neumorphicButton.addActionListener(themeListener);
+            glassButton.addActionListener(themeListener);
+
+            themesTitle = createLabel(currentStyle, "Themes");
+            themesTitle.setForeground(Color.WHITE);
+            themesTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+            JPanel themeRow = new JPanel(new GridLayout(1, 3, 8, 0));
+            themeRow.setOpaque(false);
+            themeRow.add(flatButton);
+            themeRow.add(neumorphicButton);
+            themeRow.add(glassButton);
+
+            JPanel themesBlock = new JPanel();
+            themesBlock.setOpaque(false);
+            themesBlock.setLayout(new BoxLayout(themesBlock, BoxLayout.Y_AXIS));
+            themesBlock.add(themesTitle);
+            themesBlock.add(Box.createVerticalStrut(8));
+            themesBlock.add(themeRow);
+
+            JPanel contentPanel = new JPanel(new BorderLayout(0, 16));
+            contentPanel.setOpaque(false);
+            contentPanel.add(fullscreenToggle, BorderLayout.NORTH);
+            contentPanel.add(themesBlock, BorderLayout.CENTER);
+
+            JPanel panel = new JPanel(new BorderLayout(0, 16));
+            panel.setBackground(new Color(28, 28, 32));
+            panel.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+            panel.add(contentPanel, BorderLayout.CENTER);
+
+            JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+            bottomPanel.setOpaque(false);
+            bottomPanel.add(settingsCloseButton);
+            panel.add(bottomPanel, BorderLayout.SOUTH);
+
+            settingsDialog = new JDialog();
+            settingsDialog.setTitle("Settings");
+            settingsCloseButton.addActionListener(ev -> settingsDialog.dispose());
+            settingsDialog.setContentPane(panel);
+            settingsDialog.pack();
+            settingsDialog.setLocationRelativeTo(this);
+            settingsDialog.setAlwaysOnTop(true);
+            settingsDialog.setResizable(false);
+            settingsDialog.setVisible(true);
         });
-        infoButton.addActionListener(e -> JOptionPane.showMessageDialog(this, "Controls:\nWASD - Move",
-                "Info", JOptionPane.INFORMATION_MESSAGE));
+        infoButton.addActionListener(e -> {
+            if (infoDialog != null && infoDialog.isVisible()) { infoDialog.toFront(); return; }
 
-        Timer timer = new Timer(16, e -> {updateStars();repaint();});
-        timer.start();
+            JLabel label = new JLabel("<html>Controls:<br>WASD - Move<br>SHIFT - Run</html>");
+            label.setForeground(Color.WHITE);
+            label.setFont(new Font("Arial", Font.PLAIN, 16));
+
+            infoCloseButton = createButton(currentStyle, "Close");
+
+            JPanel panel = new JPanel(new BorderLayout(0, 16));
+            panel.setBackground(new Color(28, 28, 32));
+            panel.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+            panel.add(label, BorderLayout.CENTER);
+
+            JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+            bottomPanel.setOpaque(false);
+            bottomPanel.add(infoCloseButton);
+            panel.add(bottomPanel, BorderLayout.SOUTH);
+
+            infoDialog = new JDialog();
+            infoDialog.setTitle("Info");
+            infoCloseButton.addActionListener(ev -> infoDialog.dispose());
+            infoDialog.setContentPane(panel);
+            infoDialog.pack();
+            infoDialog.setLocationRelativeTo(this);
+            infoDialog.setAlwaysOnTop(true);
+            infoDialog.setResizable(false);
+            infoDialog.setVisible(true);
+        });
+
+        starTimer = new Timer(16, e -> {updateStars();repaint();});
+        starTimer.start();
     }
-
+    @Override public void addNotify() {
+        super.addNotify();
+        if (starTimer != null && !starTimer.isRunning()) starTimer.start();
+    }
+    @Override public void removeNotify() {
+        if (starTimer != null && starTimer.isRunning()) starTimer.stop();
+        super.removeNotify();
+    }
     private void StartGameView() {
         try {
             int mazeWidth = Math.clamp(Integer.parseInt(xField.getText()), 5, 200);
@@ -143,24 +263,18 @@ public class MainMenuView extends JPanel {
     }
 
     //region UI
-    private JLabel createLabel(String text, int fontSize) {
-        JLabel label = new JLabel(text);
+    private StyledLabel createLabel(Style style, String text) {
+        StyledLabel label = new StyledLabel(style, text);
         label.setForeground(Color.WHITE);
-        label.setFont(new Font("Arial", Font.BOLD, fontSize));
-        label.setHorizontalAlignment(SwingConstants.CENTER);
         return label;
     }
-    private JButton createButton(String text, int fontSize) {
-        JButton button = new JButton(text);
-        button.setFont(new Font("Arial", Font.BOLD, fontSize));
-        button.setFocusPainted(false);
+    private StyledButton createButton(Style style, String text) {
+        StyledButton button = new StyledButton(style, text);
         button.setFocusable(false);
         return button;
     }
-    private JButton createIconButton(String text) {
-        JButton button = new JButton(text);
-        button.setFont(new Font("Arial", Font.BOLD, 30));
-        button.setFocusPainted(false);
+    private StyledButton createIconButton(Style style, String text) {
+        StyledButton button = new StyledButton(style, text);
         button.setFocusable(false);
         return button;
     }
@@ -184,6 +298,8 @@ public class MainMenuView extends JPanel {
 
         setScaledBounds(xLabel, 650, 315, 30, 35, scale, backgroundX, backgroundY);
         setScaledBounds(xField, 680, 310, 90, 45, scale, backgroundX, backgroundY);
+        xField.setHorizontalAlignment(JLabel.CENTER);
+        yField.setHorizontalAlignment(JLabel.CENTER);
 
         setScaledBounds(yLabel, 790, 315, 30, 35, scale, backgroundX, backgroundY);
         setScaledBounds(yField, 820, 310, 90, 45, scale, backgroundX, backgroundY);
@@ -227,6 +343,37 @@ public class MainMenuView extends JPanel {
         for (Star star : stars) drawStar(g2, star);
 
         g2.dispose();
+    }
+    //endregion
+
+    //region Themes
+    private void saveTheme(Style style) {
+        try {
+            Files.createDirectories(THEME_DIR);
+            Files.writeString(THEME_FILE, style.name());
+        } catch (IOException ex) { ex.printStackTrace(); }
+    }
+    private Style loadTheme() {
+        try {
+            if (Files.exists(THEME_FILE)) {
+                String name = Files.readString(THEME_FILE).trim();
+                return Style.valueOf(name);
+            }
+        } catch (IOException | IllegalArgumentException ex) { ex.printStackTrace(); }
+        return Style.FLAT;
+    }
+    private void SyncAllUI(Style style) {
+        modeBox.setStyle(style);
+
+        xField.setStyle(style);
+        yField.setStyle(style);
+        seedField.setStyle(style);
+
+        for (StyledButton SB : new StyledButton[]{playButton, textureEditorButton, mapEditorButton, creditsButton, exitButton, settingsButton, infoButton, settingsCloseButton, infoCloseButton})
+            if (SB != null) SB.setStyle(style);
+        for (StyledLabel SL : new StyledLabel[]{mazeDimensionsLabel, modeLabel, xLabel, yLabel, seedLabel, themesTitle})
+            if (SL != null) SL.setStyle(style);
+        if (fullscreenToggle != null) fullscreenToggle.setStyle(style);
     }
     //endregion
 
@@ -285,11 +432,24 @@ public class MainMenuView extends JPanel {
     static class AnimatedTitle extends JComponent {
         private final String text;
         private double time = 0;
+        private final Timer titleTimer;
 
         public AnimatedTitle(String text) {
             this.text = text;
-            Timer timer = new Timer(16, e -> {time += 0.05;repaint();});
-            timer.start();
+            titleTimer = new Timer(16, e -> {time += 0.05;repaint();});
+            titleTimer.start();
+        }
+
+        @Override
+        public void addNotify() {
+            super.addNotify();
+            if (titleTimer != null && !titleTimer.isRunning()) titleTimer.start();
+        }
+
+        @Override
+        public void removeNotify() {
+            if (titleTimer != null && titleTimer.isRunning()) titleTimer.stop();
+            super.removeNotify();
         }
         @Override protected void paintComponent(Graphics g) {
             Graphics2D g2d = (Graphics2D) g.create();

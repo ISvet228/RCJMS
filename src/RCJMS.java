@@ -8,6 +8,7 @@ public class RCJMS extends JFrame {
     public VictoryView victoryView;
     public TextureEditorView textureEditorView;
     public CreditsView creditsView;
+    public MapEditorView mapEditorView;
     private JPanel currentView;
 
     public static final int SCREEN_WIDTH = 960;//DO NOT CHANGE UI WILL BE BROKEN
@@ -22,14 +23,19 @@ public class RCJMS extends JFrame {
         setVisible(true);
     }
     public void ChangeView(JPanel nextView, String nextTitle) {
+        // Remove the current view first to ensure its removeNotify() is called
+        // and any animation timers are stopped before the next view is added.
+        if (currentView != null) {
+            remove(currentView);
+        }
         add(nextView);
-        if (currentView != null) remove(currentView);
         currentView = nextView;
         setTitle(nextTitle);
         revalidate();
         repaint();
+        System.gc();
     }
-    static void main(String[] args) {
+    public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> { try {new RCJMS();}
             catch (IOException e){throw new RuntimeException(e);}});
     }

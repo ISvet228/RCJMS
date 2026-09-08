@@ -23,6 +23,8 @@ public class CreditsView extends JPanel {
             "",
             "Ljubo For Collision Fix And Walk Enchantments|https://github.com/lobujo552",
             "",
+            "fUnGuN StyleUI Help|https://github.com/AnimemanDude",
+            "",
             "Useful Resources",
             "",
             "DDA|https://aaaa.sh/creatures/dda-algorithm-interactive/",
@@ -62,6 +64,18 @@ public class CreditsView extends JPanel {
         scrollTimer = new Timer(16, e -> {updateCredits();repaint();});
         scrollTimer.start();
         SwingUtilities.invokeLater(this::requestFocusInWindow);
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        if (scrollTimer != null && !scrollTimer.isRunning()) scrollTimer.start();
+    }
+
+    @Override
+    public void removeNotify() {
+        if (scrollTimer != null && scrollTimer.isRunning()) scrollTimer.stop();
+        super.removeNotify();
     }
 
     //region Credits

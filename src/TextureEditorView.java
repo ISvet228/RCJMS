@@ -1,3 +1,5 @@
+import StyleUI.*;
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
@@ -10,49 +12,45 @@ import java.util.*;
 public class TextureEditorView extends JPanel {
     //region Variables
     public enum TextureMode {WALLS, FLOOR, CEILING}
-
     private enum Tool {SELECT, BRUSH, FILL, ERASER}
 
     private static final int MIN_TEXTURE_SIZE = 1;
     private static final int MAX_TEXTURE_SIZE = 32;
-
     private static final int MIN_TOOL_SIZE = 1;
     private static final int MAX_TOOL_SIZE = 10;
 
     private static final int ORIGINAL_WALL_COLOR = 0xECD485;
     private static final int ORIGINAL_FLOOR_COLOR = 0xD3AF63;
     private static final int ORIGINAL_CEILING_COLOR = 0x816E1E;
-
     private static final int EMPTY_COLOR = -1;
     private static final int SAVED_EMPTY_COLOR = 0xFFFFFF;
 
     private final TextureCanvas textureCanvas = new TextureCanvas();
     private final JPanel colorPreview = new JPanel();
 
-    private final JSlider widthSlider = new JSlider(MIN_TEXTURE_SIZE, MAX_TEXTURE_SIZE, 8);
-    private final JSlider heightSlider = new JSlider(MIN_TEXTURE_SIZE, MAX_TEXTURE_SIZE, 8);
+    private final StyledSlider widthSlider = new StyledSlider(Style.GLASS, MIN_TEXTURE_SIZE, MAX_TEXTURE_SIZE, 8);
+    private final StyledSlider heightSlider = new StyledSlider(Style.GLASS, MIN_TEXTURE_SIZE, MAX_TEXTURE_SIZE, 8);
 
-    private final JLabel widthLabel = new JLabel();
-    private final JLabel heightLabel = new JLabel();
+    private final StyledLabel widthLabel = new StyledLabel(Style.GLASS, "");
+    private final StyledLabel heightLabel = new StyledLabel(Style.GLASS, "");
+    private final StyledLabel modeLabel = new StyledLabel(Style.GLASS, "");
+    private final StyledLabel selectedCellLabel = new StyledLabel(Style.GLASS, "Selected: none", false, false);
 
-    private final JLabel modeLabel = new JLabel();
-    private final JLabel selectedCellLabel = new JLabel("Selected: none");
+    private final StyledSlider redSlider = new StyledSlider(Style.GLASS, 0, 255, 255);
+    private final StyledSlider greenSlider = new StyledSlider(Style.GLASS, 0, 255, 255);
+    private final StyledSlider blueSlider = new StyledSlider(Style.GLASS, 0, 255, 255);
 
-    private final JSlider redSlider = new JSlider(0, 255, 255);
-    private final JSlider greenSlider = new JSlider(0, 255, 255);
-    private final JSlider blueSlider = new JSlider(0, 255, 255);
+    private final StyledTextField hexField = new StyledTextField(Style.GLASS, "FFFFFF");
 
-    private final JTextField hexField = new JTextField("FFFFFF");
+    private final StyledToggleButton selectToolButton = new StyledToggleButton(Style.GLASS, "Select");
+    private final StyledToggleButton brushToolButton = new StyledToggleButton(Style.GLASS, "Brush");
+    private final StyledToggleButton fillToolButton = new StyledToggleButton(Style.GLASS, "Fill");
+    private final StyledToggleButton eraserToolButton = new StyledToggleButton(Style.GLASS, "Eraser");
 
-    private final JToggleButton selectToolButton = new JToggleButton("Select");
-    private final JToggleButton brushToolButton = new JToggleButton("Brush");
-    private final JToggleButton fillToolButton = new JToggleButton("Fill");
-    private final JToggleButton eraserToolButton = new JToggleButton("Eraser");
-
-    private final JSlider brushSizeSlider = new JSlider(MIN_TOOL_SIZE, MAX_TOOL_SIZE, 1);
-    private final JSlider eraserSizeSlider = new JSlider(MIN_TOOL_SIZE, MAX_TOOL_SIZE, 1);
-    private final JLabel brushSizeLabel = new JLabel();
-    private final JLabel eraserSizeLabel = new JLabel();
+    private final StyledSlider brushSizeSlider = new StyledSlider(Style.GLASS, MIN_TOOL_SIZE, MAX_TOOL_SIZE, 1);
+    private final StyledSlider eraserSizeSlider = new StyledSlider(Style.GLASS, MIN_TOOL_SIZE, MAX_TOOL_SIZE, 1);
+    private final StyledLabel brushSizeLabel = new StyledLabel(Style.GLASS, "");
+    private final StyledLabel eraserSizeLabel = new StyledLabel(Style.GLASS, "");
 
     private Tool currentTool = Tool.SELECT;
 
@@ -60,7 +58,6 @@ public class TextureEditorView extends JPanel {
 
     private int textureWidth = 8;
     private int textureHeight = 8;
-
     private int wallWidth = 8;
     private int wallHeight = 8;
     private int floorWidth = 8;
@@ -77,6 +74,11 @@ public class TextureEditorView extends JPanel {
 
     private boolean updatingSizeControls = false;
 
+    private static final int MAX_HISTORY = 10;
+    private final Deque<EditorState> undoHistory = new ArrayDeque<>();
+    private final Deque<EditorState> redoHistory = new ArrayDeque<>();
+    private boolean historyRestoring = false;
+    private boolean mouseHistoryStarted = false;
     //endregion
 
     public TextureEditorView() throws IOException {
@@ -88,6 +90,7 @@ public class TextureEditorView extends JPanel {
         buildRightPanel();
         buildCenter();
         buildBottomMenu();
+        setupUndoRedo();
 
         resetTextures();
         updateModeLabel();
@@ -110,7 +113,7 @@ public class TextureEditorView extends JPanel {
         return new int[]{8, 8};
     }
 
-    //region builders
+    //region Builders
     private void buildTopMenu() {
         JPanel top = new JPanel(new BorderLayout(10, 5));
         top.setOpaque(false);
@@ -124,17 +127,17 @@ public class TextureEditorView extends JPanel {
         modePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         modeLabel.setForeground(Color.WHITE);
-        modeLabel.setFont(modeLabel.getFont().deriveFont(Font.BOLD, 16f));
+        modeLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 16));
 
-        JButton wallsButton = new JButton("Walls");
-        JButton floorButton = new JButton("Floor");
-        JButton ceilingButton = new JButton("Ceiling");
+        StyledButton wallsButton = new StyledButton(Style.GLASS, "Walls");
+        StyledButton floorButton = new StyledButton(Style.GLASS, "Floor");
+        StyledButton ceilingButton = new StyledButton(Style.GLASS, "Ceiling");
 
         wallsButton.addActionListener(e -> setMode(TextureMode.WALLS));
         floorButton.addActionListener(e -> setMode(TextureMode.FLOOR));
         ceilingButton.addActionListener(e -> setMode(TextureMode.CEILING));
 
-        JLabel textureLabel = new JLabel("Texture");
+        StyledLabel textureLabel = new StyledLabel(Style.GLASS, "Texture", false, false);
         textureLabel.setForeground(Color.WHITE);
         modePanel.add(textureLabel);
         modePanel.add(wallsButton);
@@ -145,6 +148,8 @@ public class TextureEditorView extends JPanel {
 
         widthLabel.setForeground(Color.WHITE);
         heightLabel.setForeground(Color.WHITE);
+        widthLabel.setPreferredSize(50, 22);
+        heightLabel.setPreferredSize(50, 22);
 
         configureSizeSlider(widthSlider);
         configureSizeSlider(heightSlider);
@@ -166,12 +171,10 @@ public class TextureEditorView extends JPanel {
         stack.add(Box.createVerticalStrut(2));
         stack.add(heightRow);
 
-        JButton exitButton = new JButton("Exit");
+        StyledButton exitButton = new StyledButton(Style.GLASS, "Exit");
         exitButton.setFocusable(false);
 
-        exitButton.addActionListener(e -> {
-            RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu");
-        });
+        exitButton.addActionListener(e -> {RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu");});
 
         JPanel exitPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 4));
         exitPanel.setOpaque(false);
@@ -181,35 +184,42 @@ public class TextureEditorView extends JPanel {
         top.add(exitPanel, BorderLayout.EAST);
         add(top, BorderLayout.NORTH);
     }
-    private JPanel buildLabeledSliderRow(String labelText, JSlider slider, JLabel valueLabel) {
+
+    private JPanel buildLabeledSliderRow(String labelText, StyledSlider slider, StyledLabel valueLabel) {
         JPanel row = new JPanel(new BorderLayout(8, 0));
         row.setOpaque(false);
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 60));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
 
-        JLabel nameLabel = new JLabel(labelText);
+        StyledLabel nameLabel = new StyledLabel(Style.GLASS, labelText, false, false);
         nameLabel.setForeground(Color.WHITE);
+        nameLabel.setPreferredSize(60, 22);
 
         row.add(nameLabel, BorderLayout.WEST);
         row.add(slider, BorderLayout.CENTER);
         row.add(valueLabel, BorderLayout.EAST);
         return row;
     }
-    private void configureSizeSlider(JSlider slider) {
+
+    private void configureSizeSlider(StyledSlider slider) {
         slider.setMajorTickSpacing(8);
         slider.setMinorTickSpacing(1);
         slider.setForeground(Color.WHITE);
         slider.setPaintTicks(true);
         slider.setPaintLabels(true);
         slider.setOpaque(false);
+        slider.setPreferredSize(new Dimension(140, 32)); // фикс — не даём дефолтные 180x44 распирать строку
     }
-    private void configureToolSizeSlider(JSlider slider) {
+
+    private void configureToolSizeSlider(StyledSlider slider) {
         slider.setMajorTickSpacing(MAX_TOOL_SIZE - MIN_TOOL_SIZE);
         slider.setMinorTickSpacing(1);
         slider.setPaintTicks(false);
         slider.setPaintLabels(false);
         slider.setOpaque(false);
+        slider.setPreferredSize(new Dimension(130, 22)); // фикс п.4: строка рассчитана на 26px высоты
     }
+
     private void buildCenter() {
         JPanel center = new JPanel(new GridBagLayout());
         center.setOpaque(false);
@@ -226,6 +236,7 @@ public class TextureEditorView extends JPanel {
         center.add(textureCanvas, gbc);
         add(center, BorderLayout.CENTER);
     }
+
     private void buildRightPanel() {
         JPanel right = new JPanel();
         right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
@@ -236,10 +247,10 @@ public class TextureEditorView extends JPanel {
         right.setMinimumSize(new Dimension(220, 0));
         right.setMaximumSize(new Dimension(220, Integer.MAX_VALUE));
 
-        JLabel toolsTitle = new JLabel("Tool");
+        StyledLabel toolsTitle = new StyledLabel(Style.GLASS, "Tool", false, false);
         toolsTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
         toolsTitle.setForeground(Color.WHITE);
-        toolsTitle.setFont(toolsTitle.getFont().deriveFont(Font.BOLD, 18f));
+        toolsTitle.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
 
         JPanel toolButtons = new JPanel(new GridLayout(2, 2, 4, 4));
         toolButtons.setOpaque(false);
@@ -288,11 +299,12 @@ public class TextureEditorView extends JPanel {
 
         JSeparator separator = new JSeparator();
         separator.setMaximumSize(new Dimension(210, 2));
+        separator.setAlignmentX(Component.CENTER_ALIGNMENT); // фикс п.5
 
-        JLabel colorTitle = new JLabel("Color");
+        StyledLabel colorTitle = new StyledLabel(Style.GLASS, "Color", false, false);
         colorTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
         colorTitle.setForeground(Color.WHITE);
-        colorTitle.setFont(colorTitle.getFont().deriveFont(Font.BOLD, 18f));
+        colorTitle.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
 
         colorPreview.setPreferredSize(new Dimension(150, 150));
         colorPreview.setMinimumSize(new Dimension(150, 150));
@@ -303,22 +315,22 @@ public class TextureEditorView extends JPanel {
         colorPreview.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         colorPreview.addMouseListener(new MouseAdapter() {@Override public void mouseClicked(MouseEvent e) {openColorPicker();}});
 
-        JLabel hint = new JLabel("<html><center>Click the square<br>to choose a color</center></html>");
+        StyledLabel hint = new StyledLabel(Style.GLASS, "Click the square to choose a color", false, false);
         hint.setForeground(Color.LIGHT_GRAY);
         hint.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         selectedCellLabel.setForeground(Color.WHITE);
         selectedCellLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        JButton applyButton = new JButton("Apply to selected cell");
+        StyledButton applyButton = new StyledButton(Style.GLASS,"Apply to cell");
         applyButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         applyButton.addActionListener(e -> applyColorToSelectedCell());
 
-        JButton fillButton = new JButton("Fill texture");
+        StyledButton fillButton = new StyledButton(Style.GLASS, "Fill texture");
         fillButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         fillButton.addActionListener(e -> fillCurrentTexture());
 
-        JButton resetButton = new JButton("Reset");
+        StyledButton resetButton = new StyledButton(Style.GLASS, "Reset");
         resetButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         resetButton.addActionListener(e -> resetTextures());
 
@@ -349,13 +361,8 @@ public class TextureEditorView extends JPanel {
 
         right.add(Box.createVerticalGlue());
 
-        JPanel centerWrapper = new JPanel(new GridBagLayout());
-        centerWrapper.setOpaque(false);
-        centerWrapper.add(right);
+        StyledScrollPane rightScroll = new StyledScrollPane(right, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER, Style.GLASS);
 
-        JScrollPane rightScroll = new JScrollPane(centerWrapper, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        rightScroll.getViewport().setBackground(new Color(12, 12, 15));
-        rightScroll.getVerticalScrollBar().setBackground(new Color(28, 28, 32));
         rightScroll.setBorder(BorderFactory.createEmptyBorder());
         rightScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         rightScroll.getVerticalScrollBar().setUnitIncrement(16);
@@ -364,12 +371,13 @@ public class TextureEditorView extends JPanel {
 
         add(rightScroll, BorderLayout.EAST);
     }
+
     private void buildBottomMenu() {
         JPanel bottom = new JPanel();
         bottom.setOpaque(false);
         bottom.setLayout(new BoxLayout(bottom, BoxLayout.Y_AXIS));
 
-        JLabel info = new JLabel("Pick a tool, pick a color, then click or drag on the grid.");
+        StyledLabel info = new StyledLabel(Style.GLASS, "Pick a tool, pick a color, then click or drag on the grid.", false, false);
         info.setForeground(Color.LIGHT_GRAY);
         info.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -377,8 +385,8 @@ public class TextureEditorView extends JPanel {
         buttons.setOpaque(false);
         buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JButton saveButton = new JButton("Save");
-        JButton resetButton = new JButton("Reset");
+        StyledButton saveButton = new StyledButton(Style.GLASS, "Save");
+        StyledButton resetButton = new StyledButton(Style.GLASS, "Reset");
 
         saveButton.addActionListener(e -> {
             try {
@@ -455,6 +463,7 @@ public class TextureEditorView extends JPanel {
             updateSizeLabels();
             return;
         }
+        saveHistoryState();
 
         int[][] resized = resizePreservingData(getCurrentTexture(), newWidth, newHeight);
         setCurrentTexture(resized);
@@ -527,6 +536,7 @@ public class TextureEditorView extends JPanel {
     }
     private void applyColorToSelectedCell() {
         if (selectedX < 0 || selectedY < 0) return;
+        saveHistoryState();
         int color = getColorFromControls();
         getCurrentTexture()[selectedY][selectedX] = color;
         textureCanvas.repaint();
@@ -534,6 +544,7 @@ public class TextureEditorView extends JPanel {
     private void fillCurrentTexture() {
         int color = getColorFromControls();
         int[][] texture = getCurrentTexture();
+        saveHistoryState();
         for (int[] ints : texture) Arrays.fill(ints, color);
         textureCanvas.repaint();
     }
@@ -607,23 +618,26 @@ public class TextureEditorView extends JPanel {
         sliders.setBackground(new Color(28, 28, 32));
         sliders.setMaximumSize(new Dimension(350, 100));
 
-        JLabel redLabel = new JLabel("Red");
+        StyledLabel redLabel = new StyledLabel(Style.GLASS, "Red");
         redLabel.setForeground(Color.WHITE);
-        JLabel greenLabel = new JLabel("Green");
+        StyledLabel greenLabel = new StyledLabel(Style.GLASS, "Green");
         greenLabel.setForeground(Color.WHITE);
-        JLabel blueLabel = new JLabel("Blue");
+        StyledLabel blueLabel = new StyledLabel(Style.GLASS, "Blue");
         blueLabel.setForeground(Color.WHITE);
 
-        JSlider r = new JSlider(0, 255, redSlider.getValue());
+        StyledSlider r = new StyledSlider(Style.GLASS, 0, 255, redSlider.getValue());
         r.setBackground(new Color(28, 28, 32));
-        JSlider g = new JSlider(0, 255, greenSlider.getValue());
+        r.setOpaque(false);
+        StyledSlider g = new StyledSlider(Style.GLASS, 0, 255, greenSlider.getValue());
         g.setBackground(new Color(28, 28, 32));
-        JSlider b = new JSlider(0, 255, blueSlider.getValue());
+        g.setOpaque(false);
+        StyledSlider b = new StyledSlider(Style.GLASS, 0, 255, blueSlider.getValue());
         b.setBackground(new Color(28, 28, 32));
+        b.setOpaque(false);
 
-        JLabel rValue = new JLabel(String.valueOf(r.getValue()));
-        JLabel gValue = new JLabel(String.valueOf(g.getValue()));
-        JLabel bValue = new JLabel(String.valueOf(b.getValue()));
+        StyledLabel rValue = new StyledLabel(Style.GLASS, String.valueOf(r.getValue()), false, false);
+        StyledLabel gValue = new StyledLabel(Style.GLASS, String.valueOf(g.getValue()), false, false);
+        StyledLabel bValue = new StyledLabel(Style.GLASS, String.valueOf(b.getValue()), false, false);
 
         sliders.add(redLabel);
         sliders.add(createSliderRow(r, rValue));
@@ -632,9 +646,9 @@ public class TextureEditorView extends JPanel {
         sliders.add(blueLabel);
         sliders.add(createSliderRow(b, bValue));
 
-        JLabel hexLabel = new JLabel("Color code (RRGGBB):");
+        StyledLabel hexLabel = new StyledLabel(Style.GLASS, "Color code (RRGGBB):", false, false);
         hexLabel.setForeground(Color.WHITE);
-        JTextField pickerHex = new JTextField(hexField.getText());
+        StyledTextField pickerHex = new StyledTextField(Style.GLASS, hexField.getText());
         pickerHex.setBackground(new Color(28, 28, 32));
         pickerHex.setForeground(Color.WHITE);
         pickerHex.setMaximumSize(new Dimension(350, 28));
@@ -661,8 +675,8 @@ public class TextureEditorView extends JPanel {
                 updatePreview.run();
             }});
 
-        JButton apply = new JButton("Apply");
-        JButton cancel = new JButton("Cancel");
+        StyledButton apply = new StyledButton(Style.GLASS, "Apply");
+        StyledButton cancel = new StyledButton(Style.GLASS, "Cancel");
 
         apply.addActionListener(e -> {
             int color = (r.getValue() << 16) | (g.getValue() << 8) | b.getValue();
@@ -696,8 +710,10 @@ public class TextureEditorView extends JPanel {
         updatePreview.run();
         dialog.setVisible(true);
     }
-    private JPanel createSliderRow(JSlider slider, JLabel valueLabel) {
+    private JPanel createSliderRow(StyledSlider slider, StyledLabel valueLabel) {
         JPanel panel = new JPanel(new BorderLayout(5, 0));
+        panel.setOpaque(false);
+        valueLabel.setForeground(Color.WHITE);
         panel.add(slider, BorderLayout.CENTER);
         panel.add(valueLabel, BorderLayout.EAST);
         return panel;
@@ -721,6 +737,7 @@ public class TextureEditorView extends JPanel {
     //endregion
 
     public void resetTextures() {
+        if (!historyRestoring) saveHistoryState();
         wallTexture = new int[][]{{ORIGINAL_WALL_COLOR}};
         floorTexture = new int[][]{{ORIGINAL_FLOOR_COLOR}};
         ceilingTexture = new int[][]{{ORIGINAL_CEILING_COLOR}};
@@ -872,7 +889,95 @@ public class TextureEditorView extends JPanel {
         for (int[] row : texture) if (row == null || row.length != width) return false;
         return true;
     }
+    private static class EditorState {
+        private final int[][] wallTexture;
+        private final int[][] floorTexture;
+        private final int[][] ceilingTexture;
 
+        private final int wallWidth;
+        private final int wallHeight;
+        private final int floorWidth;
+        private final int floorHeight;
+        private final int ceilingWidth;
+        private final int ceilingHeight;
+
+        EditorState(int[][] wallTexture, int[][] floorTexture, int[][] ceilingTexture,
+                    int wallWidth, int wallHeight, int floorWidth, int floorHeight,
+                    int ceilingWidth, int ceilingHeight) {
+            this.wallTexture = copyTexture(wallTexture);
+            this.floorTexture = copyTexture(floorTexture);
+            this.ceilingTexture = copyTexture(ceilingTexture);
+            this.wallWidth = wallWidth;
+            this.wallHeight = wallHeight;
+            this.floorWidth = floorWidth;
+            this.floorHeight = floorHeight;
+            this.ceilingWidth = ceilingWidth;
+            this.ceilingHeight = ceilingHeight;
+        }
+    }
+    private static int[][] copyTexture(int[][] texture) {
+        if (texture == null) return null;
+        int[][] copy = new int[texture.length][];
+        for (int y = 0; y < texture.length; y++) copy[y] = texture[y] == null ? null : texture[y].clone();
+        return copy;
+    }
+    private EditorState createEditorState() {return new EditorState(wallTexture, floorTexture, ceilingTexture, wallWidth, wallHeight, floorWidth, floorHeight, ceilingWidth, ceilingHeight);}
+    private void saveHistoryState() {
+        if (historyRestoring) return;
+
+        undoHistory.push(createEditorState());
+        while (undoHistory.size() > MAX_HISTORY) undoHistory.removeLast();
+
+        redoHistory.clear();
+    }
+    private void undo() {
+        if (undoHistory.isEmpty()) return;
+
+        redoHistory.push(createEditorState());
+        while (redoHistory.size() > MAX_HISTORY) redoHistory.removeLast();
+
+        restoreEditorState(undoHistory.pop());
+    }
+    private void redo() {
+        if (redoHistory.isEmpty()) return;
+
+        undoHistory.push(createEditorState());
+        while (undoHistory.size() > MAX_HISTORY) undoHistory.removeLast();
+
+        restoreEditorState(redoHistory.pop());
+    }
+
+    private void restoreEditorState(EditorState state) {
+        historyRestoring = true;
+
+        wallTexture = copyTexture(state.wallTexture);
+        floorTexture = copyTexture(state.floorTexture);
+        ceilingTexture = copyTexture(state.ceilingTexture);
+
+        wallWidth = state.wallWidth;
+        wallHeight = state.wallHeight;
+        floorWidth = state.floorWidth;
+        floorHeight = state.floorHeight;
+        ceilingWidth = state.ceilingWidth;
+        ceilingHeight = state.ceilingHeight;
+
+        syncSizeControlsToMode();
+        selectedX = -1;
+        selectedY = -1;
+        updateSelectedLabel();
+        selectFirstCell();
+        textureCanvas.rebuildGrid();
+
+        historyRestoring = false;
+    }
+    private void setupUndoRedo() {
+        InputMap inputMap = getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap actionMap = getActionMap();
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK), "undo");
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK), "redo");
+        actionMap.put("undo", new AbstractAction() {@Override public void actionPerformed(ActionEvent e) {undo();}});
+        actionMap.put("redo", new AbstractAction() {@Override public void actionPerformed(ActionEvent e) {redo();}});
+    }
     private class TextureCanvas extends JPanel {
         private int gridX;
         private int gridY;
@@ -884,10 +989,17 @@ public class TextureEditorView extends JPanel {
             setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
 
             MouseAdapter handler = new MouseAdapter() {
-                @Override public void mousePressed(MouseEvent e) {handlePointerEvent(e.getX(), e.getY());}
+                @Override public void mousePressed(MouseEvent e) {
+                    mouseHistoryStarted = false;
+                    if (currentTool == Tool.BRUSH || currentTool == Tool.ERASER) {
+                        saveHistoryState();
+                        mouseHistoryStarted = true;
+                    }
+                    handlePointerEvent(e.getX(), e.getY());
+                }
+                @Override public void mouseReleased(MouseEvent e) {mouseHistoryStarted = false;}
                 @Override public void mouseDragged(MouseEvent e) {if (currentTool == Tool.BRUSH || currentTool == Tool.ERASER) handlePointerEvent(e.getX(), e.getY());}
             };
-
             addMouseListener(handler);
             addMouseMotionListener(handler);
         }
