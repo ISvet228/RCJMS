@@ -1,101 +1,80 @@
 import StyleUI.*;
+import Helpers.NSLocalizableString;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.geom.AffineTransform;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.Random;
 
 public class MainMenuView extends JPanel {
     //region Variables
-    private final Color backgroundColor = new Color(15, 15, 35);
     private final ArrayList<Star> stars = new ArrayList<>();
     private final Random random = new Random();
-    private Style currentStyle = loadTheme();
-    private static final Path THEME_DIR = Paths.get("tmp");
-    private static final Path THEME_FILE = THEME_DIR.resolve("theme.txt");
 
-    private boolean fullscreen = false;
+    private Style currentStyle = loadTheme();
+    private static final Path TMP_DIR = Paths.get("tmp");
+    private static final Path THEME_FILE = TMP_DIR.resolve("theme.txt");
+    private static final Path LANGUAGE_FILE = TMP_DIR.resolve("language.txt");
+
+    private final Animated3DText title = new Animated3DText("RCJMS", Animated3DText.AnimationType.ROTATE);
+
+    private final StyledButton playButton = createButton(currentStyle, "PLAY");
+    private final StyledButton textureEditorButton = createButton(currentStyle, "TEXTURE EDITOR");
+    private final StyledButton mapEditorButton = createButton(currentStyle, "MAP EDITOR");
+    private final StyledButton creditsButton = createButton(currentStyle, "CREDITS");
+    private final StyledButton exitButton = createButton(currentStyle, "EXIT");
+    private final StyledButton settingsButton = createIconButton(currentStyle, "…");
+    private final StyledButton infoButton = createIconButton(currentStyle, "i");
+    private StyledButton settingsCloseButton, infoCloseButton;
 
     private static final String[] modes = {"OPPOSITE CORNER", "CENTER", "RANDOM EDGE"};
     private final StyledComboBox modeBox = new StyledComboBox(currentStyle, modes);
+    private final String[] languages = {"en", "ru"};
+    private final String[] languageNames = {"English", "Русский"};
+    private StyledComboBox languageBox;
+
+    private final StyledLabel mazeDimensionsLabel = createLabel(currentStyle,"MAZE DIMENSIONS");
+    private final StyledLabel modeLabel = createLabel(currentStyle,"MODE");
+    private final StyledLabel xLabel = createLabel(currentStyle,"X");
+    private final StyledLabel yLabel = createLabel(currentStyle,"Y");
+    private final StyledLabel seedLabel = createLabel(currentStyle,"CUSTOM SEED");
+    private final StyledLabel languageTitle = createLabel(currentStyle, "Language");
+    private final StyledLabel themesTitle = createLabel(currentStyle, "Themes");
 
     private final StyledTextField xField = new StyledTextField(currentStyle,"25");
     private final StyledTextField yField = new StyledTextField(currentStyle, "25");
     private final StyledTextField seedField = new StyledTextField(currentStyle, "");
 
-    private Animated3DText title;
+    private StyledToggle fullscreenToggle;
+    private boolean fullscreen = false;
 
-    private final StyledButton playButton, textureEditorButton, mapEditorButton, creditsButton, exitButton, settingsButton, infoButton;
-    private StyledButton settingsCloseButton, infoCloseButton;
-
-    private final StyledLabel mazeDimensionsLabel, modeLabel, xLabel, yLabel, seedLabel;
-    private StyledLabel themesTitle;
-
-    private StyledToggle fullscreenToggle = new StyledToggle(currentStyle, "Fullscreen");
     private JDialog settingsDialog, infoDialog;
-
     private final Timer starTimer;
     //endregion
 
     public MainMenuView() {
+        NSLocalizableString.setLanguage(loadLanguage());
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setLayout(null);
-        title = new Animated3DText(
-                "RCJMS",
-                Animated3DText.AnimationType.ROTATE
-        );
 
         title.setBaseFontSize(55f);
         title.setAutoScale(true);
-
         title.setAnimationSpeed(1.0);
-
         title.setPulseAmount(0.06);
         title.setRotationAmount(0.05);
-
-        title.setDepth(8);
-
-        title.setTextColor(Color.WHITE);
-        title.setDepthColor(
-                new Color(255, 255, 120, 80)
-        );
-        title.addActionListener(e -> {title.setText(title.getText() == "RCJMS" ? "RayCasting Java Maze Simulator" : "RCJMS");
-        });
+        title.setDepth(6);
+        title.setTextColor(new Color(255, 127, 0));
+        title.setDepthColor(Color.cyan);
+        title.addActionListener((ActionEvent e) -> title.setText(title.getText().equals("RCJMS") ? "RayCasting Java Maze Simulator" : "RCJMS"));
+        xField.setHorizontalAlignment(JLabel.CENTER);
+        yField.setHorizontalAlignment(JLabel.CENTER);
 
         add(title);
-
-        modeLabel = createLabel(currentStyle,"MODE");
-
-        mazeDimensionsLabel = createLabel(currentStyle,"MAZE DIMENSIONS");
-        xLabel = createLabel(currentStyle,"X");
-        yLabel = createLabel(currentStyle,"Y");
-
-        seedLabel = createLabel(currentStyle,"CUSTOM SEED");
-
-        playButton = createButton(currentStyle, "PLAY");
-        textureEditorButton = createButton(currentStyle, "TEXTURE EDITOR");
-        mapEditorButton = createButton(currentStyle, "MAP EDITOR");
-        creditsButton = createButton(currentStyle, "CREDITS");
-        exitButton = createButton(currentStyle, "EXIT");
-
-        settingsButton = createIconButton(currentStyle, "…");
-        infoButton = createIconButton(currentStyle, "i");
-
-        add(modeLabel);
-        add(modeBox);
-        add(mazeDimensionsLabel);
-        add(xLabel);
-        add(xField);
-        add(yLabel);
-        add(yField);
-        add(seedLabel);
-        add(seedField);
         add(playButton);
         add(textureEditorButton);
         add(mapEditorButton);
@@ -103,6 +82,15 @@ public class MainMenuView extends JPanel {
         add(exitButton);
         add(settingsButton);
         add(infoButton);
+        add(modeBox);
+        add(mazeDimensionsLabel);
+        add(modeLabel);
+        add(xLabel);
+        add(yLabel);
+        add(seedLabel);
+        add(yField);
+        add(xField);
+        add(seedField);
 
         for (int i = 0; i < 80; i++) stars.add(createRandomStar());
 
@@ -124,8 +112,21 @@ public class MainMenuView extends JPanel {
             StyledButton flatButton = createButton(Style.FLAT, "Flat");
             StyledButton neumorphicButton = createButton(Style.NEUMORPHIC, "Neumorphic");
             StyledButton glassButton = createButton(Style.GLASS, "Glass");
-            for (StyledButton b : new StyledButton[]{flatButton, neumorphicButton, glassButton}) b.setPreferredSize(new Dimension(110, 40));
 
+            languageTitle.setForeground(Color.WHITE);
+            languageTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+            languageBox = new StyledComboBox(currentStyle, languageNames);
+            languageBox.setSelectedIndex(NSLocalizableString.getLanguage().equalsIgnoreCase("ru") ? 1 : 0);
+            languageBox.addActionListener(ev -> {
+                int index = languageBox.getSelectedIndex();
+                if (index >= 0 && index < languages.length && !languages[index].equalsIgnoreCase(NSLocalizableString.getLanguage())) {
+                    saveLanguage(languages[index]);
+                    NSLocalizableString.setLanguage(languages[index]);
+                    NSLocalizableString.refresh(settingsDialog);
+                }
+            });
+            for (StyledButton b : new StyledButton[]{flatButton, neumorphicButton, glassButton}) b.setPreferredSize(new Dimension(110, 40));
             settingsCloseButton = createButton(currentStyle, "Close");
 
             ActionListener themeListener = ev -> {
@@ -139,7 +140,6 @@ public class MainMenuView extends JPanel {
             neumorphicButton.addActionListener(themeListener);
             glassButton.addActionListener(themeListener);
 
-            themesTitle = createLabel(currentStyle, "Themes");
             themesTitle.setForeground(Color.WHITE);
             themesTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
 
@@ -152,6 +152,11 @@ public class MainMenuView extends JPanel {
             JPanel themesBlock = new JPanel();
             themesBlock.setOpaque(false);
             themesBlock.setLayout(new BoxLayout(themesBlock, BoxLayout.Y_AXIS));
+
+            themesBlock.add(languageTitle);
+            themesBlock.add(Box.createVerticalStrut(8));
+            themesBlock.add(languageBox);
+            themesBlock.add(Box.createVerticalStrut(16));
             themesBlock.add(themesTitle);
             themesBlock.add(Box.createVerticalStrut(8));
             themesBlock.add(themeRow);
@@ -172,7 +177,7 @@ public class MainMenuView extends JPanel {
             panel.add(bottomPanel, BorderLayout.SOUTH);
 
             settingsDialog = new JDialog();
-            settingsDialog.setTitle("Settings");
+            NSLocalizableString.bind(settingsDialog, "Settings", settingsDialog::setTitle);
             settingsCloseButton.addActionListener(ev -> settingsDialog.dispose());
             settingsDialog.setContentPane(panel);
             settingsDialog.pack();
@@ -201,7 +206,7 @@ public class MainMenuView extends JPanel {
             panel.add(bottomPanel, BorderLayout.SOUTH);
 
             infoDialog = new JDialog();
-            infoDialog.setTitle("Info");
+            NSLocalizableString.bind(infoDialog, "Info", infoDialog::setTitle);
             infoCloseButton.addActionListener(ev -> infoDialog.dispose());
             infoDialog.setContentPane(panel);
             infoDialog.pack();
@@ -220,6 +225,8 @@ public class MainMenuView extends JPanel {
     }
     @Override public void removeNotify() {
         if (starTimer != null && starTimer.isRunning()) starTimer.stop();
+        if (settingsDialog != null && settingsDialog.isDisplayable()) settingsDialog.dispose();
+        if (infoDialog != null && infoDialog.isDisplayable()) infoDialog.dispose();
         super.removeNotify();
     }
     private void StartGameView() {
@@ -242,15 +249,14 @@ public class MainMenuView extends JPanel {
     }
     private void setFullscreen(boolean fullscreen) {
         this.fullscreen = fullscreen;
-
         JFrame frame = RCJMS.instance;
-
         frame.dispose();
 
         if (fullscreen) {
             frame.setUndecorated(true);
             frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
-        } else {
+        }
+        else {
             frame.setUndecorated(false);
             frame.setExtendedState(JFrame.NORMAL);
             frame.setSize(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
@@ -279,9 +285,7 @@ public class MainMenuView extends JPanel {
         return button;
     }
     @Override public void doLayout() {
-        int width = getWidth();
-        int height = getHeight();
-
+        int width = getWidth(), height = getHeight();
         if (width <= 0 || height <= 0) return;
 
         double scale = Math.min((double) width / RCJMS.SCREEN_WIDTH, (double) height / RCJMS.SCREEN_HEIGHT);
@@ -291,65 +295,71 @@ public class MainMenuView extends JPanel {
 
         setScaledBounds(title, 300, 45, 400, 130, scale, backgroundX, backgroundY);
 
-        setScaledBounds(modeLabel, 100, 270, 200, 30, scale, backgroundX, backgroundY);
-        setScaledBounds(modeBox, 90, 305, 220, 40, scale, backgroundX, backgroundY);
-
-        setScaledBounds(mazeDimensionsLabel, 660, 270, 270, 30, scale, backgroundX, backgroundY);
-
-        setScaledBounds(xLabel, 650, 315, 30, 35, scale, backgroundX, backgroundY);
-        setScaledBounds(xField, 680, 310, 90, 45, scale, backgroundX, backgroundY);
-        xField.setHorizontalAlignment(JLabel.CENTER);
-        yField.setHorizontalAlignment(JLabel.CENTER);
-
-        setScaledBounds(yLabel, 790, 315, 30, 35, scale, backgroundX, backgroundY);
-        setScaledBounds(yField, 820, 310, 90, 45, scale, backgroundX, backgroundY);
-
-        setScaledBounds(seedLabel, 400, 180, 200, 30, scale, backgroundX, backgroundY);
-        setScaledBounds(seedField, 400, 220, 200, 40, scale, backgroundX, backgroundY);
-
         setScaledBounds(playButton, 390, 280, 220, 60, scale, backgroundX, backgroundY);
         setScaledBounds(textureEditorButton, 395, 350, 210, 40, scale, backgroundX, backgroundY);
         setScaledBounds(mapEditorButton, 400, 400, 200, 35, scale, backgroundX, backgroundY);
         setScaledBounds(creditsButton, 405, 445, 190, 30, scale, backgroundX, backgroundY);
         setScaledBounds(exitButton, 410, 485, 180, 28, scale, backgroundX, backgroundY);
-
         setScaledBounds(settingsButton, RCJMS.SCREEN_WIDTH - 80, 20, 60, 60, scale, backgroundX, backgroundY);
         setScaledBounds(infoButton, 20, RCJMS.SCREEN_HEIGHT - 80, 60, 60, scale, backgroundX, backgroundY);
+
+        setScaledBounds(modeBox, 90, 305, 220, 40, scale, backgroundX, backgroundY);
+
+        setScaledBounds(mazeDimensionsLabel, 660, 270, 270, 30, scale, backgroundX, backgroundY);
+        setScaledBounds(modeLabel, 100, 270, 200, 30, scale, backgroundX, backgroundY);
+        setScaledBounds(xLabel, 650, 315, 30, 35, scale, backgroundX, backgroundY);
+        setScaledBounds(yLabel, 790, 315, 30, 35, scale, backgroundX, backgroundY);
+        setScaledBounds(seedLabel, 400, 180, 200, 30, scale, backgroundX, backgroundY);
+
+        setScaledBounds(yField, 820, 310, 90, 45, scale, backgroundX, backgroundY);
+        setScaledBounds(xField, 680, 310, 90, 45, scale, backgroundX, backgroundY);
+        setScaledBounds(seedField, 400, 220, 200, 40, scale, backgroundX, backgroundY);
     }
-    private void setScaledBounds(Component component, int x, int y, int width, int height, double scale, int backgroundX, int backgroundY) {
+    private void setScaledBounds(JComponent component, int x, int y, int width, int height, double scale, int backgroundX, int backgroundY) {
         component.setBounds(backgroundX + (int) (x * scale), backgroundY + (int) (y * scale), Math.max(1, (int) (width * scale)), Math.max(1, (int) (height * scale)));
     }
     @Override protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-        int width = getWidth();
-        int height = getHeight();
+        int width = getWidth(), height = getHeight();
         if (width <= 0 || height <= 0) return;
 
         double scale = Math.min((double) width / RCJMS.SCREEN_WIDTH, (double) height / RCJMS.SCREEN_HEIGHT);
 
-        int offsetX = (width - (int) (RCJMS.SCREEN_WIDTH * scale)) / 2;
-        int offsetY = (height - (int) (RCJMS.SCREEN_HEIGHT * scale)) / 2;
+        Graphics2D g2d = (Graphics2D) g.create();
+        g2d.setColor(Color.BLACK);
+        g2d.fillRect(0, 0, width, height);
+        g2d.translate((width - (int) (RCJMS.SCREEN_WIDTH * scale)) / 2, (height - (int) (RCJMS.SCREEN_HEIGHT * scale)) / 2);
+        g2d.scale(scale, scale);
+        g2d.setColor(new Color(15, 15, 35));
+        g2d.fillRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
 
-        Graphics2D g2 = (Graphics2D) g.create();
+        for (Star star : stars) drawStar(g2d, star);
 
-        g2.setColor(Color.BLACK);
-        g2.fillRect(0, 0, width, height);
-        g2.translate(offsetX, offsetY);
-        g2.scale(scale, scale);
-        g2.setColor(backgroundColor);
-        g2.fillRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
-
-        for (Star star : stars) drawStar(g2, star);
-
-        g2.dispose();
+        g2d.dispose();
     }
     //endregion
 
-    //region Themes
+    //region Saves
+    private void saveLanguage(String language) {
+        try {
+            Files.createDirectories(TMP_DIR);
+            Files.writeString(LANGUAGE_FILE, language);
+        } catch (IOException ex) { ex.printStackTrace(); }
+    }
+    private String loadLanguage() {
+        try {
+            if (Files.exists(LANGUAGE_FILE)) {
+                String language = Files.readString(LANGUAGE_FILE).trim();
+                if (!language.isBlank()) return language;
+            }
+        } catch (IOException ex) { ex.printStackTrace(); }
+        return java.util.Locale.getDefault().getLanguage();
+    }
+
     private void saveTheme(Style style) {
         try {
-            Files.createDirectories(THEME_DIR);
+            Files.createDirectories(TMP_DIR);
             Files.writeString(THEME_FILE, style.name());
         } catch (IOException ex) { ex.printStackTrace(); }
     }
@@ -364,25 +374,24 @@ public class MainMenuView extends JPanel {
     }
     private void SyncAllUI(Style style) {
         modeBox.setStyle(style);
-
         xField.setStyle(style);
         yField.setStyle(style);
         seedField.setStyle(style);
 
         for (StyledButton SB : new StyledButton[]{playButton, textureEditorButton, mapEditorButton, creditsButton, exitButton, settingsButton, infoButton, settingsCloseButton, infoCloseButton})
             if (SB != null) SB.setStyle(style);
-        for (StyledLabel SL : new StyledLabel[]{mazeDimensionsLabel, modeLabel, xLabel, yLabel, seedLabel, themesTitle})
+        for (StyledLabel SL : new StyledLabel[]{mazeDimensionsLabel, modeLabel, xLabel, yLabel, seedLabel, themesTitle, languageTitle})
             if (SL != null) SL.setStyle(style);
         if (fullscreenToggle != null) fullscreenToggle.setStyle(style);
+        if (languageBox != null) languageBox.setStyle(style);
     }
     //endregion
 
-    //region Decorations
+    //region STARES
     private void drawStar(Graphics2D g2d, Star star) {
         AffineTransform old = g2d.getTransform();
         g2d.translate(star.x, star.y);
         g2d.rotate(Math.toRadians(star.rotation));
-
         int s = star.size;
 
         Polygon p = new Polygon();
@@ -417,59 +426,10 @@ public class MainMenuView extends JPanel {
         }
     }
     static class Star {
-        double x, y, speed, rotation, rotationSpeed;
-        int size;
-
+        private double x, y, speed, rotation, rotationSpeed;
+        private final int size;
         public Star(double x, double y, int size, double speed, double rotation, double rotationSpeed) {
-            this.x = x;
-            this.y = y;
-            this.size = size;
-            this.speed = speed;
-            this.rotation = rotation;
-            this.rotationSpeed = rotationSpeed;
-        }
-    }
-    static class AnimatedTitle extends JComponent {
-        private final String text;
-        private double time = 0;
-        private final Timer titleTimer;
-
-        public AnimatedTitle(String text) {
-            this.text = text;
-            titleTimer = new Timer(16, e -> {time += 0.05;repaint();});
-            titleTimer.start();
-        }
-
-        @Override
-        public void addNotify() {
-            super.addNotify();
-            if (titleTimer != null && !titleTimer.isRunning()) titleTimer.start();
-        }
-
-        @Override
-        public void removeNotify() {
-            if (titleTimer != null && titleTimer.isRunning()) titleTimer.stop();
-            super.removeNotify();
-        }
-        @Override protected void paintComponent(Graphics g) {
-            Graphics2D g2d = (Graphics2D) g.create();
-            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-            AffineTransform old = g2d.getTransform();
-
-            g2d.translate(getWidth() / 2, getHeight() / 2);
-            g2d.rotate(Math.sin(time * 0.7) * 0.08);
-            g2d.scale(1 + Math.sin(time) * 0.08, 1 + Math.sin(time) * 0.08);
-            g2d.setFont(new Font("Arial", Font.BOLD, 55));
-
-            int width = g2d.getFontMetrics().stringWidth(text);
-            g2d.setColor(new Color(120, 180, 255, 80));
-            for (int i = 8; i >= 1; i--) g2d.drawString(text, -width / 2 - i / 2, i);
-
-            g2d.setColor(Color.WHITE);
-            g2d.drawString(text, -width / 2, 0);
-            g2d.setTransform(old);
-            g2d.dispose();
+            this.x = x; this.y = y; this.size = size; this.speed = speed; this.rotation = rotation; this.rotationSpeed = rotationSpeed;
         }
     }
     //endregion

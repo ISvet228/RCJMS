@@ -8,26 +8,17 @@ import java.util.ArrayList;
 
 public class Animated3DText extends JComponent {
     public enum AnimationType { NONE, PULSE, ROTATE, PULSE_ROTATE, BOUNCE, FULL }
-
-    private String text;
     private AnimationType animationType = AnimationType.PULSE_ROTATE;
-
-    private double animationSpeed = 1.0, time = 0.0;
-    private float baseFontSize = 55f;
-
-    private String fontName = "Arial";
-    private int fontStyle = Font.BOLD;
-
-    private Color textColor = Color.WHITE, depthColor = new Color(120, 180, 255, 80);
-
+    private double animationSpeed = 1.0, time = 0.0, pulseAmount = 0.06, rotationAmount = 0.05, bounceAmount = 0.04;
     private int depth = 8;
 
-    private double pulseAmount = 0.06, rotationAmount = 0.05, bounceAmount = 0.04;
+    private String text;
+    private String fontName = "Arial";
+    private int fontStyle = Font.BOLD;
+    private float baseFontSize = 55f, minFontSize = 1f, maxFontSize = 1000f;
+    private Color textColor = Color.WHITE, depthColor = new Color(120, 180, 255, 80);
 
     private boolean autoScale = true;
-
-    private float minFontSize = 1f, maxFontSize = 1000f;
-
     private double currentScale = 1.0, currentRotation = 0.0, currentOffsetY = 0.0;
     private double targetScale = 1.0, targetRotation = 0.0, targetOffsetY = 0.0;
     private double interpolation = 0.12;
@@ -37,7 +28,7 @@ public class Animated3DText extends JComponent {
     private boolean hasReferenceSize;
     private boolean scaling;
 
-    private final Timer timer;
+    private final Runnable animationTask;
     private final java.util.List<ActionListener> actionListeners = new ArrayList<>();
 
     public Animated3DText(String text) {
@@ -46,24 +37,35 @@ public class Animated3DText extends JComponent {
         setOpaque(false);
         setBackground(new Color(0, 0, 0, 0));
 
-        timer = new Timer(16, e -> updateAnimation());
-        timer.start();
+        animationTask = this::updateAnimation;
         addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent e) { if (SwingUtilities.isLeftMouseButton(e)) fireActionPerformed(); }});
-    }
 
+        LocalizationBridge.bind(this, this.text, this::applyLocalizedText);
+    }
     public Animated3DText(String text, AnimationType animationType) {
         this(text);
         setAnimationType(animationType);
     }
-
     public Animated3DText(String text, int referenceWidth, int referenceHeight) {
         this(text);
         setReferenceSize(referenceWidth, referenceHeight);
     }
-
     public Animated3DText(String text, AnimationType animationType, int referenceWidth, int referenceHeight) {
         this(text, animationType);
         setReferenceSize(referenceWidth, referenceHeight);
+    }
+
+    private void applyLocalizedText(String localizedText) {
+        if (localizedText != null) {
+            this.text = localizedText;
+            repaint();
+        }
+    }
+    public void setLocalizationKey(String key) {
+        LocalizationBridge.unbind(this);
+        this.text = key == null ? "" : key;
+        LocalizationBridge.bind(this, this.text, this::applyLocalizedText);
+        repaint();
     }
 
     private void updateAnimation() {
@@ -111,20 +113,18 @@ public class Animated3DText extends JComponent {
     }
 
     private double lerp(double current, double target, double amount) { return current + (target - current) * amount; }
-
     @Override public void addNotify() {
         super.addNotify();
-        if (!timer.isRunning() && animationSpeed > 0) timer.start();
+        if (animationSpeed > 0) AnimationManager.register(animationTask);
         if (hasReferenceSize) SwingUtilities.invokeLater(this::updateScale);
         revalidate();
         repaint();
     }
-
     @Override public void removeNotify() {
-        if (timer.isRunning()) timer.stop();
+        AnimationManager.unregister(animationTask);
+        LocalizationBridge.unbind(this);
         super.removeNotify();
     }
-
     @Override public void setBounds(int x, int y, int width, int height) {
         if (!hasReferenceSize) {
             super.setBounds(x, y, width, height);
@@ -140,7 +140,6 @@ public class Animated3DText extends JComponent {
         }
         super.setBounds(x, y, width, height);
     }
-
     @Override public void setBounds(Rectangle r) {
         if (r == null) return;
         setBounds(r.x, r.y, r.width, r.height);
@@ -155,7 +154,6 @@ public class Animated3DText extends JComponent {
         if (parent == null) return;
         updateScale(parent.getWidth(), parent.getHeight());
     }
-
     public void updateScale(int parentWidth, int parentHeight) {
         if (!hasReferenceSize) {
             repaint();
@@ -178,14 +176,12 @@ public class Animated3DText extends JComponent {
         super.setBounds(x, y, width, height);
         scaling = false;
     }
-
     public void setReferenceSize(int width, int height) {
         referenceWidth = Math.max(1, width);
         referenceHeight = Math.max(1, height);
         hasReferenceSize = true;
         updateScale();
     }
-
     public boolean hasReferenceSize() { return hasReferenceSize; }
     public int getReferenceWidth() { return referenceWidth; }
     public int getReferenceHeight() { return referenceHeight; }
@@ -207,25 +203,15 @@ public class Animated3DText extends JComponent {
         g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 
-        Font font = calculateFont(width, height);
-        g2d.setFont(font);
+        g2d.setFont(calculateFont(width, height));
         FontMetrics fm = g2d.getFontMetrics();
 
-        int textWidth = fm.stringWidth(text);
-        int ascent = fm.getAscent();
-
-        double scale = currentScale;
-        double rotation = currentRotation;
-        double offsetY = currentOffsetY;
-        double centerX = width / 2.0;
-        double centerY = height / 2.0;
-
         AffineTransform old = g2d.getTransform();
-        g2d.translate(centerX, centerY + offsetY);
-        g2d.rotate(rotation);
-        g2d.scale(scale, scale);
+        g2d.translate((width / 2.0), (height / 2.0) + currentOffsetY);
+        g2d.rotate(currentRotation);
+        g2d.scale(currentScale, currentScale);
 
-        int x = -textWidth / 2, y = (int)(ascent * 0.35);
+        int x = -fm.stringWidth(text) / 2, y = (int)(fm.getAscent() * 0.35);
 
         for (int i = depth; i >= 1; i--) {
             g2d.setColor(depthColor);
@@ -268,30 +254,27 @@ public class Animated3DText extends JComponent {
         FontMetrics fm = getFontMetrics(new Font(fontName, fontStyle, Math.max(1, Math.round(baseFontSize))));
         return new Dimension(Math.max(32, fm.stringWidth(text) + depth * 2 + 20), Math.max(32, fm.getHeight() + depth * 2 + 20));
     }
-
     @Override public Dimension getMinimumSize() { return new Dimension(1, 1); }
 
     public String getText() { return text; }
-
     public void setText(String text) {
         this.text = text == null ? "" : text;
-        revalidate();
-        repaint();
+        if (!LocalizationBridge.isAvailable()) {
+            revalidate();
+            repaint();
+        }
     }
 
     public AnimationType getAnimationType() { return animationType; }
-
     public void setAnimationType(AnimationType animationType) {
         this.animationType = animationType == null ? AnimationType.NONE : animationType;
         repaint();
     }
 
     public double getAnimationSpeed() { return animationSpeed; }
-
     public void setAnimationSpeed(double animationSpeed) { this.animationSpeed = Math.max(0.0, animationSpeed); }
 
     public float getBaseFontSize() { return baseFontSize; }
-
     public void setBaseFontSize(float baseFontSize) {
         this.baseFontSize = Math.max(1f, baseFontSize);
         revalidate();
@@ -299,7 +282,6 @@ public class Animated3DText extends JComponent {
     }
 
     public String getFontName() { return fontName; }
-
     public void setFontName(String fontName) {
         if (fontName == null || fontName.isEmpty()) return;
         this.fontName = fontName;
@@ -308,7 +290,6 @@ public class Animated3DText extends JComponent {
     }
 
     public int getFontStyle() { return fontStyle; }
-
     public void setFontStyle(int fontStyle) {
         this.fontStyle = fontStyle;
         revalidate();
@@ -316,7 +297,6 @@ public class Animated3DText extends JComponent {
     }
 
     public Font getBaseFont() { return new Font(fontName, fontStyle, Math.max(1, Math.round(baseFontSize))); }
-
     public void setBaseFont(Font font) {
         if (font == null) return;
         this.fontName = font.getName();
@@ -327,11 +307,9 @@ public class Animated3DText extends JComponent {
     }
 
     @Override public Font getFont() { return getBaseFont(); }
-
     @Override public void setFont(Font font) { setBaseFont(font); }
 
     public Color getTextColor() { return textColor; }
-
     public void setTextColor(Color color) {
         if (color == null) return;
         textColor = color;
@@ -339,7 +317,6 @@ public class Animated3DText extends JComponent {
     }
 
     public Color getDepthColor() { return depthColor; }
-
     public void setDepthColor(Color color) {
         if (color == null) return;
         depthColor = color;
@@ -347,7 +324,6 @@ public class Animated3DText extends JComponent {
     }
 
     public int getDepth() { return depth; }
-
     public void setDepth(int depth) {
         this.depth = Math.max(0, depth);
         revalidate();
@@ -355,28 +331,24 @@ public class Animated3DText extends JComponent {
     }
 
     public double getPulseAmount() { return pulseAmount; }
-
     public void setPulseAmount(double pulseAmount) {
         this.pulseAmount = Math.max(0.0, pulseAmount);
         repaint();
     }
 
     public double getRotationAmount() { return rotationAmount; }
-
     public void setRotationAmount(double rotationAmount) {
         this.rotationAmount = Math.max(0.0, rotationAmount);
         repaint();
     }
 
     public double getBounceAmount() { return bounceAmount; }
-
     public void setBounceAmount(double bounceAmount) {
         this.bounceAmount = Math.max(0.0, bounceAmount);
         repaint();
     }
 
     public boolean isAutoScale() { return autoScale; }
-
     public void setAutoScale(boolean autoScale) {
         this.autoScale = autoScale;
         revalidate();
@@ -384,11 +356,9 @@ public class Animated3DText extends JComponent {
     }
 
     public double getInterpolation() { return interpolation; }
-
     public void setInterpolation(double interpolation) { this.interpolation = Math.clamp(interpolation, 0.001, 1.0); }
 
     public float getMinFontSize() { return minFontSize; }
-
     public void setMinFontSize(float minFontSize) {
         this.minFontSize = Math.max(1f, minFontSize);
         revalidate();
@@ -396,7 +366,6 @@ public class Animated3DText extends JComponent {
     }
 
     public float getMaxFontSize() { return maxFontSize; }
-
     public void setMaxFontSize(float maxFontSize) {
         this.maxFontSize = maxFontSize <= 0 ? 1000f : maxFontSize;
         revalidate();

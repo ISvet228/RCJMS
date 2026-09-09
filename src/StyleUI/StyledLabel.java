@@ -1,7 +1,7 @@
 package StyleUI;
 
-import javax.swing.*;
 import java.awt.*;
+import java.util.function.Supplier;
 
 public class StyledLabel extends AnimatedComponent {
     private Style style;
@@ -11,7 +11,7 @@ public class StyledLabel extends AnimatedComponent {
     private Float textSize;
     private boolean reflectionEnabled = true;
     private boolean themed = true;
-    private Timer reflectionTimer;
+    private final Runnable reflectionTask;
 
     public StyledLabel(Style style, String text) { this(style, text, true, true); }
     public StyledLabel(Style style, String text, boolean borderVisible) { this(style, text, true, borderVisible); }
@@ -31,20 +31,19 @@ public class StyledLabel extends AnimatedComponent {
         super();
         this.style = style;
         this.text = text == null ? "" : text;
+        LocalizationBridge.bind(this, this.text, this::applyLocalizedText);
         this.borderVisible = borderVisible;
         this.themed = themed;
         setOpaque(false);
 
         if (themed) setPreferredSize(new Dimension(180, 36));
-        if (themed && style == Style.GLASS) {
-            reflectionTimer = new Timer(16, e -> {
-                if (reflectionEnabled) {
-                    reflectionPhase = (reflectionPhase + 0.0035) % 1.0;
-                    repaint();
-                }
-            });
-            reflectionTimer.start();
-        }
+        reflectionTask = () -> {
+            if (reflectionEnabled && style == Style.GLASS) {
+                reflectionPhase = (reflectionPhase + 0.0035) % 1.0;
+                repaint();
+            }
+        };
+        if (themed && style == Style.GLASS && isDisplayable()) AnimationManager.register(reflectionTask);
     }
     public void setStyle(Style style) {
         if (style == null || style == this.style) return;
@@ -54,6 +53,17 @@ public class StyledLabel extends AnimatedComponent {
     public Style getStyleValue() { return style; }
     public String getText() { return text; }
     public void setText(String text) {
+        LocalizationBridge.externalTextChanged(this, text, this::applyLocalizedText);
+    }
+    public void setLocalizationKey(String key) {
+        LocalizationBridge.unbind(this);
+        LocalizationBridge.bind(this, key, this::applyLocalizedText);
+    }
+    public void setLocalizationFormat(String key, Supplier<Object[]> arguments) {
+        LocalizationBridge.unbind(this);
+        LocalizationBridge.bindFormat(this, key, arguments, this::applyLocalizedText);
+    }
+    private void applyLocalizedText(String text) {
         this.text = text == null ? "" : text;
         if (!themed) revalidate();
         repaint();
@@ -102,8 +112,12 @@ public class StyledLabel extends AnimatedComponent {
         drawCenteredText(g2d, text, color, size, 0, 0, w, h);
         g2d.dispose();
     }
+    @Override public void addNotify() {
+        super.addNotify();
+        if (themed && style == Style.GLASS) AnimationManager.register(reflectionTask);
+    }
     @Override public void removeNotify() {
-        if (reflectionTimer != null && reflectionTimer.isRunning()) reflectionTimer.stop();
+        AnimationManager.unregister(reflectionTask);
         super.removeNotify();
     }
     protected Style getStyle() { return style; }

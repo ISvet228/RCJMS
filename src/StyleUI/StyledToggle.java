@@ -1,23 +1,22 @@
 package StyleUI;
 
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 public  class StyledToggle extends AnimatedComponent {
     private Style style;
-    private final String text;
+    private String text;
     private boolean selected;
     private final List<ActionListener> listeners = new ArrayList<>();
 
     public StyledToggle(Style style, String text) {
         super();
         this.style = style;
-        this.text = text;
+        this.text = text == null ? "" : text;
+        LocalizationBridge.bind(this, this.text, this::applyLocalizedText);
         setPreferredSize(new Dimension(180, 34));
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         addMouseListener(new MouseAdapter() {
@@ -37,6 +36,11 @@ public  class StyledToggle extends AnimatedComponent {
         this.style = style;
         repaint();
     }
+    public String getText() { return text; }
+    public void setText(String text) { LocalizationBridge.externalTextChanged(this, text, this::applyLocalizedText); }
+    public void setLocalizationKey(String key) { LocalizationBridge.unbind(this); LocalizationBridge.bind(this, key, this::applyLocalizedText); }
+    public void setLocalizationFormat(String key, Supplier<Object[]> arguments) { LocalizationBridge.unbind(this); LocalizationBridge.bindFormat(this, key, arguments, this::applyLocalizedText); }
+    private void applyLocalizedText(String text) { this.text = text == null ? "" : text; revalidate(); repaint(); }
     public boolean isSelected() { return selected; }
     public void setSelected(boolean selected) {
         if (this.selected == selected) return;

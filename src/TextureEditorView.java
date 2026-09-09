@@ -11,13 +11,15 @@ import java.util.*;
 
 public class TextureEditorView extends JPanel {
     //region Variables
+    private static final Path TMP_DIR = Paths.get("tmp");
+    private static final Path THEME_FILE = TMP_DIR.resolve("theme.txt");
+    private final Style currentStyle = loadTheme();
+
     public enum TextureMode {WALLS, FLOOR, CEILING}
     private enum Tool {SELECT, BRUSH, FILL, ERASER}
 
-    private static final int MIN_TEXTURE_SIZE = 1;
-    private static final int MAX_TEXTURE_SIZE = 32;
-    private static final int MIN_TOOL_SIZE = 1;
-    private static final int MAX_TOOL_SIZE = 10;
+    private static final int MIN_TEXTURE_SIZE = 1, MAX_TEXTURE_SIZE = 32;
+    private static final int MIN_TOOL_SIZE = 1, MAX_TOOL_SIZE = 10;
 
     private static final int ORIGINAL_WALL_COLOR = 0xECD485;
     private static final int ORIGINAL_FLOOR_COLOR = 0xD3AF63;
@@ -28,52 +30,57 @@ public class TextureEditorView extends JPanel {
     private final TextureCanvas textureCanvas = new TextureCanvas();
     private final JPanel colorPreview = new JPanel();
 
-    private final StyledSlider widthSlider = new StyledSlider(Style.GLASS, MIN_TEXTURE_SIZE, MAX_TEXTURE_SIZE, 8);
-    private final StyledSlider heightSlider = new StyledSlider(Style.GLASS, MIN_TEXTURE_SIZE, MAX_TEXTURE_SIZE, 8);
+    StyledButton wallsButton = new StyledButton(currentStyle, "Walls");
+    StyledButton floorButton = new StyledButton(currentStyle, "Floor");
+    StyledButton ceilingButton = new StyledButton(currentStyle, "Ceiling");
+    StyledButton exitButton = new StyledButton(currentStyle, "Exit");
+    StyledButton applyButton = new StyledButton(currentStyle,"Apply to cell");
+    StyledButton fillButton = new StyledButton(currentStyle, "Fill texture");
+    StyledButton resetButton = new StyledButton(currentStyle, "Reset");
+    StyledButton saveButton = new StyledButton(currentStyle, "Save");
+    StyledButton resetAllButton = new StyledButton(currentStyle, "Reset");
 
-    private final StyledLabel widthLabel = new StyledLabel(Style.GLASS, "");
-    private final StyledLabel heightLabel = new StyledLabel(Style.GLASS, "");
-    private final StyledLabel modeLabel = new StyledLabel(Style.GLASS, "");
-    private final StyledLabel selectedCellLabel = new StyledLabel(Style.GLASS, "Selected: none", false, false);
+    private final StyledLabel widthLabel = new StyledLabel(currentStyle, "");
+    private final StyledLabel heightLabel = new StyledLabel(currentStyle, "");
+    private final StyledLabel modeLabel = new StyledLabel(currentStyle, "");
+    private final StyledLabel selectedCellLabel = new StyledLabel(currentStyle, "Selected: none", false, false);
+    private final StyledLabel brushSizeLabel = new StyledLabel(currentStyle, "");
+    private final StyledLabel eraserSizeLabel = new StyledLabel(currentStyle, "");
+    private final StyledLabel textureLabel = new StyledLabel(currentStyle, "Texture", false, false);
+    private final StyledLabel toolsTitle = new StyledLabel(currentStyle, "Tool", false, false);
+    private final StyledLabel colorTitle = new StyledLabel(currentStyle, "Color", false, false);
+    private final StyledLabel hint = new StyledLabel(currentStyle, "Click the square to choose a color", false, false);
+    private final StyledLabel info = new StyledLabel(currentStyle, "Pick a tool, pick a color, then click or drag on the grid.", false, false);
 
-    private final StyledSlider redSlider = new StyledSlider(Style.GLASS, 0, 255, 255);
-    private final StyledSlider greenSlider = new StyledSlider(Style.GLASS, 0, 255, 255);
-    private final StyledSlider blueSlider = new StyledSlider(Style.GLASS, 0, 255, 255);
+    private final StyledSlider widthSlider = new StyledSlider(currentStyle, MIN_TEXTURE_SIZE, MAX_TEXTURE_SIZE, 8);
+    private final StyledSlider heightSlider = new StyledSlider(currentStyle, MIN_TEXTURE_SIZE, MAX_TEXTURE_SIZE, 8);
+    private final StyledSlider redSlider = new StyledSlider(currentStyle, 0, 255, 255);
+    private final StyledSlider greenSlider = new StyledSlider(currentStyle, 0, 255, 255);
+    private final StyledSlider blueSlider = new StyledSlider(currentStyle, 0, 255, 255);
+    private final StyledSlider brushSizeSlider = new StyledSlider(currentStyle, MIN_TOOL_SIZE, MAX_TOOL_SIZE, 1);
+    private final StyledSlider eraserSizeSlider = new StyledSlider(currentStyle, MIN_TOOL_SIZE, MAX_TOOL_SIZE, 1);
 
-    private final StyledTextField hexField = new StyledTextField(Style.GLASS, "FFFFFF");
+    private final StyledTextField hexField = new StyledTextField(currentStyle, "FFFFFF");
 
-    private final StyledToggleButton selectToolButton = new StyledToggleButton(Style.GLASS, "Select");
-    private final StyledToggleButton brushToolButton = new StyledToggleButton(Style.GLASS, "Brush");
-    private final StyledToggleButton fillToolButton = new StyledToggleButton(Style.GLASS, "Fill");
-    private final StyledToggleButton eraserToolButton = new StyledToggleButton(Style.GLASS, "Eraser");
-
-    private final StyledSlider brushSizeSlider = new StyledSlider(Style.GLASS, MIN_TOOL_SIZE, MAX_TOOL_SIZE, 1);
-    private final StyledSlider eraserSizeSlider = new StyledSlider(Style.GLASS, MIN_TOOL_SIZE, MAX_TOOL_SIZE, 1);
-    private final StyledLabel brushSizeLabel = new StyledLabel(Style.GLASS, "");
-    private final StyledLabel eraserSizeLabel = new StyledLabel(Style.GLASS, "");
+    private final StyledToggleButton selectToolButton = new StyledToggleButton(currentStyle, "Select");
+    private final StyledToggleButton brushToolButton = new StyledToggleButton(currentStyle, "Brush");
+    private final StyledToggleButton fillToolButton = new StyledToggleButton(currentStyle, "Fill");
+    private final StyledToggleButton eraserToolButton = new StyledToggleButton(currentStyle, "Eraser");
 
     private Tool currentTool = Tool.SELECT;
-
     private TextureMode mode = TextureMode.WALLS;
 
-    private int textureWidth = 8;
-    private int textureHeight = 8;
-    private int wallWidth = 8;
-    private int wallHeight = 8;
-    private int floorWidth = 8;
-    private int floorHeight = 8;
-    private int ceilingWidth = 8;
-    private int ceilingHeight = 8;
+    private int textureWidth = 8, textureHeight = 8;
+    private int wallWidth = 8, wallHeight = 8;
+    private int floorWidth = 8, floorHeight = 8;
+    private int ceilingWidth = 8, ceilingHeight = 8;
 
     private int[][] wallTexture = createEmptyTexture(wallWidth, wallHeight);
     private int[][] floorTexture = createEmptyTexture(floorWidth, floorHeight);
     private int[][] ceilingTexture = createEmptyTexture(ceilingWidth, ceilingHeight);
 
-    private int selectedX = -1;
-    private int selectedY = -1;
-
+    private int selectedX = -1, selectedY = -1;
     private boolean updatingSizeControls = false;
-
     private static final int MAX_HISTORY = 10;
     private final Deque<EditorState> undoHistory = new ArrayDeque<>();
     private final Deque<EditorState> redoHistory = new ArrayDeque<>();
@@ -129,15 +136,10 @@ public class TextureEditorView extends JPanel {
         modeLabel.setForeground(Color.WHITE);
         modeLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 16));
 
-        StyledButton wallsButton = new StyledButton(Style.GLASS, "Walls");
-        StyledButton floorButton = new StyledButton(Style.GLASS, "Floor");
-        StyledButton ceilingButton = new StyledButton(Style.GLASS, "Ceiling");
-
         wallsButton.addActionListener(e -> setMode(TextureMode.WALLS));
         floorButton.addActionListener(e -> setMode(TextureMode.FLOOR));
         ceilingButton.addActionListener(e -> setMode(TextureMode.CEILING));
 
-        StyledLabel textureLabel = new StyledLabel(Style.GLASS, "Texture", false, false);
         textureLabel.setForeground(Color.WHITE);
         modePanel.add(textureLabel);
         modePanel.add(wallsButton);
@@ -171,7 +173,6 @@ public class TextureEditorView extends JPanel {
         stack.add(Box.createVerticalStrut(2));
         stack.add(heightRow);
 
-        StyledButton exitButton = new StyledButton(Style.GLASS, "Exit");
         exitButton.setFocusable(false);
 
         exitButton.addActionListener(e -> {RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu");});
@@ -191,7 +192,7 @@ public class TextureEditorView extends JPanel {
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
 
-        StyledLabel nameLabel = new StyledLabel(Style.GLASS, labelText, false, false);
+        StyledLabel nameLabel = new StyledLabel(currentStyle, labelText, false, false);
         nameLabel.setForeground(Color.WHITE);
         nameLabel.setPreferredSize(60, 22);
 
@@ -247,7 +248,6 @@ public class TextureEditorView extends JPanel {
         right.setMinimumSize(new Dimension(220, 0));
         right.setMaximumSize(new Dimension(220, Integer.MAX_VALUE));
 
-        StyledLabel toolsTitle = new StyledLabel(Style.GLASS, "Tool", false, false);
         toolsTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
         toolsTitle.setForeground(Color.WHITE);
         toolsTitle.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
@@ -301,7 +301,6 @@ public class TextureEditorView extends JPanel {
         separator.setMaximumSize(new Dimension(210, 2));
         separator.setAlignmentX(Component.CENTER_ALIGNMENT); // фикс п.5
 
-        StyledLabel colorTitle = new StyledLabel(Style.GLASS, "Color", false, false);
         colorTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
         colorTitle.setForeground(Color.WHITE);
         colorTitle.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
@@ -315,22 +314,18 @@ public class TextureEditorView extends JPanel {
         colorPreview.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         colorPreview.addMouseListener(new MouseAdapter() {@Override public void mouseClicked(MouseEvent e) {openColorPicker();}});
 
-        StyledLabel hint = new StyledLabel(Style.GLASS, "Click the square to choose a color", false, false);
         hint.setForeground(Color.LIGHT_GRAY);
         hint.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         selectedCellLabel.setForeground(Color.WHITE);
         selectedCellLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        StyledButton applyButton = new StyledButton(Style.GLASS,"Apply to cell");
         applyButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         applyButton.addActionListener(e -> applyColorToSelectedCell());
 
-        StyledButton fillButton = new StyledButton(Style.GLASS, "Fill texture");
         fillButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         fillButton.addActionListener(e -> fillCurrentTexture());
 
-        StyledButton resetButton = new StyledButton(Style.GLASS, "Reset");
         resetButton.setAlignmentX(Component.CENTER_ALIGNMENT);
         resetButton.addActionListener(e -> resetTextures());
 
@@ -361,7 +356,7 @@ public class TextureEditorView extends JPanel {
 
         right.add(Box.createVerticalGlue());
 
-        StyledScrollPane rightScroll = new StyledScrollPane(right, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER, Style.GLASS);
+        StyledScrollPane rightScroll = new StyledScrollPane(right, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER, currentStyle);
 
         rightScroll.setBorder(BorderFactory.createEmptyBorder());
         rightScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
@@ -377,16 +372,12 @@ public class TextureEditorView extends JPanel {
         bottom.setOpaque(false);
         bottom.setLayout(new BoxLayout(bottom, BoxLayout.Y_AXIS));
 
-        StyledLabel info = new StyledLabel(Style.GLASS, "Pick a tool, pick a color, then click or drag on the grid.", false, false);
         info.setForeground(Color.LIGHT_GRAY);
         info.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 4));
         buttons.setOpaque(false);
         buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        StyledButton saveButton = new StyledButton(Style.GLASS, "Save");
-        StyledButton resetButton = new StyledButton(Style.GLASS, "Reset");
 
         saveButton.addActionListener(e -> {
             try {
@@ -395,9 +386,9 @@ public class TextureEditorView extends JPanel {
             } catch (IOException ex) {
                 JOptionPane.showMessageDialog(this, "Could not save textures:\n" + ex.getMessage(), "Save error", JOptionPane.ERROR_MESSAGE);}
         });
-        resetButton.addActionListener(e -> resetTextures());
+        resetAllButton.addActionListener(e -> resetTextures());
 
-        buttons.add(resetButton);
+        buttons.add(resetAllButton);
         buttons.add(saveButton);
 
         bottom.add(info);
@@ -618,26 +609,26 @@ public class TextureEditorView extends JPanel {
         sliders.setBackground(new Color(28, 28, 32));
         sliders.setMaximumSize(new Dimension(350, 100));
 
-        StyledLabel redLabel = new StyledLabel(Style.GLASS, "Red");
+        StyledLabel redLabel = new StyledLabel(currentStyle, "Red");
         redLabel.setForeground(Color.WHITE);
-        StyledLabel greenLabel = new StyledLabel(Style.GLASS, "Green");
+        StyledLabel greenLabel = new StyledLabel(currentStyle, "Green");
         greenLabel.setForeground(Color.WHITE);
-        StyledLabel blueLabel = new StyledLabel(Style.GLASS, "Blue");
+        StyledLabel blueLabel = new StyledLabel(currentStyle, "Blue");
         blueLabel.setForeground(Color.WHITE);
 
-        StyledSlider r = new StyledSlider(Style.GLASS, 0, 255, redSlider.getValue());
+        StyledSlider r = new StyledSlider(currentStyle, 0, 255, redSlider.getValue());
         r.setBackground(new Color(28, 28, 32));
         r.setOpaque(false);
-        StyledSlider g = new StyledSlider(Style.GLASS, 0, 255, greenSlider.getValue());
+        StyledSlider g = new StyledSlider(currentStyle, 0, 255, greenSlider.getValue());
         g.setBackground(new Color(28, 28, 32));
         g.setOpaque(false);
-        StyledSlider b = new StyledSlider(Style.GLASS, 0, 255, blueSlider.getValue());
+        StyledSlider b = new StyledSlider(currentStyle, 0, 255, blueSlider.getValue());
         b.setBackground(new Color(28, 28, 32));
         b.setOpaque(false);
 
-        StyledLabel rValue = new StyledLabel(Style.GLASS, String.valueOf(r.getValue()), false, false);
-        StyledLabel gValue = new StyledLabel(Style.GLASS, String.valueOf(g.getValue()), false, false);
-        StyledLabel bValue = new StyledLabel(Style.GLASS, String.valueOf(b.getValue()), false, false);
+        StyledLabel rValue = new StyledLabel(currentStyle, String.valueOf(r.getValue()), false, false);
+        StyledLabel gValue = new StyledLabel(currentStyle, String.valueOf(g.getValue()), false, false);
+        StyledLabel bValue = new StyledLabel(currentStyle, String.valueOf(b.getValue()), false, false);
 
         sliders.add(redLabel);
         sliders.add(createSliderRow(r, rValue));
@@ -646,9 +637,9 @@ public class TextureEditorView extends JPanel {
         sliders.add(blueLabel);
         sliders.add(createSliderRow(b, bValue));
 
-        StyledLabel hexLabel = new StyledLabel(Style.GLASS, "Color code (RRGGBB):", false, false);
+        StyledLabel hexLabel = new StyledLabel(currentStyle, "Color code (RRGGBB):", false, false);
         hexLabel.setForeground(Color.WHITE);
-        StyledTextField pickerHex = new StyledTextField(Style.GLASS, hexField.getText());
+        StyledTextField pickerHex = new StyledTextField(currentStyle, hexField.getText());
         pickerHex.setBackground(new Color(28, 28, 32));
         pickerHex.setForeground(Color.WHITE);
         pickerHex.setMaximumSize(new Dimension(350, 28));
@@ -666,6 +657,9 @@ public class TextureEditorView extends JPanel {
         g.addChangeListener(e -> updatePreview.run());
         b.addChangeListener(e -> updatePreview.run());
 
+        StyledButton apply = new StyledButton(currentStyle, "Apply");
+        StyledButton cancel = new StyledButton(currentStyle, "Cancel");
+
         pickerHex.addActionListener(e -> {
             Integer color = parseColor(pickerHex.getText());
             if (color != null) {
@@ -674,9 +668,6 @@ public class TextureEditorView extends JPanel {
                 b.setValue(color & 0xFF);
                 updatePreview.run();
             }});
-
-        StyledButton apply = new StyledButton(Style.GLASS, "Apply");
-        StyledButton cancel = new StyledButton(Style.GLASS, "Cancel");
 
         apply.addActionListener(e -> {
             int color = (r.getValue() << 16) | (g.getValue() << 8) | b.getValue();
@@ -1067,5 +1058,14 @@ public class TextureEditorView extends JPanel {
             FontMetrics fm = g.getFontMetrics();
             g.drawString(text, (getWidth() - fm.stringWidth(text)) / 2, Math.max(18, gridY - 8));
         }
+    }
+    private Style loadTheme() {
+        try {
+            if (Files.exists(THEME_FILE)) {
+                String name = Files.readString(THEME_FILE).trim();
+                return Style.valueOf(name);
+            }
+        } catch (IOException | IllegalArgumentException ex) { ex.printStackTrace(); }
+        return Style.FLAT;
     }
 }

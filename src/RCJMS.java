@@ -23,20 +23,12 @@ public class RCJMS extends JFrame {
         setVisible(true);
     }
     public void ChangeView(JPanel nextView, String nextTitle) {
-        // Remove the current view first to ensure its removeNotify() is called
-        // and any animation timers are stopped before the next view is added.
-        if (currentView != null) {
-            remove(currentView);
-        }
+        if (currentView != null) remove(currentView);
         add(nextView);
         currentView = nextView;
         setTitle(nextTitle);
         revalidate();
         repaint();
-        System.gc();
     }
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> { try {new RCJMS();}
-            catch (IOException e){throw new RuntimeException(e);}});
-    }
+    public static void main(String[] args) { SwingUtilities.invokeLater(() -> { try {new RCJMS();} catch (IOException e){throw new RuntimeException(e);}}); }
 }

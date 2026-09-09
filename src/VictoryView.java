@@ -1,17 +1,27 @@
 import StyleUI.*;
+import Helpers.NSLocalizableString;
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Random;
 
 public class VictoryView extends JPanel {
+    private static final Path TMP_DIR = Paths.get("tmp");
+    private static final Path THEME_FILE = TMP_DIR.resolve("theme.txt");
+    private final Style currentStyle = loadTheme();
+
     private final ArrayList<Firework> fireworks = new ArrayList<>();
     private final Random random = new Random();
 
-    private final Animated3DText title;
-    private final StyledLabel timeLabel;
-    private final StyledButton restartButton, exitButton;
+    private final Animated3DText title = new Animated3DText("CONGRATULATIONS", Animated3DText.AnimationType.FULL);
+    private final StyledLabel timeLabel = new StyledLabel(currentStyle, "");
+    private final StyledButton restartButton = new StyledButton(currentStyle, "RESTART");
+    private final StyledButton exitButton = new StyledButton(currentStyle, "EXIT");
 
     private int viewportX, viewportY;
 
@@ -23,26 +33,21 @@ public class VictoryView extends JPanel {
         setLayout(null);
         setBackground(Color.BLACK);
 
-        title = new Animated3DText("CONGRATULATIONS", Animated3DText.AnimationType.FULL);
+        NSLocalizableString.bind(title, "CONGRATULATIONS");
         title.setTextColor(Color.WHITE);
         title.setDepthColor(new Color(255, 255, 120, 80));
         add(title);
 
-        timeLabel = new StyledLabel(Style.GLASS, "You completed maze in " + elapsedSeconds / 3600 + " hour(s) " + (elapsedSeconds % 3600) / 60 +
-                " minute(s) " + elapsedSeconds % 60 + " second(s)");
+        timeLabel.setLocalizationFormat("victory.time", () -> new Object[]{
+                elapsedSeconds / 3600, (elapsedSeconds % 3600) / 60, elapsedSeconds % 60});
         timeLabel.setForeground(Color.WHITE);
         timeLabel.setFont(new Font("Arial", Font.BOLD, 25));
-
         add(timeLabel);
 
-        restartButton = new StyledButton(Style.GLASS, "RESTART");
         restartButton.setFont(new Font("Arial", Font.BOLD, 32));
-
         restartButton.addActionListener(e -> {RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu");});
-
         add(restartButton);
 
-        exitButton = new StyledButton(Style.GLASS, "EXIT");
         exitButton.setFont(new Font("Arial", Font.BOLD, 18));
         exitButton.addActionListener(e -> System.exit(0));
         add(exitButton);
@@ -59,17 +64,12 @@ public class VictoryView extends JPanel {
         addComponentListener(new java.awt.event.ComponentAdapter() {@Override public void componentResized(java.awt.event.ComponentEvent e) {updateLayout();}});
     }
 
-    @Override
-    public void addNotify() {
+    @Override public void addNotify() {
         super.addNotify();
         if (fireworksTimer != null && !fireworksTimer.isRunning()) fireworksTimer.start();
-        if (title != null) title.addNotify();
     }
-
-    @Override
-    public void removeNotify() {
+    @Override public void removeNotify() {
         if (fireworksTimer != null && fireworksTimer.isRunning()) fireworksTimer.stop();
-        if (title != null) title.removeNotify();
         super.removeNotify();
     }
     private void updateFireworks() {
@@ -108,61 +108,40 @@ public class VictoryView extends JPanel {
         g2d.dispose();
     }
     private void updateLayout() {
-        int windowWidth = getWidth();
-        int windowHeight = getHeight();
+        int width = getWidth(), height = getHeight();
+        if (width <= 0 || height <= 0) return;
 
-        if (windowWidth <= 0 || windowHeight <= 0) return;
+        scale = Math.min((double) width / RCJMS.SCREEN_WIDTH, (double) height / RCJMS.SCREEN_HEIGHT);
 
-        double scaleX = (double) windowWidth / RCJMS.SCREEN_WIDTH;
-        double scaleY = (double) windowHeight / RCJMS.SCREEN_HEIGHT;
-        scale = Math.min(scaleX, scaleY);
+        viewportX = (width - (int)Math.round(RCJMS.SCREEN_WIDTH * scale)) / 2;
+        viewportY = (height - (int)Math.round(RCJMS.SCREEN_HEIGHT * scale)) / 2;
 
-        int viewportWidth = (int) Math.round(RCJMS.SCREEN_WIDTH * scale);
-        int viewportHeight = (int) Math.round(RCJMS.SCREEN_HEIGHT * scale);
-        viewportX = (windowWidth - viewportWidth) / 2;
-        viewportY = (windowHeight - viewportHeight) / 2;
-
-        int titleX = RCJMS.SCREEN_WIDTH / 2 - RCJMS.SCREEN_WIDTH / 4;
-        int titleY = RCJMS.SCREEN_HEIGHT / 20;
-        int titleWidth = RCJMS.SCREEN_WIDTH / 2;
-        int titleHeight = RCJMS.SCREEN_HEIGHT / 8;
-
-        title.setBounds(viewportX + (int) (titleX * scale), viewportY + (int) (titleY * scale), (int) (titleWidth * scale), (int) (titleHeight * scale));
-
-        int timeWidth = 800;
-        int timeHeight = 40;
-        int timeX = RCJMS.SCREEN_WIDTH / 2 - timeWidth / 2;
-        int timeY = RCJMS.SCREEN_HEIGHT / 4;
-
-        timeLabel.setBounds(viewportX + (int) (timeX * scale), viewportY + (int) (timeY * scale), (int) (timeWidth * scale), (int) (timeHeight * scale));
-
-        int restartWidth = 340;
-        int restartHeight = 90;
-        int restartX = RCJMS.SCREEN_WIDTH / 2 - restartWidth / 2;
-        int restartY = RCJMS.SCREEN_HEIGHT / 2 - 40;
-        restartButton.setBounds(viewportX + (int) (restartX * scale), viewportY + (int) (restartY * scale), (int) (restartWidth * scale), (int) (restartHeight * scale));
-
-        int exitWidth = 200;
-        int exitHeight = 50;
-        int exitX = RCJMS.SCREEN_WIDTH / 2 - exitWidth / 2;
-        int exitY = RCJMS.SCREEN_HEIGHT / 2 + 100;
-        exitButton.setBounds(viewportX + (int) (exitX * scale), viewportY + (int) (exitY * scale), (int) (exitWidth * scale), (int) (exitHeight * scale));
+        title.setBounds(viewportX + (int)(((double)RCJMS.SCREEN_WIDTH / 2 - (double)RCJMS.SCREEN_WIDTH / 4) * scale), viewportY +
+                (int)(((double)RCJMS.SCREEN_HEIGHT / 20) * scale), (int)((double)RCJMS.SCREEN_WIDTH / 2 * scale), (int)((double)RCJMS.SCREEN_HEIGHT / 8 * scale));
+        timeLabel.setBounds(viewportX + (int)(((double)RCJMS.SCREEN_WIDTH / 2 - 400) * scale), viewportY +
+                (int)((double)RCJMS.SCREEN_HEIGHT / 4 * scale), (int)(800 * scale), (int)(40 * scale));
+        restartButton.setBounds(viewportX + (int)(((double)RCJMS.SCREEN_WIDTH / 2 - 170) * scale), viewportY +
+                (int)(((double)RCJMS.SCREEN_HEIGHT / 2 - 40) * scale), (int)(340 * scale), (int)(90 * scale));
+        exitButton.setBounds(viewportX + (int)(((double)RCJMS.SCREEN_WIDTH / 2 - 100) * scale), viewportY +
+                (int)(((double)RCJMS.SCREEN_HEIGHT / 2 + 100) * scale), (int)(200 * scale), (int)(50 * scale));
         revalidate();
         repaint();
+    }
+    private Style loadTheme() {
+        try {
+            if (Files.exists(THEME_FILE)) {
+                String name = Files.readString(THEME_FILE).trim();
+                return Style.valueOf(name);
+            }
+        } catch (IOException | IllegalArgumentException ex) { ex.printStackTrace(); }
+        return Style.FLAT;
     }
 }
 class Firework {
     double x, y, vx, vy;
-    int size,life;
+    int size, life;
     Color color;
-
     public Firework(double x, double y, double vx, double vy, int size, Color color, int life) {
-        this.x = x;
-        this.y = y;
-        this.vx = vx;
-        this.vy = vy;
-        this.size = size;
-        this.color = color;
-        this.life = life;
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.size = size; this.color = color; this.life = life;
     }
 }

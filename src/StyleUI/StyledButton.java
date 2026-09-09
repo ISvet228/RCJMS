@@ -1,21 +1,20 @@
 package StyleUI;
 
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 public class StyledButton extends AnimatedComponent {
     private Style style;
-    private final String text;
+    private String text;
     private final List<ActionListener> listeners = new ArrayList<>();
     public StyledButton(Style style, String text) {
         super();
         this.style = style;
-        this.text = text;
+        this.text = text == null ? "" : text;
+        LocalizationBridge.bind(this, this.text, this::applyLocalizedText);
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         setPreferredSize(new Dimension(180, 42));
         addMouseListener(new MouseAdapter() {
@@ -25,6 +24,11 @@ public class StyledButton extends AnimatedComponent {
                 for (ActionListener listener : listeners) listener.actionPerformed(event); }});
     }
     public void addActionListener(ActionListener listener) { if (listener != null) listeners.add(listener); }
+    public String getText() { return text; }
+    public void setText(String text) { LocalizationBridge.externalTextChanged(this, text, this::applyLocalizedText); }
+    public void setLocalizationKey(String key) { LocalizationBridge.unbind(this); LocalizationBridge.bind(this, key, this::applyLocalizedText); }
+    public void setLocalizationFormat(String key, Supplier<Object[]> arguments) { LocalizationBridge.unbind(this); LocalizationBridge.bindFormat(this, key, arguments, this::applyLocalizedText); }
+    private void applyLocalizedText(String text) { this.text = text == null ? "" : text; revalidate(); repaint(); }
     public StyledButton(Style style, String text, int referenceWidth, int referenceHeight) {
         this(style, text);
         setReferenceSize(referenceWidth, referenceHeight);

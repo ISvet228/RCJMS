@@ -75,7 +75,6 @@ public class StyledComboBox extends AnimatedComponent {
     private final ItemStyle itemStyle = new ItemStyle(), popupStyle = new ItemStyle();
 
     private int selectedIndex = -1;
-
     private boolean popupVisible, editable;
     private boolean enabled = true, lightWeightPopup = true;
 
@@ -84,9 +83,7 @@ public class StyledComboBox extends AnimatedComponent {
     private Color backgroundColor, hoverColor, selectedColor, textColor, borderColor, arrowColor, popupBackgroundColor, popupBorderColor;
 
     private int arc = 12, popupArc = 14;
-
     private int horizontalPadding = 9, verticalPadding = 4;
-
     private int popupPadding = 4, itemSpacing = 2, itemHeight = 34;
 
     private Font font, popupFont;
@@ -205,6 +202,16 @@ public class StyledComboBox extends AnimatedComponent {
         this(style, values);
         setReferenceSize(referenceWidth, referenceHeight);
     }
+    @Override public void addNotify() {
+        super.addNotify();
+        LocalizationBridge.addLanguageChangeListener(languageChangeTask);
+    }
+
+    @Override public void removeNotify() {
+        LocalizationBridge.removeLanguageChangeListener(languageChangeTask);
+        super.removeNotify();
+    }
+
     @Override public void repaint() {
         super.repaint();
         if (popup != null && popup.isVisible()) {
@@ -355,8 +362,20 @@ public class StyledComboBox extends AnimatedComponent {
     public String getSelectedItemString() {
         Object value = getSelectedItem();
         if (value == null) return editor != null ? editor.getText() : "";
-        return String.valueOf(value);
+        return displayString(value);
     }
+
+    private String displayString(Object value) {
+        if (value == null) return "";
+        return LocalizationBridge.localized(String.valueOf(value));
+    }
+
+    private final Runnable languageChangeTask = () -> {
+        if (editor != null && selectedIndex >= 0) editor.setText(getSelectedItemString());
+        if (popupVisible) rebuildPopup();
+        revalidate();
+        repaint();
+    };
 
     public boolean isEditable() { return editable; }
     public void setEditable(boolean editable) {
@@ -384,7 +403,7 @@ public class StyledComboBox extends AnimatedComponent {
         editor.addActionListener(e -> {
             String text = editor.getText();
             for (int i = 0; i < items.size(); i++) {
-                if (String.valueOf(items.get(i)).equals(text)) {
+                if (displayString(items.get(i)).equals(text)) {
                     setSelectedIndex(i);
                     return;
                 }
@@ -582,7 +601,7 @@ public class StyledComboBox extends AnimatedComponent {
                 g2d.setColor(enabled ? s.getTextColor() : disabledColor());
 
                 FontMetrics fm = g2d.getFontMetrics();
-                g2d.drawString(String.valueOf(items.get(index)), scaled(s.getHorizontalPadding()),  (h - fm.getHeight()) / 2 + fm.getAscent());
+                g2d.drawString(displayString(items.get(index)), scaled(s.getHorizontalPadding()),  (h - fm.getHeight()) / 2 + fm.getAscent());
                 g2d.dispose();
             }
         };

@@ -4,8 +4,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.*;
-import java.awt.geom.Point2D;
-import java.awt.geom.RoundRectangle2D;
+import java.awt.geom.*;
 
 public class StyledTextField extends JTextField {
     private Style style;
@@ -16,7 +15,8 @@ public class StyledTextField extends JTextField {
     private boolean hasReferenceSize;
     private boolean scaling;
 
-    private final Timer reflectionTimer;
+    private final Runnable reflectionTask;
+    private boolean localizationReady;
 
     public StyledTextField(Style style, String text) {
         super(text);
@@ -36,15 +36,16 @@ public class StyledTextField extends JTextField {
             }
         });
 
-        reflectionTimer = new Timer(16, e -> {
+        reflectionTask = () -> {
             if (style == Style.GLASS) {
                 reflectionPhase = (reflectionPhase + 0.0035) % 1.0;
                 repaint();
             }
-        });
+        };
 
-        reflectionTimer.start();
         updateFont();
+        localizationReady = true;
+        LocalizationBridge.bind(this, text, this::applyLocalizedText);
     }
 
     public StyledTextField(Style style, String text, int referenceWidth, int referenceHeight) {
@@ -52,14 +53,26 @@ public class StyledTextField extends JTextField {
         setReferenceSize(referenceWidth, referenceHeight);
     }
 
+
+    @Override public void setText(String text) {
+        if (localizationReady) LocalizationBridge.externalTextChanged(this, text, value -> StyledTextField.super.setText(value == null ? "" : value));
+        else super.setText(text == null ? "" : text);
+    }
+
+    private void applyLocalizedText(String text) {
+        super.setText(text == null ? "" : text);
+        revalidate();
+        repaint();
+    }
+
     @Override public void addNotify() {
         super.addNotify();
-        if (reflectionTimer != null && !reflectionTimer.isRunning()) reflectionTimer.start();
+        if (style == Style.GLASS) AnimationManager.register(reflectionTask);
         if (hasReferenceSize) SwingUtilities.invokeLater(this::updateScale);
     }
 
     @Override public void removeNotify() {
-        if (reflectionTimer != null && reflectionTimer.isRunning()) reflectionTimer.stop();
+        AnimationManager.unregister(reflectionTask);
         super.removeNotify();
     }
 
@@ -136,6 +149,8 @@ public class StyledTextField extends JTextField {
     public void setStyle(Style style) {
         if (style == null || style == this.style) return;
         this.style = style;
+        AnimationManager.unregister(reflectionTask);
+        if (style == Style.GLASS && isDisplayable()) AnimationManager.register(reflectionTask);
         setForeground(style.text);
         setCaretColor(style.text);
         repaint();

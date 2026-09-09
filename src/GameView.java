@@ -1,10 +1,10 @@
 import Helpers.MazeGenerator;
+import Helpers.NSLocalizableString;
 
 import javax.swing.*; //Frame Library
 import java.awt.*; //Graphics Library
 import java.awt.event.*; //Input Library
-import java.awt.image.BufferedImage; //Buffer Library
-import java.awt.image.DataBufferInt;
+import java.awt.image.*; //Buffer Library
 import java.io.IOException;
 import java.nio.file.Paths;
 
@@ -63,7 +63,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private long gameStartTime = System.currentTimeMillis();
     private long pauseStartTime = 0;
     private long pausedTime = 0;
-    private long elapsedSeconds;
+    private  long elapsedSeconds;
     //endregion
     //endregion
 
@@ -140,6 +140,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     private void hideCursor() { setCursor(invisibleCursor); }
     private void showCursor() { setCursor(Cursor.getDefaultCursor()); }
+
+    @Override public void addNotify() {
+        super.addNotify();
+        SwingUtilities.invokeLater(this::requestFocusInWindow);
+    }
     //endregion
 
     //region Life Status Operations
@@ -285,9 +290,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             int drawEnd = Math.min((int) (horizon + wallHeight / 2.0), RCJMS.SCREEN_HEIGHT - 1);
 
             if (drawStart > drawEnd) continue;
-
             double wallX;
-
             wallX = side == 0 ?  playerY + perpendicularDistance * rayDirY : playerX + perpendicularDistance * rayDirX;
             wallX -= Math.floor(wallX);
 
@@ -305,13 +308,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
             for (int y = drawStart; y <= drawEnd; y++) {
                 double wallPosition;
-
                 if (hitType == 2) wallPosition = (y - horizon) / Math.max(wallHeight / 2.0, 1.0);
                 else wallPosition = (y - (horizon - wallHeight / 2.0)) / Math.max(wallHeight, 1.0);
                 wallPosition = Math.clamp(wallPosition, 0.0, 0.999999);
 
                 int color;
-
                 if (textureWidth > 0 && textureHeight > 0 && hitType != 2) color = wallTexture[Math.clamp((int) (wallPosition * textureHeight), 0, textureHeight - 1)]
                             [Math.clamp((int) (wallX * textureWidth), 0, textureWidth - 1)];
                 else color = (hitType == 2) ? 0x33FF66 : wallBaseColor;
@@ -402,18 +403,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     //endregion
     private void drawMiniMap() {
-        int mapWidth = map[0].length;
-        int mapHeight = map.length;
+        int mapWidth = map[0].length, mapHeight = map.length;
+        double scale = Math.min((double) MINI_MAP_WIDTH / mapWidth, (double) MINI_MAP_HEIGHT / mapHeight);
 
-        double scaleX = (double) MINI_MAP_WIDTH / mapWidth;
-        double scaleY = (double) MINI_MAP_HEIGHT / mapHeight;
-        double scale = Math.min(scaleX, scaleY);
-
-        int actualWidth = (int) (mapWidth * scale);
-        int actualHeight = (int) (mapHeight * scale);
-
-        int offsetX = 10 + (MINI_MAP_WIDTH - actualWidth) / 2;
-        int offsetY = 10 + (MINI_MAP_HEIGHT - actualHeight) / 2;
+        int offsetX = 10 + (MINI_MAP_WIDTH - (int) (mapWidth * scale)) / 2;
+        int offsetY = 10 + (MINI_MAP_HEIGHT - (int) (mapHeight * scale)) / 2;
 
         for (int y = 0; y < mapHeight; y++) {
             for (int x = 0; x < mapWidth; x++) {
@@ -432,17 +426,12 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             }
         }
 
-        int playerPixelX = offsetX + (int) (playerX * scale);
-        int playerPixelY = offsetY + (int) (playerY * scale);
         int playerSize = Math.max(1, (int) Math.floor(scale * 0.25));
-
         for (int yy = -playerSize; yy <= playerSize; yy++) {
             for (int xx = -playerSize; xx <= playerSize; xx++) {
-                int px = playerPixelX + xx;
-                int py = playerPixelY + yy;
-
-                if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT)
-                    pixels[px + py * RCJMS.SCREEN_WIDTH] = 0xFF0000;
+                int px = offsetX + (int) (playerX * scale) + xx;
+                int py = offsetY + (int) (playerY * scale) + yy;
+                if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT) pixels[px + py * RCJMS.SCREEN_WIDTH] = 0xFF0000;
             }
         }
     }
@@ -470,17 +459,20 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         g.setColor(new Color(0,0,0,180));
         g.fillRect(0,0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
 
+        String pausedText = NSLocalizableString.get("PAUSED");
+
         g.setColor(Color.WHITE);
         g.setFont(new Font("Arial", Font.BOLD, 42));
-        g.drawString("PAUSED", RCJMS.SCREEN_WIDTH / 2 - 100, RCJMS.SCREEN_HEIGHT / 2 - 20);
+        int pausedWidth = g.getFontMetrics().stringWidth(pausedText);
+        g.drawString(pausedText, (RCJMS.SCREEN_WIDTH - pausedWidth) / 2, RCJMS.SCREEN_HEIGHT / 2 - 20);
 
         g.setFont(new Font("Arial", Font.PLAIN, 20));
-        g.drawString("ESC - Continue", RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 20);
-        g.drawString("R - Restart", RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 50);
-        g.drawString("SHIFT - Run", RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 80);
-        g.drawString("Movement Speed = " + ((shift) ? runSpeed : moveSpeed), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 110);
-        g.drawString("Mouse Sensitivity = " + mouseSensitivity, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 140);
-        g.drawString("NoColip = " + noClip, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 170);
+        g.drawString(NSLocalizableString.get("ESC - Continue"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 20);
+        g.drawString(NSLocalizableString.get("R - Restart"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 50);
+        g.drawString(NSLocalizableString.get("SHIFT - Run"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 80);
+        g.drawString(NSLocalizableString.get("Movement Speed = ") + ((shift) ? runSpeed : moveSpeed), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 110);
+        g.drawString(NSLocalizableString.get("Mouse Sensitivity = ") + mouseSensitivity, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 140);
+        g.drawString(NSLocalizableString.get("NoColip = ") + noClip, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 170);
 
         g.dispose();
     }
@@ -516,6 +508,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             }
         }
         if (key == KeyEvent.VK_R) {
+            if (isPaused) {
+                pausedTime += System.currentTimeMillis() - pauseStartTime;
+                isPaused = false;
+                hideCursor();
+            }
             if (isCustomMap){
                 try {
                     isGameRunning = false;

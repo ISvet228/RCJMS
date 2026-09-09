@@ -3,8 +3,7 @@ package StyleUI;
 import javax.swing.*;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 import java.awt.geom.RoundRectangle2D;
 
 public class StyledScrollPane extends JScrollPane {
@@ -21,7 +20,7 @@ public class StyledScrollPane extends JScrollPane {
     private float glassOpacity = 0.45f;
 
     private double reflectionPhase;
-    private final Timer reflectionTimer;
+    private final Runnable reflectionTask;
 
     public StyledScrollPane(Component view, int vsbPolicy, int hsbPolicy, Style style) {
         super(view, vsbPolicy, hsbPolicy);
@@ -42,12 +41,11 @@ public class StyledScrollPane extends JScrollPane {
         getVerticalScrollBar().setUnitIncrement(16);
         getHorizontalScrollBar().setUnitIncrement(16);
 
-        reflectionTimer = new Timer(16, e -> {
+        reflectionTask = () -> {
             if (this.style != Style.GLASS) return;
             reflectionPhase = (reflectionPhase + 0.0035) % 1.0;
             repaint();
-        });
-        reflectionTimer.start();
+        };
     }
 
     public StyledScrollPane(Component view, Style style) { this(view, VERTICAL_SCROLLBAR_AS_NEEDED, HORIZONTAL_SCROLLBAR_AS_NEEDED, style); }
@@ -55,11 +53,27 @@ public class StyledScrollPane extends JScrollPane {
 
     @Override public void addNotify() {
         super.addNotify();
-        if (reflectionTimer != null && !reflectionTimer.isRunning()) reflectionTimer.start();
+        if (glass) AnimationManager.register(reflectionTask);
+        startScrollBarAnimations();
     }
     @Override public void removeNotify() {
-        if (reflectionTimer != null && reflectionTimer.isRunning()) reflectionTimer.stop();
+        AnimationManager.unregister(reflectionTask);
+        stopScrollBarAnimations();
         super.removeNotify();
+    }
+    private void startScrollBarAnimations() {
+        startScrollBarAnimation(getVerticalScrollBar());
+        startScrollBarAnimation(getHorizontalScrollBar());
+    }
+    private void stopScrollBarAnimations() {
+        stopScrollBarAnimation(getVerticalScrollBar());
+        stopScrollBarAnimation(getHorizontalScrollBar());
+    }
+    private void startScrollBarAnimation(JScrollBar bar) {
+        if (bar != null && bar.getUI() instanceof StyledScrollBarUI ui) ui.startAnimation();
+    }
+    private void stopScrollBarAnimation(JScrollBar bar) {
+        if (bar != null && bar.getUI() instanceof StyledScrollBarUI ui) ui.stopAnimation();
     }
 
     private void installScrollBar(JScrollBar bar, boolean vertical) {
@@ -92,6 +106,8 @@ public class StyledScrollPane extends JScrollPane {
         if (style == null || style == this.style) return;
         this.style = style;
         applyStyleColors(style);
+        AnimationManager.unregister(reflectionTask);
+        if (glass && isDisplayable()) AnimationManager.register(reflectionTask);
         getVerticalScrollBar().repaint();
         getHorizontalScrollBar().repaint();
         repaint();
@@ -164,7 +180,7 @@ public class StyledScrollPane extends JScrollPane {
         private final StyledScrollPane pane;
         private boolean thumbHover, thumbPressed;
         private double animation;
-        private Timer animationTimer;
+        private Runnable animationTask;
 
         StyledScrollBarUI(StyledScrollPane pane) { this.pane = pane; }
 
@@ -175,15 +191,15 @@ public class StyledScrollPane extends JScrollPane {
         }
         @Override protected void installListeners() {
             super.installListeners();
-            animationTimer = new Timer(16, e -> {
+            animationTask = () -> {
                 double target = thumbHover || thumbPressed ? 1.0 : 0.0;
                 double old = animation;
                 animation += (target - animation) * 0.25;
                 if (Math.abs(animation - target) < 0.01) animation = target;
                 boolean glassAnim = pane.isGlass();
                 if (old != animation || glassAnim) scrollbar.repaint();
-            });
-            animationTimer.start();
+            };
+            if (scrollbar.isDisplayable()) AnimationManager.register(animationTask);
             scrollbar.addMouseListener(new MouseAdapter() {
                 @Override public void mouseEntered(MouseEvent e) { thumbHover = true; }
                 @Override public void mouseExited(MouseEvent e) { thumbHover = false; thumbPressed = false; }
@@ -191,8 +207,14 @@ public class StyledScrollPane extends JScrollPane {
                 @Override public void mouseReleased(MouseEvent e) { thumbPressed = false; }
             });
         }
+        void startAnimation() {
+            if (animationTask != null) AnimationManager.register(animationTask);
+        }
+        void stopAnimation() {
+            if (animationTask != null) AnimationManager.unregister(animationTask);
+        }
         @Override protected void uninstallListeners() {
-            if (animationTimer != null) animationTimer.stop();
+            stopAnimation();
             super.uninstallListeners();
         }
         @Override protected JButton createDecreaseButton(int orientation) { return zeroButton(); }

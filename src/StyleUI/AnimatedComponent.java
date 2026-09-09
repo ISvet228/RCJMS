@@ -3,14 +3,13 @@ package StyleUI;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseEvent;
-import java.awt.geom.Point2D;
-import java.awt.geom.RoundRectangle2D;
+import java.awt.geom.*;
 
 public abstract class AnimatedComponent extends JComponent {
     protected double animation, reflectionPhase;
     protected boolean mouseOver, mousePressed;
     private Dimension baseParentSize;
-    private final Timer animationTimer;
+    private final Runnable animationTask;
 
     private int baseX, baseY, baseWidth, baseHeight;
     private int referenceWidth, referenceHeight;
@@ -20,7 +19,7 @@ public abstract class AnimatedComponent extends JComponent {
         hasReferenceSize = false;
         setOpaque(false);
         enableEvents(AWTEvent.MOUSE_EVENT_MASK | AWTEvent.MOUSE_MOTION_EVENT_MASK);
-        animationTimer = new Timer(16, e -> {
+        animationTask = () -> {
             double target = mouseOver || mousePressed ? 1.0 : 0.0;
             double old = animation;
             animation += (target - animation) * 0.22;
@@ -28,8 +27,7 @@ public abstract class AnimatedComponent extends JComponent {
             boolean glass = getStyle() == Style.GLASS;
             if (glass) reflectionPhase = (reflectionPhase + 0.0035) % 1.0;
             if (old != animation || glass) repaint();
-        });
-        animationTimer.start();
+        };
     }
 
     AnimatedComponent(int referenceWidth, int referenceHeight) {
@@ -40,11 +38,11 @@ public abstract class AnimatedComponent extends JComponent {
     }
     @Override public void addNotify() {
         super.addNotify();
-        if (animationTimer != null && !animationTimer.isRunning()) animationTimer.start();
+        AnimationManager.register(animationTask);
         if (hasReferenceSize) SwingUtilities.invokeLater(this::updateScale);
     }
     @Override public void removeNotify() {
-        if (animationTimer != null && animationTimer.isRunning()) animationTimer.stop();
+        AnimationManager.unregister(animationTask);
         super.removeNotify();
     }
     protected abstract Style getStyle();

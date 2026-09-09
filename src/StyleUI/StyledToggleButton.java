@@ -3,15 +3,15 @@ package StyleUI;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseEvent;
-import java.awt.geom.Point2D;
-import java.awt.geom.RoundRectangle2D;
+import java.awt.geom.*;
+import java.util.function.Supplier;
 
 public class StyledToggleButton extends JToggleButton {
     private Style style;
     private double animation, reflectionPhase;
     private boolean mouseOver, mousePressed;
     private Dimension baseParentSize;
-    private Timer animationTimer;
+    private Runnable animationTask;
 
     private int baseX, baseY;
     private int baseWidth, baseHeight;
@@ -22,17 +22,40 @@ public class StyledToggleButton extends JToggleButton {
     public StyledToggleButton(Style style, String text) {
         super(text);
         this.style = style;
+        LocalizationBridge.bind(this, text, this::applyLocalizedText);
         this.referenceScaling = false;
         initialize();
     }
     public StyledToggleButton(Style style, String text, int referenceWidth, int referenceHeight) {
         super(text);
         this.style = style;
+        LocalizationBridge.bind(this, text, this::applyLocalizedText);
         this.referenceWidth = Math.max(1, referenceWidth);
         this.referenceHeight = Math.max(1, referenceHeight);
         this.referenceScaling = true;
         initialize();
     }
+
+    @Override public void setText(String text) {
+        LocalizationBridge.externalTextChanged(this, text, value -> StyledToggleButton.super.setText(value == null ? "" : value));
+    }
+
+    public void setLocalizationKey(String key) {
+        LocalizationBridge.unbind(this);
+        LocalizationBridge.bind(this, key, this::applyLocalizedText);
+    }
+
+    public void setLocalizationFormat(String key, Supplier<Object[]> arguments) {
+        LocalizationBridge.unbind(this);
+        LocalizationBridge.bindFormat(this, key, arguments, this::applyLocalizedText);
+    }
+
+    private void applyLocalizedText(String text) {
+        super.setText(text == null ? "" : text);
+        revalidate();
+        repaint();
+    }
+
     private void initialize() {
         setOpaque(false);
         setContentAreaFilled(false);
@@ -44,7 +67,7 @@ public class StyledToggleButton extends JToggleButton {
 
         enableEvents(AWTEvent.MOUSE_EVENT_MASK | AWTEvent.MOUSE_MOTION_EVENT_MASK);
 
-        animationTimer = new Timer(16, e -> {
+        animationTask = () -> {
             double target = mouseOver || mousePressed || isSelected() ? 1.0 : 0.0;
             double old = animation;
             animation += (target - animation) * 0.22;
@@ -52,18 +75,17 @@ public class StyledToggleButton extends JToggleButton {
             boolean glass = style == Style.GLASS;
             if (glass) reflectionPhase = (reflectionPhase + 0.0035) % 1.0;
             if (old != animation || glass) repaint();
-        });
-        animationTimer.start();
+        };
     }
 
     @Override public void addNotify() {
         super.addNotify();
-        if (!animationTimer.isRunning()) animationTimer.start();
+        AnimationManager.register(animationTask);
         SwingUtilities.invokeLater(this::updateScale);
     }
 
     @Override public void removeNotify() {
-        if (animationTimer.isRunning()) animationTimer.stop();
+        AnimationManager.unregister(animationTask);
         super.removeNotify();
     }
 

@@ -1,3 +1,5 @@
+import Helpers.NSLocalizableString;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
@@ -10,7 +12,7 @@ public class CreditsView extends JPanel {
     private final String[] creditsText = {
             "PROJECT RCJMS",
             "",
-            "Main Devloper",
+            "Main Devlooper",
             "ME",
             "",
             "Main Designer",
@@ -29,6 +31,10 @@ public class CreditsView extends JPanel {
             "",
             "DDA|https://aaaa.sh/creatures/dda-algorithm-interactive/",
             "",
+            "StyleUI|https://github.com/ISvet228/StyleUI",
+            "",
+            "NSLocalizedString(NSLocalizableString)|https://developer.apple.com/documentation/foundation/nslocalizedstring",
+            "",
             "Thanks For Watching Credits",
             "",
             "I Also Have Another Project",
@@ -41,8 +47,9 @@ public class CreditsView extends JPanel {
 
     private final List<CreditLine> lines = new ArrayList<>();
     private final Timer scrollTimer;
+    private final Runnable languageListener = () -> { parseCredits(); repaint(); };
 
-    private final double scrollSpeed = 1.0;
+    private final double scrollSpeed = 10.0;
     private double scrollY;
     private boolean scrollInitialized = false;
     private double endY;
@@ -54,6 +61,7 @@ public class CreditsView extends JPanel {
         setBackground(Color.BLACK);
         setFocusable(true);
         parseCredits();
+        NSLocalizableString.addLanguageChangeListener(languageListener);
 
         addKeyListener(new KeyAdapter() {@Override public void keyPressed(KeyEvent e) {if (e.getKeyCode() == KeyEvent.VK_ESCAPE) returnToMenu();}});
         addMouseListener(new MouseAdapter() {
@@ -66,15 +74,13 @@ public class CreditsView extends JPanel {
         SwingUtilities.invokeLater(this::requestFocusInWindow);
     }
 
-    @Override
-    public void addNotify() {
+    @Override public void addNotify() {
         super.addNotify();
         if (scrollTimer != null && !scrollTimer.isRunning()) scrollTimer.start();
     }
-
-    @Override
-    public void removeNotify() {
+    @Override public void removeNotify() {
         if (scrollTimer != null && scrollTimer.isRunning()) scrollTimer.stop();
+        NSLocalizableString.removeLanguageChangeListener(languageListener);
         super.removeNotify();
     }
 
@@ -88,10 +94,10 @@ public class CreditsView extends JPanel {
             }
             int separator = text.lastIndexOf('|');
             if (separator > 0 && separator < text.length() - 1) {
-                String visibleText = text.substring(0, separator);
+                String visibleText = NSLocalizableString.localizeDynamic(text.substring(0, separator));
                 String url = text.substring(separator + 1);
                 lines.add(new CreditLine(visibleText, url));
-            } else lines.add(new CreditLine(text));
+            } else lines.add(new CreditLine(NSLocalizableString.localizeDynamic(text)));
         }
     }
 
@@ -113,7 +119,7 @@ public class CreditsView extends JPanel {
         finished = true;
         if (scrollTimer != null) scrollTimer.stop();
 
-        try {RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "RayCast Me!");}
+        try {RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu");}
         catch (Exception ex) {ex.printStackTrace();}
     }
 
@@ -132,23 +138,17 @@ public class CreditsView extends JPanel {
     //region Rendering
     @Override protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-
-        int width = getWidth();
-        int height = getHeight();
-
+        int width = getWidth(), height = getHeight();
         if (width <= 0 || height <= 0) return;
         double scale = getScale();
-        int offsetX = getOffsetX(scale);
-        int offsetY = getOffsetY(scale);
 
         Graphics2D g2 = (Graphics2D) g.create();
         g2.setColor(Color.BLACK);
         g2.fillRect(0, 0, width, height);
-        g2.translate(offsetX, offsetY);
+        g2.translate(getOffsetX(scale), getOffsetY(scale));
         g2.scale(scale, scale);
         g2.setColor(Color.BLACK);
         g2.fillRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
-
         Shape oldClip = g2.getClip();
 
         g2.clipRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
@@ -157,8 +157,7 @@ public class CreditsView extends JPanel {
         g2.dispose();
     }
     private void drawCredits(Graphics2D g2) {
-        int baseFontSize = 28;
-        int lineHeight = 45;
+        int baseFontSize = 28, lineHeight = 45;
 
         Font normalFont = new Font("Arial", Font.PLAIN, baseFontSize);
         Font linkFont = new Font("Arial", Font.PLAIN, baseFontSize);
@@ -247,15 +246,8 @@ public class CreditsView extends JPanel {
     //endregion
 
     private static class CreditLine {
-        String text;
-        String url;
-        CreditLine(String text) {
-            this.text = text;
-            this.url = null;
-        }
-        CreditLine(String text, String url) {
-            this.text = text;
-            this.url = url;
-        }
+        String text, url;
+        CreditLine(String text) { this.text = text; this.url = null; }
+        CreditLine(String text, String url) { this.text = text; this.url = url; }
     }
 }
