@@ -1,5 +1,6 @@
 import StyleUI.*;
 import Helpers.NSLocalizableString;
+import Helpers.AppPaths;
 
 import javax.swing.*;
 import java.awt.*;
@@ -17,7 +18,7 @@ public class MainMenuView extends JPanel {
     private final Random random = new Random();
 
     private Style currentStyle = loadTheme();
-    private static final Path TMP_DIR = Paths.get("tmp");
+    private static final Path TMP_DIR = AppPaths.DATA_DIR;
     private static final Path THEME_FILE = TMP_DIR.resolve("theme.txt");
     private static final Path LANGUAGE_FILE = TMP_DIR.resolve("language.txt");
 

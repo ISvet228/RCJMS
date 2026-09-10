@@ -1,4 +1,5 @@
 import StyleUI.*;
+import Helpers.AppPaths;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -11,7 +12,7 @@ import java.util.*;
 
 public class TextureEditorView extends JPanel {
     //region Variables
-    private static final Path TMP_DIR = Paths.get("tmp");
+    private static final Path TMP_DIR = AppPaths.DATA_DIR;
     private static final Path THEME_FILE = TMP_DIR.resolve("theme.txt");
     private final Style currentStyle = loadTheme();
 
@@ -766,7 +767,7 @@ public class TextureEditorView extends JPanel {
 
     //region Texture RW-
     public Path saveTexturesToTmp() throws IOException {
-        Path tmp = Paths.get("tmp");
+        Path tmp = AppPaths.DATA_DIR;
         Files.createDirectories(tmp);
 
         writeTexture(tmp.resolve("walltexture.txt"), wallTexture);
@@ -829,7 +830,7 @@ public class TextureEditorView extends JPanel {
         }
     }
     public void loadTexturesFromTmp() throws IOException {
-        Path tmp = Paths.get("tmp");
+        Path tmp = AppPaths.DATA_DIR;
         int[][][] textures = {
                 readTexture(tmp.resolve("walltexture.txt")),
                 readTexture(tmp.resolve("floortexture.txt")),

@@ -1,5 +1,6 @@
 import StyleUI.*;
 import Helpers.NSLocalizableString;
+import Helpers.AppPaths;
 
 import javax.swing.*;
 import java.awt.*;
@@ -11,7 +12,7 @@ import java.util.ArrayList;
 import java.util.Random;
 
 public class VictoryView extends JPanel {
-    private static final Path TMP_DIR = Paths.get("tmp");
+    private static final Path TMP_DIR = AppPaths.DATA_DIR;
     private static final Path THEME_FILE = TMP_DIR.resolve("theme.txt");
     private final Style currentStyle = loadTheme();
 
