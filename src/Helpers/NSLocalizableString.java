@@ -292,12 +292,12 @@ public final class NSLocalizableString {
         List<Path> result = new ArrayList<>();
         if (lang == null) {
             result.add(baseDirectory.resolve(FILE_NAME));
-            result.add(baseDirectory.resolve("Localization").resolve(FILE_NAME));
+            result.add(baseDirectory.resolve("src/Localization").resolve(FILE_NAME));
             result.add(baseDirectory.resolve("localization").resolve(FILE_NAME));
             result.add(baseDirectory.resolve("src").resolve("Localization").resolve(FILE_NAME));
         } else {
             String folder = lang + ".lproj";
-            result.add(baseDirectory.resolve("Localization").resolve(folder).resolve(FILE_NAME));
+            result.add(baseDirectory.resolve("src/Localization").resolve(folder).resolve(FILE_NAME));
             result.add(baseDirectory.resolve("localization").resolve(folder).resolve(FILE_NAME));
             result.add(baseDirectory.resolve(folder).resolve(FILE_NAME));
             result.add(baseDirectory.resolve("src").resolve("Localization").resolve(folder).resolve(FILE_NAME));

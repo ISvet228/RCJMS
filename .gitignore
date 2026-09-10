@@ -26,4 +26,6 @@ replay_pid*
 .idea/
 .vs/
 /tmp/
-/Localization/LocalizableStrings.strings
+/src/META-INF/
+/out/
+src/Localization/LocalizableStrings.strings
