@@ -1,0 +1,3 @@
+[submodule "src/StyleUI"]
+	path = src/StyleUI
+	url = https://github.com/ISvet228/StyleUI
