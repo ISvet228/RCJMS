@@ -49,7 +49,7 @@ public class CreditsView extends JPanel {
     private final Timer scrollTimer;
     private final Runnable languageListener = () -> { parseCredits(); repaint(); };
 
-    private final double scrollSpeed = 10.0;
+    private final double scrollSpeed = 1.0;
     private double scrollY;
     private boolean scrollInitialized = false;
     private double endY;
