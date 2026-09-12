@@ -1,4 +1,5 @@
 import javax.swing.*;
+import java.awt.*;
 import java.io.IOException;
 
 public class RCJMS extends JFrame {
@@ -13,13 +14,14 @@ public class RCJMS extends JFrame {
 
     public static final int SCREEN_WIDTH = 960;//DO NOT CHANGE UI WILL BE BROKEN
     public static final int SCREEN_HEIGHT = 540;//DO NOT CHANGE UI WILL BE BROKEN
+    public static final Color MY_FAV_GRAY = new Color(28, 28, 32);
 
     public RCJMS() throws IOException {
         instance = this;
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
         setLocationRelativeTo(null);
-        ChangeView(mainMenuView, "Main Menu");
+        ChangeView(mainMenuView, "main_menu");
         setVisible(true);
     }
     public void ChangeView(JPanel nextView, String nextTitle) {

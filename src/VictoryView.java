@@ -1,28 +1,23 @@
 import StyleUI.*;
-import Helpers.NSLocalizableString;
-import Helpers.AppPaths;
+import Helpers.*;
 
 import javax.swing.*;
 import java.awt.*;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Random;
 
 public class VictoryView extends JPanel {
-    private static final Path TMP_DIR = AppPaths.DATA_DIR;
-    private static final Path THEME_FILE = TMP_DIR.resolve("theme.txt");
     private final Style currentStyle = loadTheme();
 
     private final ArrayList<Firework> fireworks = new ArrayList<>();
     private final Random random = new Random();
 
-    private final Animated3DText title = new Animated3DText("CONGRATULATIONS", Animated3DText.AnimationType.FULL);
+    private final Animated3DText title = new Animated3DText("", Animated3DText.AnimationType.FULL);
     private final StyledLabel timeLabel = new StyledLabel(currentStyle, "");
-    private final StyledButton restartButton = new StyledButton(currentStyle, "RESTART");
-    private final StyledButton exitButton = new StyledButton(currentStyle, "EXIT");
+    private final StyledButton restartButton = new StyledButton(currentStyle, "vv.restart");
+    private final StyledButton exitButton = new StyledButton(currentStyle, "exit");
 
     private int viewportX, viewportY;
 
@@ -34,19 +29,19 @@ public class VictoryView extends JPanel {
         setLayout(null);
         setBackground(Color.BLACK);
 
-        NSLocalizableString.bind(title, "CONGRATULATIONS");
+        NSLocalizedString.bind(title, "vv.title");
         title.setTextColor(Color.WHITE);
         title.setDepthColor(new Color(255, 255, 120, 80));
         add(title);
 
-        timeLabel.setLocalizationFormat("victory.time", () -> new Object[]{
+        timeLabel.setLocalizationFormat("vv.victory_time", () -> new Object[]{
                 elapsedSeconds / 3600, (elapsedSeconds % 3600) / 60, elapsedSeconds % 60});
         timeLabel.setForeground(Color.WHITE);
         timeLabel.setFont(new Font("Arial", Font.BOLD, 25));
         add(timeLabel);
 
         restartButton.setFont(new Font("Arial", Font.BOLD, 32));
-        restartButton.addActionListener(e -> {RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu");});
+        restartButton.addActionListener(e -> {RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu");});
         add(restartButton);
 
         exitButton.setFont(new Font("Arial", Font.BOLD, 18));
@@ -130,8 +125,8 @@ public class VictoryView extends JPanel {
     }
     private Style loadTheme() {
         try {
-            if (Files.exists(THEME_FILE)) {
-                String name = Files.readString(THEME_FILE).trim();
+            if (Files.exists(AppPaths.THEME_FILE)) {
+                String name = Files.readString(AppPaths.THEME_FILE).trim();
                 return Style.valueOf(name);
             }
         } catch (IOException | IllegalArgumentException ex) { ex.printStackTrace(); }

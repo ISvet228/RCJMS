@@ -1,4 +1,4 @@
-import Helpers.NSLocalizableString;
+import Helpers.NSLocalizedString;
 
 import javax.swing.*;
 import java.awt.*;
@@ -10,34 +10,34 @@ import java.util.List;
 public class CreditsView extends JPanel {
     //region Variables
     private final String[] creditsText = {
-            "PROJECT RCJMS",
+            "cv.project_rcjms",
             "",
-            "Main Devlooper",
-            "ME",
+            "cv.main_devlooper",
+            "cv.me",
             "",
-            "Main Designer",
-            "ME",
+            "cv.main_designer",
+            "cv.me",
             "",
-            "Scenario By",
-            "ME",
+            "cv.scenario_plot_by",
+            "cv.me",
             "",
-            "Special Thanks",
+            "cv.special_thanks",
             "",
-            "Ljubo For Collision Fix And Walk Enchantments|https://github.com/lobujo552",
+            "cv.ljubo|https://github.com/lobujo552",
             "",
-            "fUnGuN StyleUI Help|https://github.com/AnimemanDude",
+            "cv.fungun|https://github.com/AnimemanDude",
             "",
-            "Useful Resources",
+            "cv.useful_resources",
             "",
             "DDA|https://aaaa.sh/creatures/dda-algorithm-interactive/",
             "",
             "StyleUI|https://github.com/ISvet228/StyleUI",
             "",
-            "NSLocalizedString(NSLocalizableString)|https://developer.apple.com/documentation/foundation/nslocalizedstring",
+            "NSLocalizedString|https://developer.apple.com/documentation/foundation/nslocalizedstring",
             "",
-            "Thanks For Watching Credits",
+            "cv.thanks",
             "",
-            "I Also Have Another Project",
+            "cv.another_project",
             "",
             "MondLocalized|https://github.com/ISvet228/mondLocalized",
             "",
@@ -61,7 +61,7 @@ public class CreditsView extends JPanel {
         setBackground(Color.BLACK);
         setFocusable(true);
         parseCredits();
-        NSLocalizableString.addLanguageChangeListener(languageListener);
+        NSLocalizedString.addLanguageChangeListener(languageListener);
 
         addKeyListener(new KeyAdapter() {@Override public void keyPressed(KeyEvent e) {if (e.getKeyCode() == KeyEvent.VK_ESCAPE) returnToMenu();}});
         addMouseListener(new MouseAdapter() {
@@ -80,7 +80,7 @@ public class CreditsView extends JPanel {
     }
     @Override public void removeNotify() {
         if (scrollTimer != null && scrollTimer.isRunning()) scrollTimer.stop();
-        NSLocalizableString.removeLanguageChangeListener(languageListener);
+        NSLocalizedString.removeLanguageChangeListener(languageListener);
         super.removeNotify();
     }
 
@@ -94,10 +94,10 @@ public class CreditsView extends JPanel {
             }
             int separator = text.lastIndexOf('|');
             if (separator > 0 && separator < text.length() - 1) {
-                String visibleText = NSLocalizableString.localizeDynamic(text.substring(0, separator));
+                String visibleText = NSLocalizedString.localizeDynamic(text.substring(0, separator));
                 String url = text.substring(separator + 1);
                 lines.add(new CreditLine(visibleText, url));
-            } else lines.add(new CreditLine(NSLocalizableString.localizeDynamic(text)));
+            } else lines.add(new CreditLine(NSLocalizedString.localizeDynamic(text)));
         }
     }
 

@@ -1,11 +1,9 @@
 import StyleUI.*;
-import Helpers.NSLocalizableString;
-import Helpers.AppPaths;
+import Helpers.*;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+import java.awt.event.*;
 import java.awt.geom.AffineTransform;
 import java.io.IOException;
 import java.nio.file.*;
@@ -18,34 +16,31 @@ public class MainMenuView extends JPanel {
     private final Random random = new Random();
 
     private Style currentStyle = loadTheme();
-    private static final Path TMP_DIR = AppPaths.DATA_DIR;
-    private static final Path THEME_FILE = TMP_DIR.resolve("theme.txt");
-    private static final Path LANGUAGE_FILE = TMP_DIR.resolve("language.txt");
 
     private final Animated3DText title = new Animated3DText("RCJMS", Animated3DText.AnimationType.ROTATE);
 
-    private final StyledButton playButton = createButton(currentStyle, "PLAY");
-    private final StyledButton textureEditorButton = createButton(currentStyle, "TEXTURE EDITOR");
-    private final StyledButton mapEditorButton = createButton(currentStyle, "MAP EDITOR");
-    private final StyledButton creditsButton = createButton(currentStyle, "CREDITS");
-    private final StyledButton exitButton = createButton(currentStyle, "EXIT");
+    private final StyledButton playButton = createButton(currentStyle, "mm.play");
+    private final StyledButton textureEditorButton = createButton(currentStyle, "mm.texture_editor");
+    private final StyledButton mapEditorButton = createButton(currentStyle, "mm.map_editor");
+    private final StyledButton creditsButton = createButton(currentStyle, "mm.credits");
+    private final StyledButton exitButton = createButton(currentStyle, "exit");
     private final StyledButton settingsButton = createIconButton(currentStyle, "…");
     private final StyledButton infoButton = createIconButton(currentStyle, "i");
     private StyledButton settingsCloseButton, infoCloseButton;
 
-    private static final String[] modes = {"OPPOSITE CORNER", "CENTER", "RANDOM EDGE"};
+    private static final String[] modes = {"mm.opposite_corner", "mm.center", "mm.random_edge"};
     private final StyledComboBox modeBox = new StyledComboBox(currentStyle, modes);
     private final String[] languages = {"en", "ru"};
     private final String[] languageNames = {"English", "Русский"};
     private StyledComboBox languageBox;
 
-    private final StyledLabel mazeDimensionsLabel = createLabel(currentStyle,"MAZE DIMENSIONS");
-    private final StyledLabel modeLabel = createLabel(currentStyle,"MODE");
+    private final StyledLabel mazeDimensionsLabel = createLabel(currentStyle,"mm.maze_dimensions");
+    private final StyledLabel modeLabel = createLabel(currentStyle,"mm.mode");
     private final StyledLabel xLabel = createLabel(currentStyle,"X");
     private final StyledLabel yLabel = createLabel(currentStyle,"Y");
-    private final StyledLabel seedLabel = createLabel(currentStyle,"CUSTOM SEED");
-    private final StyledLabel languageTitle = createLabel(currentStyle, "Language");
-    private final StyledLabel themesTitle = createLabel(currentStyle, "Themes");
+    private final StyledLabel seedLabel = createLabel(currentStyle,"mm.custom_seed");
+    private final StyledLabel languageTitle = createLabel(currentStyle, "st.language");
+    private final StyledLabel themesTitle = createLabel(currentStyle, "st.themes");
 
     private final StyledTextField xField = new StyledTextField(currentStyle,"25");
     private final StyledTextField yField = new StyledTextField(currentStyle, "25");
@@ -59,7 +54,7 @@ public class MainMenuView extends JPanel {
     //endregion
 
     public MainMenuView() {
-        NSLocalizableString.setLanguage(loadLanguage());
+        NSLocalizedString.setLanguage(loadLanguage());
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setLayout(null);
 
@@ -97,38 +92,38 @@ public class MainMenuView extends JPanel {
 
         playButton.addActionListener(e -> StartGameView());
         textureEditorButton.addActionListener(e -> {
-            try {RCJMS.instance.ChangeView(RCJMS.instance.textureEditorView = new TextureEditorView(), "Texture Editor");}
+            try {RCJMS.instance.ChangeView(RCJMS.instance.textureEditorView = new TextureEditorView(), "te.texture_editor");}
             catch (IOException ex) {throw new RuntimeException(ex);}});
-        mapEditorButton.addActionListener(e -> RCJMS.instance.ChangeView(RCJMS.instance.mapEditorView = new MapEditorView(), "Map Editor"));
-        creditsButton.addActionListener(e -> RCJMS.instance.ChangeView(RCJMS.instance.creditsView = new CreditsView(), "Credits"));
+        mapEditorButton.addActionListener(e -> RCJMS.instance.ChangeView(RCJMS.instance.mapEditorView = new MapEditorView(), "me.map_editor"));
+        creditsButton.addActionListener(e -> RCJMS.instance.ChangeView(RCJMS.instance.creditsView = new CreditsView(), "cv.credits"));
         exitButton.addActionListener(e -> System.exit(0));
 
         settingsButton.addActionListener(e -> {
             if (settingsDialog != null && settingsDialog.isVisible()) { settingsDialog.toFront(); return; }
 
-            fullscreenToggle = new StyledToggle(currentStyle, "Fullscreen");
+            fullscreenToggle = new StyledToggle(currentStyle, "st.fullscreen");
             fullscreenToggle.setSelected(fullscreen);
             fullscreenToggle.addActionListener(ev -> setFullscreen(fullscreenToggle.isSelected()));
 
-            StyledButton flatButton = createButton(Style.FLAT, "Flat");
-            StyledButton neumorphicButton = createButton(Style.NEUMORPHIC, "Neumorphic");
-            StyledButton glassButton = createButton(Style.GLASS, "Glass");
+            StyledButton flatButton = createButton(Style.FLAT, "st.flat");
+            StyledButton neumorphicButton = createButton(Style.NEUMORPHIC, "st.neumorphic");
+            StyledButton glassButton = createButton(Style.GLASS, "st.glass");
 
             languageTitle.setForeground(Color.WHITE);
             languageTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
 
             languageBox = new StyledComboBox(currentStyle, languageNames);
-            languageBox.setSelectedIndex(NSLocalizableString.getLanguage().equalsIgnoreCase("ru") ? 1 : 0);
+            languageBox.setSelectedIndex(NSLocalizedString.getLanguage().equalsIgnoreCase("ru") ? 1 : 0);
             languageBox.addActionListener(ev -> {
                 int index = languageBox.getSelectedIndex();
-                if (index >= 0 && index < languages.length && !languages[index].equalsIgnoreCase(NSLocalizableString.getLanguage())) {
+                if (index >= 0 && index < languages.length && !languages[index].equalsIgnoreCase(NSLocalizedString.getLanguage())) {
                     saveLanguage(languages[index]);
-                    NSLocalizableString.setLanguage(languages[index]);
-                    NSLocalizableString.refresh(settingsDialog);
+                    NSLocalizedString.setLanguage(languages[index]);
+                    NSLocalizedString.refresh(settingsDialog);
                 }
             });
             for (StyledButton b : new StyledButton[]{flatButton, neumorphicButton, glassButton}) b.setPreferredSize(new Dimension(110, 40));
-            settingsCloseButton = createButton(currentStyle, "Close");
+            settingsCloseButton = createButton(currentStyle, "close");
 
             ActionListener themeListener = ev -> {
                 Style newStyle = ev.getSource() == flatButton ? Style.FLAT : ev.getSource() == neumorphicButton ? Style.NEUMORPHIC : Style.GLASS;
@@ -168,7 +163,7 @@ public class MainMenuView extends JPanel {
             contentPanel.add(themesBlock, BorderLayout.CENTER);
 
             JPanel panel = new JPanel(new BorderLayout(0, 16));
-            panel.setBackground(new Color(28, 28, 32));
+            panel.setBackground(RCJMS.MY_FAV_GRAY);
             panel.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
             panel.add(contentPanel, BorderLayout.CENTER);
 
@@ -178,7 +173,7 @@ public class MainMenuView extends JPanel {
             panel.add(bottomPanel, BorderLayout.SOUTH);
 
             settingsDialog = new JDialog();
-            NSLocalizableString.bind(settingsDialog, "Settings", settingsDialog::setTitle);
+            NSLocalizedString.bind(settingsDialog, "st.settings", settingsDialog::setTitle);
             settingsCloseButton.addActionListener(ev -> settingsDialog.dispose());
             settingsDialog.setContentPane(panel);
             settingsDialog.pack();
@@ -190,14 +185,14 @@ public class MainMenuView extends JPanel {
         infoButton.addActionListener(e -> {
             if (infoDialog != null && infoDialog.isVisible()) { infoDialog.toFront(); return; }
 
-            JLabel label = new JLabel("<html>Controls:<br>WASD - Move<br>SHIFT - Run</html>");
+            JLabel label = new JLabel("<html>if.controls<br>if.move<br>run</html>");
             label.setForeground(Color.WHITE);
             label.setFont(new Font("Arial", Font.PLAIN, 16));
 
-            infoCloseButton = createButton(currentStyle, "Close");
+            infoCloseButton = createButton(currentStyle, "close");
 
             JPanel panel = new JPanel(new BorderLayout(0, 16));
-            panel.setBackground(new Color(28, 28, 32));
+            panel.setBackground(RCJMS.MY_FAV_GRAY);
             panel.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
             panel.add(label, BorderLayout.CENTER);
 
@@ -207,7 +202,7 @@ public class MainMenuView extends JPanel {
             panel.add(bottomPanel, BorderLayout.SOUTH);
 
             infoDialog = new JDialog();
-            NSLocalizableString.bind(infoDialog, "Info", infoDialog::setTitle);
+            NSLocalizedString.bind(infoDialog, "if.info", infoDialog::setTitle);
             infoCloseButton.addActionListener(ev -> infoDialog.dispose());
             infoDialog.setContentPane(panel);
             infoDialog.pack();
@@ -245,7 +240,7 @@ public class MainMenuView extends JPanel {
             }
             RCJMS.instance.gameView.start();
         } catch (NumberFormatException | IOException ex) {
-            JOptionPane.showMessageDialog(this, "Maze size must be a number.", "Invalid Input", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "mm.maze_size_error", "mm.invalid_input", JOptionPane.ERROR_MESSAGE);
         }
     }
     private void setFullscreen(boolean fullscreen) {
@@ -344,14 +339,14 @@ public class MainMenuView extends JPanel {
     //region Saves
     private void saveLanguage(String language) {
         try {
-            Files.createDirectories(TMP_DIR);
-            Files.writeString(LANGUAGE_FILE, language);
+            Files.createDirectories(AppPaths.DATA_DIR);
+            Files.writeString(AppPaths.LANGUAGE_FILE, language);
         } catch (IOException ex) { ex.printStackTrace(); }
     }
     private String loadLanguage() {
         try {
-            if (Files.exists(LANGUAGE_FILE)) {
-                String language = Files.readString(LANGUAGE_FILE).trim();
+            if (Files.exists(AppPaths.LANGUAGE_FILE)) {
+                String language = Files.readString(AppPaths.LANGUAGE_FILE).trim();
                 if (!language.isBlank()) return language;
             }
         } catch (IOException ex) { ex.printStackTrace(); }
@@ -360,14 +355,14 @@ public class MainMenuView extends JPanel {
 
     private void saveTheme(Style style) {
         try {
-            Files.createDirectories(TMP_DIR);
-            Files.writeString(THEME_FILE, style.name());
+            Files.createDirectories(AppPaths.DATA_DIR);
+            Files.writeString(AppPaths.THEME_FILE, style.name());
         } catch (IOException ex) { ex.printStackTrace(); }
     }
     private Style loadTheme() {
         try {
-            if (Files.exists(THEME_FILE)) {
-                String name = Files.readString(THEME_FILE).trim();
+            if (Files.exists(AppPaths.THEME_FILE)) {
+                String name = Files.readString(AppPaths.THEME_FILE).trim();
                 return Style.valueOf(name);
             }
         } catch (IOException | IllegalArgumentException ex) { ex.printStackTrace(); }

@@ -12,8 +12,6 @@ import java.util.*;
 
 public class MapEditorView extends JPanel {
     //region Variables
-    private static final Path TMP_DIR = AppPaths.DATA_DIR;
-    private static final Path THEME_FILE = TMP_DIR.resolve("theme.txt");
     private final Style currentStyle = loadTheme();
 
     private static final int MIN_MAP_SIZE = 5, MAX_MAP_SIZE = 201;
@@ -33,18 +31,18 @@ public class MapEditorView extends JPanel {
 
     private final MapCanvas mapCanvas = new MapCanvas();
 
-    private final StyledButton exitButton = new StyledButton(currentStyle, "Exit");
-    private final StyledButton clearMapButton = new StyledButton(currentStyle, "Clear Map");
-    private final StyledButton resetButton = new StyledButton(currentStyle, "Reset");
-    private final StyledButton playMapButton = new StyledButton(currentStyle, "Play Map");
+    private final StyledButton exitButton = new StyledButton(currentStyle, "exit");
+    private final StyledButton clearMapButton = new StyledButton(currentStyle, "me.clear_map");
+    private final StyledButton resetButton = new StyledButton(currentStyle, "reset");
+    private final StyledButton playMapButton = new StyledButton(currentStyle, "me.play_map");
 
     private final StyledLabel sizeLabel = new StyledLabel(currentStyle, "", false, false);
     private final StyledLabel selectedBlockLabel = new StyledLabel(currentStyle, "", false);
-    private final StyledLabel selectedCellLabel = new StyledLabel(currentStyle,"Selected: none", false);
+    private final StyledLabel selectedCellLabel = new StyledLabel(currentStyle,"selected_none", false);
     private final StyledLabel brushSizeLabel = new StyledLabel(currentStyle, "", false);
     private final StyledLabel eraserSizeLabel = new StyledLabel(currentStyle, "",  false);
-    private final StyledLabel instruction = new StyledLabel(currentStyle, "Start: (1, 1)    |    0 = Path    1 = Wall    2 = Finish", false, false);
-    private final StyledLabel bottomInstruction = new StyledLabel(currentStyle, "Select a tool and block, then click or drag on the map.", false, false);
+    private final StyledLabel instruction = new StyledLabel(currentStyle, "me.blocks_info", false, false);
+    private final StyledLabel bottomInstruction = new StyledLabel(currentStyle, "me.select_a_tool", false, false);
     private StyledLabel toolsTitle, blockTitle;
 
     private StyledScrollPane rightScroll;
@@ -57,12 +55,12 @@ public class MapEditorView extends JPanel {
     private final StyledTextField widthField = new StyledTextField(currentStyle, String.valueOf(DEFAULT_SIZE));
     private final StyledTextField heightField = new StyledTextField(currentStyle, String.valueOf(DEFAULT_SIZE));
 
-    private final StyledToggleButton selectToolButton = new StyledToggleButton(currentStyle,"Select");
-    private final StyledToggleButton brushToolButton = new StyledToggleButton(currentStyle,"Brush");
-    private final StyledToggleButton eraserToolButton = new StyledToggleButton(currentStyle,"Eraser");
-    private final StyledToggleButton pathButton = new StyledToggleButton(currentStyle,"0 - Path");
-    private final StyledToggleButton wallButton = new StyledToggleButton(currentStyle,"1 - Wall");
-    private final StyledToggleButton finishButton = new StyledToggleButton(currentStyle,"2 - Finish");
+    private final StyledToggleButton selectToolButton = new StyledToggleButton(currentStyle,"select");
+    private final StyledToggleButton brushToolButton = new StyledToggleButton(currentStyle,"brush");
+    private final StyledToggleButton eraserToolButton = new StyledToggleButton(currentStyle,"eraser");
+    private final StyledToggleButton pathButton = new StyledToggleButton(currentStyle,"me.path");
+    private final StyledToggleButton wallButton = new StyledToggleButton(currentStyle,"me.wall");
+    private final StyledToggleButton finishButton = new StyledToggleButton(currentStyle,"me.finish");
 
     private boolean changingSize = false;
     private boolean changingSizeField = false;
@@ -75,7 +73,7 @@ public class MapEditorView extends JPanel {
     public MapEditorView() {
         setLayout(new BorderLayout(10, 10));
         setBorder(new EmptyBorder(10, 10, 10, 10));
-        setBackground(new Color(28, 28, 32));
+        setBackground(RCJMS.MY_FAV_GRAY);
 
         buildTopMenu();
         buildCenter();
@@ -192,12 +190,12 @@ public class MapEditorView extends JPanel {
         controls.setOpaque(false);
         controls.setLayout(new BoxLayout(controls, BoxLayout.Y_AXIS));
 
-        JPanel widthRow = createSizeRow("Width:", widthSlider, widthField);
+        JPanel widthRow = createSizeRow("width", widthSlider, widthField);
         widthSlider.setForeground(Color.WHITE);
         controls.add(widthRow);
         controls.add(Box.createVerticalStrut(4));
 
-        JPanel heightRow = createSizeRow("Height:", heightSlider, heightField);
+        JPanel heightRow = createSizeRow("height", heightSlider, heightField);
         heightSlider.setForeground(Color.WHITE);
         controls.add(heightRow);
         controls.add(Box.createVerticalStrut(5));
@@ -210,7 +208,7 @@ public class MapEditorView extends JPanel {
         controls.add(instruction);
 
         exitButton.setFocusable(false);
-        exitButton.addActionListener(e -> RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu"));
+        exitButton.addActionListener(e -> RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu"));
 
         JPanel exitPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 4));
         exitPanel.setOpaque(false);
@@ -259,7 +257,6 @@ public class MapEditorView extends JPanel {
 
         field.setPreferredSize(new Dimension(70, 28));
         field.setHorizontalAlignment(JTextField.CENTER);
-        field.setToolTipText("Size: " + MIN_MAP_SIZE + " - " + MAX_MAP_SIZE + ", odd values only");
 
         row.add(label, BorderLayout.WEST);
         row.add(slider, BorderLayout.CENTER);
@@ -290,7 +287,7 @@ public class MapEditorView extends JPanel {
         right.setBorder(new EmptyBorder(20, 10, 10, 10));
         right.setBackground(new Color(25, 25, 25));
 
-        toolsTitle = createTitle("Tool");
+        toolsTitle = createTitle("tool");
         JPanel tools = new JPanel(new GridLayout(3, 1, 4, 4));
         tools.setOpaque(false);
 
@@ -308,7 +305,7 @@ public class MapEditorView extends JPanel {
         tools.add(brushToolButton);
         tools.add(eraserToolButton);
 
-        blockTitle = createTitle("Block");
+        blockTitle = createTitle("me.block");
         JPanel blockButtons = new JPanel(new GridLayout(3, 1, 4, 4));
         blockButtons.setOpaque(false);
 
@@ -427,25 +424,25 @@ public class MapEditorView extends JPanel {
 
     //region UI Updates
     private void updateToolLabels() {
-        brushSizeLabel.setText("Brush: " + brushSizeSlider.getValue());
-        eraserSizeLabel.setText("Eraser: " + eraserSizeSlider.getValue());
+        brushSizeLabel.setText("brush_size" + brushSizeSlider.getValue());
+        eraserSizeLabel.setText("eraser_size" + eraserSizeSlider.getValue());
     }
 
     private void updateBlockLabels() {
         switch (selectedBlock) {
-            case PATH -> selectedBlockLabel.setText("Selected: Path (0)");
-            case WALL -> selectedBlockLabel.setText("Selected: Wall (1)");
-            case FINISH -> selectedBlockLabel.setText("Selected: Finish (2)");
-            default -> selectedBlockLabel.setText("Selected: ?");
+            case PATH -> selectedBlockLabel.setText("Sme.selected_path");
+            case WALL -> selectedBlockLabel.setText("me.selected_wall");
+            case FINISH -> selectedBlockLabel.setText("me.selected_finish");
+            default -> selectedBlockLabel.setText("me.selected_?");
         }
     }
 
     private void updateSelectedLabel() {
         if (isInsideMap(selectedX, selectedY)) {
-            selectedCellLabel.setText("Selected: none");
+            selectedCellLabel.setText("selected_none");
             return;
         }
-        selectedCellLabel.setText("Selected: " + selectedX + ", " + selectedY + " (" + map[selectedY][selectedX] + ")");
+        selectedCellLabel.setText("selected" + selectedX + ", " + selectedY + " (" + map[selectedY][selectedX] + ")");
     }
     //endregion
 
@@ -549,11 +546,6 @@ public class MapEditorView extends JPanel {
     }
 
     private String validateMap() {
-        if (mapWidth < MIN_MAP_SIZE || mapHeight < MIN_MAP_SIZE) return "The map is too small.";
-        if ((mapWidth & 1) == 0 || (mapHeight & 1) == 0) return "Map width and height must be odd.";
-        if (isInsideMap(START_X, START_Y)) return "The starting position is outside the map.";
-        if (map[START_Y][START_X] == WALL) return "The starting position (1, 1) must be a Path (0).";
-
         boolean[][] visited = new boolean[mapHeight][mapWidth];
         ArrayDeque<int[]> queue = new ArrayDeque<>();
         queue.add(new int[]{START_X, START_Y});
@@ -579,7 +571,7 @@ public class MapEditorView extends JPanel {
                 queue.add(new int[]{nx, ny});
             }
         }
-        return "There is no path from the starting position (1, 1) to any Finish (2).";
+        return "me.no_path";
     }
     //endregion
 
@@ -587,31 +579,31 @@ public class MapEditorView extends JPanel {
     private void saveMapAndPlayNGG() {
         String error = validateMap();
         if (error != null) {
-            JOptionPane.showMessageDialog(this, error, "Map cannot be saved", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, error, "me.map_cannot_be_saved", JOptionPane.ERROR_MESSAGE);
             return;
         }
         try {
-            Path folder = AppPaths.DATA_DIR;
-            Files.createDirectories(folder);
-            Path file = folder.resolve("map.txt");
+            Files.createDirectories(AppPaths.DATA_DIR);
+            Path file = AppPaths.MAP_FILE;
             writeMap(file);
 
             java.util.List<int[]> exits = findExits();
             int[] reachable = findReachableExit();
 
             if (reachable == null) {
-                JOptionPane.showMessageDialog(this, "No reachable finish.", "Save error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, "me.no_reachable_finish", "save_error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            String message = "Map saved successfully.\n\nFile:\n" + file.toAbsolutePath() + "\n\nSize: " + mapWidth + " x " + mapHeight + "\nFinishes: " + exits.size() + "\nReachable finish: (" + reachable[0] + ", " + reachable[1] + ")";
-            JOptionPane.showMessageDialog(this, message, "Saved", JOptionPane.INFORMATION_MESSAGE);
+            String message = "me.map_saved_successfully" + "\n\nme.file\n" + file.toAbsolutePath() + "\n\nme.size" +
+                    mapWidth + " x " + mapHeight + "\nme.finishes" + exits.size() + "\nme.reachable_finish" + reachable[0] + ", " + reachable[1] + ")";
+            JOptionPane.showMessageDialog(this, message, "saved", JOptionPane.INFORMATION_MESSAGE);
 
             RCJMS.instance.gameView = new GameView(readMap(file));
             RCJMS.instance.ChangeView(RCJMS.instance.gameView, "Raycast Me!");
             RCJMS.instance.gameView.start();
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(this, "Could not save map:\n" + e.getMessage(), "Save error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "me.could_not_save_map\n" + e.getMessage(), "save_error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -837,8 +829,8 @@ public class MapEditorView extends JPanel {
 
     private Style loadTheme() {
         try {
-            if (Files.exists(THEME_FILE)) {
-                String name = Files.readString(THEME_FILE).trim();
+            if (Files.exists(AppPaths.THEME_FILE)) {
+                String name = Files.readString(AppPaths.THEME_FILE).trim();
                 return Style.valueOf(name);
             }
         } catch (IOException | IllegalArgumentException ex) { ex.printStackTrace(); }

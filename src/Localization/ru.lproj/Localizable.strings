@@ -1,0 +1,128 @@
+//Main Menu mm. st. if.
+"mm.play" = "ИГРАТЬ";
+"mm.texture_editor" = "РЕДАКТОР ТЕКСТУР";
+"mm.map_editor" = "РЕДАКТОР КАРТ";
+"mm.credits" = "АВТОРЫ";
+"mm.mode" = "РЕЖИМ";
+"mm.opposite_corner" = "ПРОТИВОПОЛОЖНЫЙ УГОЛ";
+"mm.center" = "ЦЕНТР";
+"mm.random_edge" = "СЛУЧАЙНЫЙ КРАЙ";
+"mm.maze_dimensions" = "РАЗМЕР ЛАБИРИНТА";
+"mm.custom_seed" = "СВОЙ SEED";
+"mm.invalid_input" = "Неверный ввод";
+"mm.maze_size_error" = "Размер лабиринта должен быть числом.";
+
+"st.settings" = "Настройки";
+"st.fullscreen" = "Полный экран";
+"st.language" = "Язык";
+"st.themes" = "Темы";
+"st.flat" = "Плоская";
+"st.neumorphic" = "Неоморфная";
+"st.glass" = "Стекло";
+
+"if.info" = "Информация";
+"if.controls" = "Управление:";
+"if.move" = "WASD — Движение";
+
+//Game View gv.
+"gv.paused" = "ПАУЗА";
+"gv.continue" = "ESC — Продолжить";
+"gv.restart" = "R — Заново";
+"gv.movement_speed" = "Скорость движения = ";
+"gv.mouse_sensitivity" = "Чувствительность мыши = ";
+"gv.no_clip" = "NoClip = ";
+
+//Victory View vv.
+"vv.victory" = "Победа!";
+"vv.title" = "ПОЗДРАВЛЯЕМ";
+"vv.victory_time" = "Вы прошли лабиринт за %d ч. %d мин. %d сек.";
+"vv.restart" = "ЗАНОВО";
+
+//Texture Editor te. cp.
+"te.texture_editor" = "Редактор текстур";
+"te.texture" = "Текстура";
+"te.walls" = "Стены";
+"te.floor" = "Пол";
+"te.ceiling" = "Потолок";
+"te.finish" = "Финиш";
+"te.editing" = "Редактирование: ";
+"te.w" = "Ш: ";
+"te.h" = "В: ";
+"te.fill" = "Заливка";
+"te.color" = "Цвет";
+"te.color_square" = "Нажмите на квадрат, чтобы выбрать цвет";
+"te.apply_to_cell" = "Применить к ячейке";
+"te.fill_texture" = "Залить текстуру";
+"te.reset" = "Сбросить";
+"te.pick_a_tool" = "Выберите инструмент и цвет, затем нажмите или проведите по сетке.";
+"te.import_png" = "Импорт PNG";
+"te.save" = "Сохранить";
+"te.saved_to" = "Текстуры сохранены в:";
+"te.could_not_save" = "Не удалось сохранить текстуры:";
+"te.could_not_import" = "Не удалось импортировать PNG:";
+"te.import_error" = "Ошибка импорта";
+
+"cp.choose_color" = "Выбор цвета";
+"cp.red" = "Красный";
+"cp.green" = "Зелёный";
+"cp.blue" = "Синий";
+"cp.color_code" = "Код цвета (RRGGBB):";
+"cp.cancel" = "Отмена";
+"cp.apply" = "Применить";
+
+//Map Editor me.
+"me.map_editor" = "Редактор карт";
+"me.clear_map" = "Очистить карту";
+"me.play_map" = "Играть карту";
+"me.blocks_info" = "Начало: (1, 1)    |    0 = Проход    1 = Стена    2 = Финиш";
+"me.select_a_tool" = "Выберите инструмент и блок, затем нажмите или проведите по карте.";
+"me.path" = "0 - Проход";
+"me.wall" = "1 - Стена";
+"me.finish" = "2 - Финиш";
+"me.size" = "Размер: ";
+"me.block" = "Блок";
+"me.selected_path" = "Выбрано: Проход (0)";
+"me.selected_wall" = "Выбрано: Стена (1)";
+"me.selected_finish" = "Выбрано: Финиш (2)";
+"me.selected_?" = "Выбрано: ?";
+"me.no_path" = "От начальной позиции (1, 1) нет пути ни к одному Финишу (2).";
+"me.map_cannot_be_saved" = "Не удалось сохранить карту";
+"me.no_reachable_finish" = "No reachable finish."
+"me.map_saved_successfully" = "Карта успешно сохранена.";
+"me.file" = "Файл:";
+"me.finishes" = "Финиши: ";
+"me.reachable_finish" = "Достижимый финиш: (";
+"me.could_not_save_map" = "Не удалось сохранить карту:";
+
+//Credits View cv.
+"cv.credits" = "Авторы";
+"cv.project_rcjms" = "ПРОЕКТ RCJMS";
+"cv.main_devlooper" = "Главный разработчик";
+"cv.me" = "Я";
+"cv.main_designer" = "Главный дизайнер";
+"cv.scenario_plot_by" = "Сценарий и сюжет";
+"cv.special_thanks" = "Особая благодарность";
+"cv.ljubo" = "Ljubo — за исправление коллизий и улучшения передвижения";
+"cv.fungun" = "fUnGuN — помощь со StyleUI";
+"cv.useful_resources" = "Полезные ресурсы";
+"cv.thanks" = "Спасибо, что посмотрели титры";
+"cv.another_project" = "У меня есть ещё один проект:";
+
+//Universals
+"brush" = "Кисть";
+"brush_size" = "Кисть: ";
+"close" = "Закрыть";
+"eraser" = "Ластик";
+"eraser_size" = "Ластик: ";
+"exit" = "ВЫХОД";
+"height" = "Высота:";
+"main_menu" = "Главное меню";
+"reset" = "Сбросить";
+"run" = "SHIFT — Бег";
+"saved" = "Сохранено";
+"save_error" = "Ошибка сохранения";
+"select" = "Выбор";
+"selected" = "Выбрано: ";
+"selected_none" = "Выбрано: ничего";
+"tool" = "Инструмент";
+"width" = "Ширина:";

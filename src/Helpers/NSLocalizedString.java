@@ -18,9 +18,9 @@ import java.awt.Toolkit;
 import java.awt.event.*;
 import java.beans.PropertyChangeEvent;
 
-public final class NSLocalizableString {
+public final class NSLocalizedString {
     //region Variables
-    private static final String FILE_NAME = "LocalizableStrings.strings";
+    private static final String FILE_NAME = "Localizable.strings";
     private static final Pattern LINE_PATTERN = Pattern.compile("^\\s*\"((?:\\\\.|[^\"])*)\"\\s*=\\s*\"((?:\\\\.|[^\"])*)\"\\s*;?\\s*(?://.*)?$");
 
     private static final Map<String, String> strings = new LinkedHashMap<>();
@@ -61,7 +61,7 @@ public final class NSLocalizableString {
     }
 
     public static String get(String key) { return localized(key); }
-    public static boolean hhasKey(String key) {
+    public static boolean hasKey(String key) {
         if (key == null) return true;
         synchronized (strings) { return !strings.containsKey(key); }
     }
@@ -93,7 +93,7 @@ public final class NSLocalizableString {
 
     //region Binding
     public static void bind(Object owner, String key, Consumer<String> setter) {
-        if (owner == null || key == null || setter == null || hhasKey(key)) return;
+        if (owner == null || key == null || setter == null || hasKey(key)) return;
         Runnable refresh = () -> { internalUpdates.add(owner); try { setter.accept(localized(key)); } finally { internalUpdates.remove(owner); } };
         bindings.put(owner, new Binding(refresh));
         runOnEdt(refresh);
@@ -104,7 +104,7 @@ public final class NSLocalizableString {
     public static void bind(JFrame frame, String key) { bind(frame, key, frame::setTitle); }
     public static void bind(JDialog dialog, String key) { bind(dialog, key, dialog::setTitle); }
     public static boolean bind(Component component, String key) {
-        if (component == null || key == null || hhasKey(key)) return false;
+        if (component == null || key == null || hasKey(key)) return false;
         switch (component) {
             case JLabel label -> { bind((JLabel) label, key); return true; }
             case AbstractButton button -> { bind((AbstractButton) button, key); return true; }
@@ -121,7 +121,7 @@ public final class NSLocalizableString {
         catch (NoSuchMethodException ignored) { return false; }
     }
     public static void bindFormat(Object owner, String key, Supplier<Object[]> arguments, Consumer<String> setter) {
-        if (owner == null || key == null || arguments == null || setter == null || hhasKey(key)) return;
+        if (owner == null || key == null || arguments == null || setter == null || hasKey(key)) return;
         Runnable refresh = () -> { internalUpdates.add(owner); try { setter.accept(format(key, arguments.get())); } finally { internalUpdates.remove(owner); } };
         bindings.put(owner, new Binding(refresh));
         runOnEdt(refresh);
@@ -301,7 +301,6 @@ public final class NSLocalizableString {
             result.add(baseDirectory.resolve("localization").resolve(folder).resolve(FILE_NAME));
             result.add(baseDirectory.resolve(folder).resolve(FILE_NAME));
             result.add(baseDirectory.resolve("src").resolve("Localization").resolve(folder).resolve(FILE_NAME));
-            result.add(baseDirectory.resolve("LocalizableStrings_" + lang + ".strings"));
         }
         return result;
     }
@@ -309,7 +308,7 @@ public final class NSLocalizableString {
         if (lang == null) return List.of("/" + FILE_NAME, "/Localization/" + FILE_NAME, "/localization/" + FILE_NAME);
         String folder = lang + ".lproj";
         return List.of("/Localization/" + folder + "/" + FILE_NAME, "/localization/" + folder + "/" + FILE_NAME, "/" + folder + "/" +
-                FILE_NAME, "/LocalizableStrings_" + lang + ".strings");
+                FILE_NAME);
     }
     private static void loadInto(Map<String, String> target, List<Path> paths, List<String> resources) {
         for (Path path : paths) {
@@ -318,7 +317,7 @@ public final class NSLocalizableString {
             catch (IOException ignored) {}
         }
         for (String resource : resources) {
-            try (InputStream in = NSLocalizableString.class.getResourceAsStream(resource)) {
+            try (InputStream in = NSLocalizedString.class.getResourceAsStream(resource)) {
                 if (in == null) continue;
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) { parse(reader, target); return; }
             } catch (IOException ignored) {}

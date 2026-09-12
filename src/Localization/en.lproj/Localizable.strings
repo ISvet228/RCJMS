@@ -1,0 +1,128 @@
+//Main Menu mm. st. if.
+"mm.play" = "PLAY";
+"mm.texture_editor" = "TEXTURE EDITOR";
+"mm.map_editor" = "MAP EDITOR";
+"mm.credits" = "CREDITS";
+"mm.mode" = "MODE";
+"mm.opposite_corner" = "OPPOSITE CORNER";
+"mm.center" = "CENTER";
+"mm.random_edge" = "RANDOM EDGE";
+"mm.maze_dimensions" = "MAZE DIMENSIONS";
+"mm.custom_seed" = "CUSTOM SEED";
+"mm.invalid_input" = "Invalid Input";
+"mm.maze_size_error" = "Maze size must be a number.";
+
+"st.settings" = "Settings";
+"st.fullscreen" = "Fullscreen";
+"st.language" = "Language";
+"st.themes" = "Themes";
+"st.flat" = "Flat";
+"st.neumorphic" = "Neumorphic";
+"st.glass" = "Glass";
+
+"if.info" = "Info";
+"if.controls" = "Controls:";
+"if.move" = "WASD - Move";
+
+//Game View gv.
+"gv.paused" = "PAUSED";
+"gv.continue" = "ESC - Continue";
+"gv.restart" = "R - Restart";
+"gv.movement_speed" = "Movement Speed = ";
+"gv.mouse_sensitivity" = "Mouse Sensitivity = ";
+"gv.no_clip" = "NoClip = ";
+
+//Victory View vv.
+"vv.victory" = "Victory!";
+"vv.title" = "CONGRATULATIONS";
+"vv.victory_time" = "You completed maze in %d hour(s) %d minute(s) %d second(s)";
+"vv.restart" = "RESTART";
+
+//Texture Editor te. cp.
+"te.texture_editor" = "Texture Editor";
+"te.texture" = "Texture";
+"te.walls" = "Walls";
+"te.floor" = "Floor";
+"te.ceiling" = "Ceiling";
+"te.finish" = "Finish";
+"te.editing" = "Editing: ";
+"te.w" = "W: ";
+"te.h" = "H: ";
+"te.fill" = "Fill";
+"te.color" = "Color";
+"te.color_square" = "Click the square to choose a color";
+"te.apply_to_cell" = "Apply to cell";
+"te.fill_texture" = "Fill texture";
+"te.reset" = "Reset";
+"te.pick_a_tool" = "Pick a tool, pick a color, then click or drag on the grid.";
+"te.import_png" = "Import PNG";
+"te.save" = "Save";
+"te.saved_to" = "Textures saved to:";
+"te.could_not_save" = "Could not save textures:";
+"te.could_not_import" = "Could not import PNG:";
+"te.import_error" = "Import error";
+
+"cp.choose_color" = "Choose Color";
+"cp.red" = "Red";
+"cp.green" = "Green";
+"cp.blue" = "Blue";
+"cp.color_code" = "Color code (RRGGBB):";
+"cp.cancel" = "Cancel";
+"cp.apply" = "Apply";
+
+//Map Editor me.
+"me.map_editor" = "Map Editor";
+"me.clear_map" = "Clear Map";
+"me.play_map" = "Play Map";
+"me.blocks_info" = "Start: (1, 1)    |    0 = Path    1 = Wall    2 = Finish";
+"me.select_a_tool" = "Select a tool and block, then click or drag on the map.";
+"me.path" = "0 - Path";
+"me.wall" = "1 - Wall";
+"me.finish" = "2 - Finish";
+"me.size" = "Size: ";
+"me.block" = "Block";
+"me.selected_path" = "Selected: Path (0)";
+"me.selected_wall" = "Selected: Wall (1)";
+"me.selected_finish" = "Selected: Finish (2)";
+"me.selected_?" = "Selected: ?";
+"me.no_path" = "There is no path from the starting position (1, 1) to any Finish (2).";
+"me.map_cannot_be_saved" = "Map cannot be saved";
+"me.no_reachable_finish" = "No reachable finish."
+"me.map_saved_successfully" = "Map saved successfully.";
+"me.file" = "File:";
+"me.finishes" = "Finishes: ";
+"me.reachable_finish" = "Reachable finish: (";
+"me.could_not_save_map" = "Could not save map:";
+
+//Credits View cv.
+"cv.credits" = "Credits";
+"cv.project_rcjms" = "PROJECT RCJMS";
+"cv.main_devlooper" = "Main Devlooper";
+"cv.me" = "ME";
+"cv.main_designer" = "Main Designer";
+"cv.scenario_plot_by" = "Scenario & Plot By";
+"cv.special_thanks" = "Special Thanks";
+"cv.ljubo" = "Ljubo For Collision Fix And Walk Enchantments";
+"cv.fungun" = "fUnGuN StyleUI Help";
+"cv.useful_resources" = "Useful Resources";
+"cv.thanks" = "Thanks For Watching Credits";
+"cv.another_project" = "I Also Have Another Projects:";
+
+//Universals
+"brush" = "Brush";
+"brush_size" = "Brush: ";
+"close" = "Close";
+"eraser" = "Eraser";
+"eraser_size" = "Eraser: ";
+"exit" = "EXIT";
+"height" = "Height:";
+"main_menu" = "Main Menu";
+"reset" = "Reset";
+"run" = "SHIFT - Run";
+"saved" = "Saved";
+"save_error" = "Save error";
+"select" = "Select";
+"selected" = "Selected: ";
+"selected_none" = "Selected: none";
+"tool" = "Tool";
+"width" = "Width:";

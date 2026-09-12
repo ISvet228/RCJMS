@@ -1,12 +1,14 @@
-import Helpers.MazeGenerator;
-import Helpers.NSLocalizableString;
+import Helpers.*;
 
 import javax.swing.*; //Frame Library
 import java.awt.*; //Graphics Library
 import java.awt.event.*; //Input Library
 import java.awt.image.*; //Buffer Library
 import java.io.IOException;
-import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.*;
+import java.util.function.IntConsumer;
 
 public class GameView extends JPanel implements Runnable, KeyListener, MouseMotionListener {
     //region Variables
@@ -29,9 +31,10 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
     private final Long mazeSeed;
 
-    private final int[][] wallTexture = TextureEditorView.readTexture(Paths.get("tmp/walltexture.txt"));
-    private final int[][] floorTexture = TextureEditorView.readTexture(Paths.get("tmp/floortexture.txt"));
-    private final int[][] ceilingTexture = TextureEditorView.readTexture(Paths.get("tmp/ceilingtexture.txt"));
+    private final int[][] wallTexture = TextureEditorView.readTexture(AppPaths.WALL_TEXTURE_FILE);
+    private final int[][] floorTexture = TextureEditorView.readTexture(AppPaths.FLOOR_TEXTURE_FILE);
+    private final int[][] ceilingTexture = TextureEditorView.readTexture(AppPaths.CEILING_TEXTURE_FILE);
+    private final int[][] finishTexture = TextureEditorView.readFinishTexture(AppPaths.FINISH_TEXTURE_FILE);
 
     private final int wallBaseColor = 0xECD485;
     private final int floorBaseColor = 0xD3AF63;
@@ -54,6 +57,15 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private boolean noClip = false;
     //endregion
 
+    //region Multi - Thread render
+    private final int renderThreadCount = Math.max(2, Runtime.getRuntime().availableProcessors());
+    private final ExecutorService renderExecutor = Executors.newFixedThreadPool(renderThreadCount, r -> {
+        Thread t = new Thread(r, "GameViewRenderWorker");
+        t.setDaemon(true);
+        return t;
+    });
+    //endregion
+
     //region Other Stuff
     private boolean isGameRunning = false;
     private boolean isRecentering = false; //Mouse Recursion Helper
@@ -64,6 +76,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private long pauseStartTime = 0;
     private long pausedTime = 0;
     private  long elapsedSeconds;
+    //endregion
+
+    //region FPS Counter (debug)
+    private int frameCounter = 0, currentFps = 0;
+    private long fpsWindowStart = System.currentTimeMillis();
     //endregion
     //endregion
 
@@ -155,17 +172,22 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         gameThread.start();
     }
     @Override public void run() { //OMG IT'S DA GAME CYCLE!!!
-        long lastFrameTime = System.nanoTime();
-        while (isGameRunning) {
-            long currentFrameTime = System.nanoTime();
-            double deltaTime = (currentFrameTime - lastFrameTime) / 1_000_000_000.0;
-            lastFrameTime = currentFrameTime;
-            if (!isPaused) update(deltaTime);
+        try {
+            long lastFrameTime = System.nanoTime();
+            while (isGameRunning) {
+                long currentFrameTime = System.nanoTime();
+                double deltaTime = (currentFrameTime - lastFrameTime) / 1_000_000_000.0;
+                lastFrameTime = currentFrameTime;
+                if (!isPaused) update(deltaTime);
 
-            render(); repaint();
+                render(); repaint();
+                trackFps();
 
-            try {Thread.sleep(16); //IDK HELPS WITH FPS LIMIT BRUH 1000/60 = 16.66666666666667
-            } catch (Exception ignored) {}
+                try {Thread.sleep(5); //FPS limit, you can experiment with it, but lower sleeptime means more artifacts
+                } catch (Exception ignored) {}
+            }
+        } finally {
+            renderExecutor.shutdownNow(); //stop worker threads once the game loop ends
         }
     }
     private void update(double deltaTiime) {
@@ -227,11 +249,32 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             isGameRunning = false;
             playerX = playerY = 1.5;
             cameraAngle = cameraPitch = 0;
-            RCJMS.instance.ChangeView(RCJMS.instance.victoryView = new VictoryView(elapsedSeconds), "Victory!");
+            RCJMS.instance.ChangeView(RCJMS.instance.victoryView = new VictoryView(elapsedSeconds), "vv.victory");
             gameThread.interrupt();
         }
     }
     //endregion/
+
+    private void parallelRange(int start, int end, IntConsumer task) {
+        int range = end - start;
+        if (range <= 0) return;
+        int threads = Math.min(renderThreadCount, range);
+        int chunkSize = (int) Math.ceil(range / (double) threads);
+
+        List<Future<?>> futures = new ArrayList<>(threads);
+        for (int t = 0; t < threads; t++) {
+            int from = start + t * chunkSize;
+            int to = Math.min(end, from + chunkSize);
+            if (from >= to) continue;
+
+            futures.add(renderExecutor.submit(() -> { for (int i = from; i < to; i++) task.accept(i); }));
+        }
+        for (Future<?> future : futures) {
+            try { future.get(); }
+            catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            catch (Exception e) { throw new RuntimeException(e); }
+        }
+    }
 
     //region Rendering
     private void render() {
@@ -245,7 +288,12 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         double horizon = RCJMS.SCREEN_HEIGHT / 2.0 + cameraPitch * RCJMS.SCREEN_HEIGHT / 2.0;
         renderHorizontalSurfaces(dirX, dirY, planeX, planeY, horizon);
 
-        for (int x = 0; x < RCJMS.SCREEN_WIDTH; x++) {
+        int textureHeight = getTextureHeight(wallTexture);
+        int textureWidth = getTextureWidth(wallTexture);
+        int finishTextureHeight = getTextureHeight(finishTexture);
+        int finishTextureWidth = getTextureWidth(finishTexture);
+
+        parallelRange(0, RCJMS.SCREEN_WIDTH, x -> {
             double cameraX = 2.0 * x / (double) RCJMS.SCREEN_WIDTH - 1.0;
 
             double rayDirX = dirX + planeX * cameraX;
@@ -279,7 +327,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 if (hitType == 1 || hitType == 2) hit = true;
             }
 
-            if (!hit) continue;
+            if (!hit) return;
 
             double perpendicularDistance = side == 0 ? sideDistX - deltaDistX : sideDistY - deltaDistY;
             perpendicularDistance = Math.max(perpendicularDistance, 0.0001);
@@ -289,7 +337,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             int drawStart = Math.max(hitType == 2 ? (int) horizon : (int) (horizon - wallHeight / 2.0), 0);
             int drawEnd = Math.min((int) (horizon + wallHeight / 2.0), RCJMS.SCREEN_HEIGHT - 1);
 
-            if (drawStart > drawEnd) continue;
+            if (drawStart > drawEnd) return;
             double wallX;
             wallX = side == 0 ?  playerY + perpendicularDistance * rayDirY : playerX + perpendicularDistance * rayDirX;
             wallX -= Math.floor(wallX);
@@ -302,8 +350,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
             if (side == 1) brightness *= 0.85;
 
-            int textureHeight = getTextureHeight(wallTexture);
-            int textureWidth = getTextureWidth(wallTexture);
             int offset = drawStart * RCJMS.SCREEN_WIDTH;
 
             for (int y = drawStart; y <= drawEnd; y++) {
@@ -313,17 +359,23 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 wallPosition = Math.clamp(wallPosition, 0.0, 0.999999);
 
                 int color;
-                if (textureWidth > 0 && textureHeight > 0 && hitType != 2) color = wallTexture[Math.clamp((int) (wallPosition * textureHeight), 0, textureHeight - 1)]
-                            [Math.clamp((int) (wallX * textureWidth), 0, textureWidth - 1)];
-                else color = (hitType == 2) ? 0x33FF66 : wallBaseColor;
+                if (hitType == 2) {
+                    if (finishTextureWidth > 0 && finishTextureHeight > 0)
+                        color = finishTexture[Math.clamp((int) (wallPosition * finishTextureHeight), 0, finishTextureHeight - 1)]
+                                [Math.clamp((int) (wallX * finishTextureWidth), 0, finishTextureWidth - 1)];
+                    else color = 0x33FF66;
+                } else if (textureWidth > 0 && textureHeight > 0) {
+                    color = wallTexture[Math.clamp((int) (wallPosition * textureHeight), 0, textureHeight - 1)][Math.clamp((int) (wallX * textureWidth), 0, textureWidth - 1)];
+                } else color = wallBaseColor;
 
                 pixels[offset + x] = applyBrightness(color, brightness);
                 offset += RCJMS.SCREEN_WIDTH;
             }
-        }
+        });
+
         drawTimer();
 
-        if (isDebugMode && !isPaused) drawMiniMap();
+        if (isDebugMode && !isPaused) { drawMiniMap(); drawFpsCounter(); }
         if (isPaused) drawPauseMenu();
     }
     private void renderHorizontalSurfaces(double dirX, double dirY, double planeX, double planeY, double horizon) {
@@ -334,8 +386,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         double rightRayX = dirX + planeX,  rightRayY = dirY + planeY;
         int firstFloorY = Math.max(0, (int) Math.ceil(horizon));
 
-        for (int y = firstFloorY; y < RCJMS.SCREEN_HEIGHT; y++) {
-            if ((y - horizon) < minDistance) continue;
+        parallelRange(firstFloorY, RCJMS.SCREEN_HEIGHT, y -> {
+            if ((y - horizon) < minDistance) return;
 
             double rowDistance = playerHeight * RCJMS.SCREEN_HEIGHT / (2.0 * (y - horizon));
 
@@ -353,11 +405,12 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 floorX += rowDistance * (rightRayX - leftRayX) / RCJMS.SCREEN_WIDTH;
                 floorY += rowDistance * (rightRayY - leftRayY) / RCJMS.SCREEN_WIDTH;
             }
-        }
+        });
+
         int lastCeilingY = Math.min(RCJMS.SCREEN_HEIGHT - 1, (int) Math.floor(horizon) - 1);
-        for (int y = 0; y <= lastCeilingY; y++) {
+        parallelRange(0, lastCeilingY + 1, y -> {
             double row = horizon - y;
-            if (row < minDistance) continue;
+            if (row < minDistance) return;
             double rowDistance = ceilingHeight * RCJMS.SCREEN_HEIGHT / (2.0 * row);
 
             double ceilingStepX = rowDistance * (rightRayX - leftRayX) / RCJMS.SCREEN_WIDTH;
@@ -376,7 +429,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 ceilingX += ceilingStepX;
                 ceilingY += ceilingStepY;
             }
-        }
+        });
     }
     private int sampleTexture(int[][] texture, double worldX, double worldY, int baseColor) {
         int textureHeight = getTextureHeight(texture);
@@ -421,8 +474,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 int endY = offsetY + (int) ((y + 1) * scale);
 
                 for (int py = startY; py < endY; py++) for (int px = startX; px < endX; px++)
-                        if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT)
-                            pixels[px + py * RCJMS.SCREEN_WIDTH] = color;
+                    if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT) pixels[px + py * RCJMS.SCREEN_WIDTH] = color;
             }
         }
 
@@ -435,6 +487,28 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             }
         }
     }
+    private void trackFps() {
+        frameCounter++;
+        long now = System.currentTimeMillis();
+        if (now - fpsWindowStart >= 1000) {
+            currentFps = frameCounter;
+            frameCounter = 0;
+            fpsWindowStart = now;
+        }
+    }
+    private void drawFpsCounter() {
+        Graphics2D g2d = bufferedImage.createGraphics();
+        String fpsText = "FPS: " + currentFps;
+
+        g2d.setFont(new Font("Consolas", Font.BOLD, 20));
+        g2d.setColor(Color.BLACK);
+        g2d.drawString(fpsText, 40, RCJMS.SCREEN_HEIGHT - 30);
+
+        g2d.setColor(Color.GREEN);
+        g2d.drawString(fpsText, 38, RCJMS.SCREEN_HEIGHT - 28);
+        g2d.dispose();
+    }
+    //endregion
     private void drawTimer() {
         Graphics2D g = bufferedImage.createGraphics();
         elapsedSeconds = ((isPaused ? pauseStartTime : System.currentTimeMillis()) - gameStartTime - pausedTime) / 1000;
@@ -459,20 +533,20 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         g.setColor(new Color(0,0,0,180));
         g.fillRect(0,0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
 
-        String pausedText = NSLocalizableString.get("PAUSED");
+        String pausedText = NSLocalizedString.get("gv.paused");
 
         g.setColor(Color.WHITE);
-        g.setFont(new Font("Arial", Font.BOLD, 42));
+        g.setFont(new Font("Arial", Font.BOLD, 80));
         int pausedWidth = g.getFontMetrics().stringWidth(pausedText);
-        g.drawString(pausedText, (RCJMS.SCREEN_WIDTH - pausedWidth) / 2, RCJMS.SCREEN_HEIGHT / 2 - 20);
+        g.drawString(pausedText, (RCJMS.SCREEN_WIDTH - pausedWidth) / 2, RCJMS.SCREEN_HEIGHT / 2 - 50);
 
         g.setFont(new Font("Arial", Font.PLAIN, 20));
-        g.drawString(NSLocalizableString.get("ESC - Continue"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 20);
-        g.drawString(NSLocalizableString.get("R - Restart"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 50);
-        g.drawString(NSLocalizableString.get("SHIFT - Run"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 80);
-        g.drawString(NSLocalizableString.get("Movement Speed = ") + ((shift) ? runSpeed : moveSpeed), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 110);
-        g.drawString(NSLocalizableString.get("Mouse Sensitivity = ") + mouseSensitivity, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 140);
-        g.drawString(NSLocalizableString.get("NoColip = ") + noClip, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 170);
+        g.drawString(NSLocalizedString.get("gv.continue"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 20);
+        g.drawString(NSLocalizedString.get("gv.restart"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 50);
+        g.drawString(NSLocalizedString.get("run"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 80);
+        g.drawString(NSLocalizedString.get("gv.movement_speed") + ((shift) ? runSpeed : moveSpeed), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 110);
+        g.drawString(NSLocalizedString.get("gv.mouse_sensitivity") + mouseSensitivity, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 140);
+        g.drawString(NSLocalizedString.get("gv.no_clip") + noClip, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 170);
 
         g.dispose();
     }
@@ -517,7 +591,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 try {
                     isGameRunning = false;
                     GameView gameView = new GameView(map);
-                    RCJMS.instance.gameView = gameView;
                     RCJMS.instance.ChangeView(gameView, "Raycast Me!");
                     gameThread.interrupt();
                     gameView.start();
@@ -585,13 +658,13 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         int drawX = (panelWidth - drawWidth) / 2;
         int drawY = (panelHeight - drawHeight) / 2;
 
-        Graphics2D g2 = (Graphics2D) g.create();
-        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-        g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
-        g2.setColor(Color.BLACK);
-        g2.fillRect(0, 0, panelWidth, panelHeight);
-        g2.drawImage(bufferedImage, drawX, drawY, drawWidth, drawHeight, null);
-        g2.dispose();
+        Graphics2D g2d = (Graphics2D) g.create();
+        g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
+        g2d.setColor(Color.BLACK);
+        g2d.fillRect(0, 0, panelWidth, panelHeight);
+        g2d.drawImage(bufferedImage, drawX, drawY, drawWidth, drawHeight, null);
+        g2d.dispose();
     }
     // endregion
 }
