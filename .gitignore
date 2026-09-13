@@ -24,8 +24,5 @@ hs_err_pid*
 replay_pid*
 
 .idea/
-.vs/
-/tmp/
 /src/META-INF/
 /out/
-src/Localization/LocalizableStrings.strings
