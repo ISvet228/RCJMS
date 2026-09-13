@@ -11,6 +11,9 @@
 "mm.custom_seed" = "CUSTOM SEED";
 "mm.invalid_input" = "Invalid Input";
 "mm.maze_size_error" = "Maze size must be a number.";
+"mm.3d_mode" = "3D (FLOORS)";
+"mm.floors_count" = "FLOORS";
+"mm.wrong_geometry" = "WRONG GEOMETRY";
 
 "st.settings" = "Settings";
 "st.fullscreen" = "Fullscreen";
@@ -28,9 +31,11 @@
 "gv.paused" = "PAUSED";
 "gv.continue" = "ESC - Continue";
 "gv.restart" = "R - Restart";
-"gv.movement_speed" = "Movement Speed = ";
-"gv.mouse_sensitivity" = "Mouse Sensitivity = ";
 "gv.no_clip" = "NoClip = ";
+"gv.geometry" = "Geometry = ";
+"gv.euclidean" = "Euclidean";
+"gv.wrong_geometry" = "Wrong Geometry!";
+"gv.floor" = "Floor: ";
 
 //Victory View vv.
 "vv.victory" = "Victory!";

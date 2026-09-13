@@ -3,33 +3,44 @@ package Helpers;
 import java.util.*;
 
 public class MazeGenerator {
-    public enum FinishMode {OPPOSITE_CORNER, CENTER, RANDOM_EDGE}
+    public enum FinishMode { OPPOSITE_CORNER, CENTER, RANDOM_EDGE }
+    public enum GeometryMode { EUCLIDEAN, WRONG }
 
     private final int width;
     private final int height;
     private final int[][] maze;
     private final Random random;
+    private final GeometryMode geometryMode;
 
-    public MazeGenerator(int width, int height) {
+    //region Constructors
+    public MazeGenerator(int width, int height, GeometryMode geometryMode) {
         this.width = width % 2 == 0 ? width + 1 : width;
         this.height = height % 2 == 0 ? height + 1 : height;
         maze = new int[this.height][this.width];
         random = new Random();
+        this.geometryMode = geometryMode == null ? GeometryMode.EUCLIDEAN : geometryMode;
     }
-    public MazeGenerator(int width, int height, long seed) {
+    public MazeGenerator(int width, int height, long seed, GeometryMode geometryMode) {
         this.width = width % 2 == 0 ? width + 1 : width;
         this.height = height % 2 == 0 ? height + 1 : height;
         maze = new int[this.height][this.width];
         random = new Random(seed);
+        this.geometryMode = geometryMode == null ? GeometryMode.EUCLIDEAN : geometryMode;
     }
     public int[][] generate(FinishMode mode) {
-        for (int y = 0; y < height; y++) Arrays.fill(maze[y], 1);
-
-        carve(1, 1);
-        addBranchesFUN();
+        generateRaw();
         placeFinish(mode);
         return maze;
     }
+    public int[][] generateRaw() {
+        for (int y = 0; y < height; y++) Arrays.fill(maze[y], 1);
+        carve(1, 1);
+        addBranchesFUN();
+        return maze;
+    }
+    //endregion
+
+    //region Helpers
     private void carve(int x, int y) {
         maze[y][x] = 0;
         int[][] dirs = {{0, -2}, {2, 0}, {0, 2}, {-2, 0}};
@@ -47,14 +58,22 @@ public class MazeGenerator {
         }
     }
     private void addBranchesFUN() {
-        int extraOpenings = (width * height) / 20;
+        boolean wrongGeometry = geometryMode == GeometryMode.WRONG;
+        int extraOpenings = wrongGeometry ? (width * height) / 10 : (width * height) / 20;
+
         for (int i = 0; i < extraOpenings; i++) {
             int x = random.nextInt(width - 2) + 1;
             int y = random.nextInt(height - 2) + 1;
 
             if (maze[y][x] != 1) continue;
-            int openSides = 0;
 
+            if (wrongGeometry) {
+                double normalizedDist = Math.hypot(x - 1, y - 1) / Math.hypot(width, height);
+                double acceptWeight = Math.tanh(normalizedDist * 3.0);
+                if (random.nextDouble() > acceptWeight) continue;
+            }
+
+            int openSides = 0;
             if (maze[y - 1][x] == 0) openSides++;
             if (maze[y + 1][x] == 0) openSides++;
             if (maze[y][x - 1] == 0) openSides++;
@@ -111,7 +130,7 @@ public class MazeGenerator {
                 break;
         }
 
-        if (!hasPath(fx, fy)) createDirectPath(1, 1, fx, fy);
+        if (!hasPath(fx, fy)) createDirectPath(fx, fy);
         maze[fy][fx] = 2;
     }
     private boolean hasPath(int fx, int fy) {
@@ -139,9 +158,9 @@ public class MazeGenerator {
         }
         return false;
     }
-    private void createDirectPath(int sx, int sy, int fx, int fy) {
-        int x = sx;
-        int y = sy;
+    private void createDirectPath(int fx, int fy) {
+        int x = 1;
+        int y = 1;
 
         while (x != fx) {
             maze[y][x] = 0;

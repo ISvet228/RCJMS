@@ -11,6 +11,9 @@
 "mm.custom_seed" = "СВОЙ SEED";
 "mm.invalid_input" = "Неверный ввод";
 "mm.maze_size_error" = "Размер лабиринта должен быть числом.";
+"mm.3d_mode" = "3D (ЭТАЖИ)";
+"mm.floors_count" = "ЭТАЖИ";
+"mm.wrong_geometry" = "СЛОМАННАЯ ГЕОМЕТРИЯ";
 
 "st.settings" = "Настройки";
 "st.fullscreen" = "Полный экран";
@@ -28,9 +31,11 @@
 "gv.paused" = "ПАУЗА";
 "gv.continue" = "ESC — Продолжить";
 "gv.restart" = "R — Заново";
-"gv.movement_speed" = "Скорость движения = ";
-"gv.mouse_sensitivity" = "Чувствительность мыши = ";
 "gv.no_clip" = "NoClip = ";
+"gv.geometry" = "Геометрия = ";
+"gv.euclidean" = "Евклидова";
+"gv.wrong_geometry" = "Сломанная Геометрия!";
+"gv.floor" = "Этаж: ";
 
 //Victory View vv.
 "vv.victory" = "Победа!";

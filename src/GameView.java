@@ -14,12 +14,19 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Variables
     public static int MINI_MAP_WIDTH = 250;
     public static int MINI_MAP_HEIGHT = 250;
-    public static int MAZE_WIDTH;
-    public static int MAZE_HEIGHT;
+    public static int MAZE_WIDTH, MAZE_HEIGHT;
     public static MazeGenerator.FinishMode MAZE_MODE = MazeGenerator.FinishMode.RANDOM_EDGE;
+    public static MazeGenerator.GeometryMode GEOMETRY_MODE = MazeGenerator.GeometryMode.EUCLIDEAN;
+    public static double HYPERBOLIC_CURVATURE = HyperbolicMath.DEFAULT_CURVATURE;
+    public static boolean MAZE_3D = false;
+    public static int MAZE_FLOORS = 1;
 
     //region Dependencies
     private MazeGenerator mazeGenerator;
+    private MazeGenerator3D mazeGenerator3D;
+    private int[][][] map3D;
+    private int currentFloor = 0;
+    private boolean onStairsLastFrame = false;
     private final BufferedImage bufferedImage;
     private final Cursor invisibleCursor;
     private Robot cursorRobot; //BOBR KURSOR JA PERDOLE
@@ -39,7 +46,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private final int wallBaseColor = 0xECD485;
     private final int floorBaseColor = 0xD3AF63;
     private final int ceilingBaseColor = 0x816E1E;
-    //endregion
 
     //region Dynamic Player Stats
     private double playerX = 1.5;
@@ -78,47 +84,50 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private  long elapsedSeconds;
     //endregion
 
-    //region FPS Counter (debug)
+    //region FPS Counter
     private int frameCounter = 0, currentFps = 0;
     private long fpsWindowStart = System.currentTimeMillis();
     //endregion
     //endregion
 
-    //region Helpers
-    public GameView(int mazeWidth, int mazeHeight, int mazeMode) throws IOException {
+    // region Constructors
+    public GameView(int mazeWidth, int mazeHeight, int mazeMode, int geometryMode) throws IOException {
+        this(mazeWidth, mazeHeight, mazeMode, geometryMode, null, 1); }
+    public GameView(int mazeWidth, int mazeHeight, int mazeMode, int geometryMode, Long seed) throws IOException {
+        this(mazeWidth, mazeHeight, mazeMode, geometryMode, seed, 1); }
+    public GameView(int mazeWidth, int mazeHeight, int mazeMode, int geometryMode, int floors) throws IOException {
+        this(mazeWidth, mazeHeight, mazeMode, geometryMode, null, floors); }
+    public GameView(int mazeWidth, int mazeHeight, int mazeMode, int geometryMode, Long seed, int floors) throws IOException {
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setFocusable(true);
         requestFocus();
 
         bufferedImage = new BufferedImage(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT, BufferedImage.TYPE_INT_RGB);
         pixels = ((DataBufferInt) bufferedImage.getRaster().getDataBuffer()).getData();
-        isCustomMap = false;
-        mazeSeed = null;
-        mazeGenerator = new MazeGenerator(MAZE_WIDTH = mazeWidth, MAZE_HEIGHT = mazeHeight);
-        map = mazeGenerator.generate(MAZE_MODE = MazeGenerator.FinishMode.values()[mazeMode]);
-
-        addKeyListener(this);
-        addMouseMotionListener(this);
-
-        try {cursorRobot = new Robot();}
-        catch (Exception e) {e.printStackTrace();}
-
-        Toolkit toolkit = Toolkit.getDefaultToolkit();
-        Image img = toolkit.createImage(new byte[0]);
-        invisibleCursor = toolkit.createCustomCursor(img, new Point(0, 0), "hidden");
-        hideCursor();
-    }
-    public GameView(int mazeWidth, int mazeHeight, int mazeMode, Long seed) throws IOException {
-        setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
-        setFocusable(true); requestFocus();
-
-        bufferedImage = new BufferedImage(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT, BufferedImage.TYPE_INT_RGB);
-        pixels = ((DataBufferInt) bufferedImage.getRaster().getDataBuffer()).getData();
 
         mazeSeed = seed;
         isCustomMap = false;
-        mazeGenerator = new MazeGenerator(MAZE_WIDTH = mazeWidth, MAZE_HEIGHT = mazeHeight, mazeSeed);
-        map = mazeGenerator.generate(MAZE_MODE = MazeGenerator.FinishMode.values()[mazeMode]);
+        GEOMETRY_MODE = MazeGenerator.GeometryMode.values()[Math.clamp(geometryMode, 0, MazeGenerator.GeometryMode.values().length - 1)];
+        MAZE_MODE = MazeGenerator.FinishMode.values()[mazeMode];
+
+        MAZE_3D = floors > 1;
+        MAZE_FLOORS = MAZE_3D ? Math.max(2, floors) : 1;
+
+        if (MAZE_3D) {
+            mazeGenerator3D = mazeSeed != null ? new MazeGenerator3D(mazeWidth, mazeHeight, MAZE_FLOORS, mazeSeed, GEOMETRY_MODE)
+                    : new MazeGenerator3D(mazeWidth, mazeHeight, MAZE_FLOORS, GEOMETRY_MODE);
+
+            map3D = mazeGenerator3D.generate(MAZE_MODE);
+            MAZE_HEIGHT = map3D[0].length;
+            MAZE_WIDTH = map3D[0][0].length;
+            currentFloor = 0;
+            map = map3D[currentFloor];
+        }
+        else {
+            mazeGenerator = mazeSeed != null ? new MazeGenerator(MAZE_WIDTH = mazeWidth, MAZE_HEIGHT = mazeHeight, mazeSeed, GEOMETRY_MODE)
+                    : new MazeGenerator(MAZE_WIDTH = mazeWidth, MAZE_HEIGHT = mazeHeight, GEOMETRY_MODE);
+            map = mazeGenerator.generate(MAZE_MODE);
+        }
 
         addKeyListener(this);
         addMouseMotionListener(this);
@@ -127,8 +136,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         catch (Exception e) { e.printStackTrace(); }
 
         Toolkit toolkit = Toolkit.getDefaultToolkit();
-        Image img = toolkit.createImage(new byte[0]);
-        invisibleCursor = toolkit.createCustomCursor(img, new Point(0,0), "hidden");
+        invisibleCursor = toolkit.createCustomCursor(toolkit.createImage(new byte[0]), new Point(0, 0), "hidden");
         hideCursor();
     }
     public GameView(int[][] customMap) throws IOException {
@@ -140,6 +148,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         pixels = ((DataBufferInt) bufferedImage.getRaster().getDataBuffer()).getData();
         mazeSeed = null;
         isCustomMap = true;
+        MAZE_3D = false;
+        MAZE_FLOORS = 1;
         map = customMap;
         MAZE_HEIGHT = map.length;
         MAZE_WIDTH = map[0].length;
@@ -151,16 +161,47 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         catch (Exception e) {e.printStackTrace();}
 
         Toolkit toolkit = Toolkit.getDefaultToolkit();
-        Image img = toolkit.createImage(new byte[0]);
-        invisibleCursor = toolkit.createCustomCursor(img, new Point(0, 0), "hidden");
+        invisibleCursor = toolkit.createCustomCursor(toolkit.createImage(new byte[0]), new Point(0, 0), "hidden");
         hideCursor();
     }
+    //endregion
+
+    //region Helpers
     private void hideCursor() { setCursor(invisibleCursor); }
     private void showCursor() { setCursor(Cursor.getDefaultCursor()); }
-
     @Override public void addNotify() {
         super.addNotify();
         SwingUtilities.invokeLater(this::requestFocusInWindow);
+    }
+    private void parallelRange(int start, int end, IntConsumer task) {
+        int range = end - start;
+        if (range <= 0) return;
+        int threads = Math.min(renderThreadCount, range);
+        int chunkSize = (int) Math.ceil(range / (double) threads);
+
+        List<Future<?>> futures = new ArrayList<>(threads);
+        for (int t = 0; t < threads; t++) {
+            int from = start + t * chunkSize;
+            int to = Math.min(end, from + chunkSize);
+            if (from >= to) continue;
+
+            futures.add(renderExecutor.submit(() -> { for (int i = from; i < to; i++) task.accept(i); }));
+        }
+        for (Future<?> future : futures) {
+            try { future.get(); }
+            catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            catch (Exception e) { throw new RuntimeException(e); }
+        }
+    }
+    private int getTextureWidth(int[][] texture) {
+        if (texture == null || texture.length == 0) return 0;
+        return texture[0] == null ? 0 : texture[0].length;
+    }
+    private int getTextureHeight(int[][] texture) {
+        if (texture == null || texture.length == 0) return 0;
+        if (getTextureWidth(texture) == 0) return 0;
+        for (int[] ints : texture) if (ints == null || ints.length != getTextureWidth(texture)) return 0;
+        return texture.length;
     }
     //endregion
 
@@ -245,43 +286,42 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         playerX = Math.clamp(playerX, 0.0001, MAZE_WIDTH - 0.0001);
         playerY = Math.clamp(playerY, 0.0001, MAZE_HEIGHT - 0.0001);
 
-        if (map[Math.clamp((int)playerY, 0, MAZE_HEIGHT - 1)][Math.clamp((int)playerX, 0, MAZE_WIDTH - 1)] == 2 && isGameRunning) {
+        int cellY = Math.clamp((int) playerY, 0, MAZE_HEIGHT - 1);
+        int cellX = Math.clamp((int) playerX, 0, MAZE_WIDTH - 1);
+        int cellType = map[cellY][cellX];
+
+        if (cellType == 2 && isGameRunning) {
             isGameRunning = false;
             playerX = playerY = 1.5;
             cameraAngle = cameraPitch = 0;
             RCJMS.instance.ChangeView(RCJMS.instance.victoryView = new VictoryView(elapsedSeconds), "vv.victory");
             gameThread.interrupt();
+            return;
         }
+
+        if (MAZE_3D) handleStairs(cellType);
+    }
+    private void handleStairs(int cellType) {
+        boolean onStairsNow = cellType == 3 || cellType == 4;
+
+        if (onStairsNow && !onStairsLastFrame) {
+            if (cellType == 3 && currentFloor < map3D.length - 1) currentFloor++;
+            else if (cellType == 4 && currentFloor > 0) currentFloor--;
+            map = map3D[currentFloor];
+        }
+        onStairsLastFrame = onStairsNow;
     }
     //endregion/
 
-    private void parallelRange(int start, int end, IntConsumer task) {
-        int range = end - start;
-        if (range <= 0) return;
-        int threads = Math.min(renderThreadCount, range);
-        int chunkSize = (int) Math.ceil(range / (double) threads);
-
-        List<Future<?>> futures = new ArrayList<>(threads);
-        for (int t = 0; t < threads; t++) {
-            int from = start + t * chunkSize;
-            int to = Math.min(end, from + chunkSize);
-            if (from >= to) continue;
-
-            futures.add(renderExecutor.submit(() -> { for (int i = from; i < to; i++) task.accept(i); }));
-        }
-        for (Future<?> future : futures) {
-            try { future.get(); }
-            catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
-            catch (Exception e) { throw new RuntimeException(e); }
-        }
-    }
-
     //region Rendering
     private void render() {
+        boolean wrongGeometry = GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG;
+        double curvature = HYPERBOLIC_CURVATURE;
+
         double dirX = Math.cos(cameraAngle);
         double dirY = Math.sin(cameraAngle);
 
-        double planeLength = Math.tan((/*FOV*/Math.PI / 3.0) / 2.0);
+        double planeLength = Math.tan((wrongGeometry ? Math.toRadians(140) : Math.PI / 3.0) / 2.0);
         double planeX = -dirY * planeLength;
         double planeY =  dirX * planeLength;
 
@@ -332,8 +372,9 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             double perpendicularDistance = side == 0 ? sideDistX - deltaDistX : sideDistY - deltaDistY;
             perpendicularDistance = Math.max(perpendicularDistance, 0.0001);
 
-            int wallHeight = (int) (RCJMS.SCREEN_HEIGHT / perpendicularDistance);
+            double projectedDistance = wrongGeometry ? HyperbolicMath.hyperbolicDistance(perpendicularDistance, curvature) : perpendicularDistance;
 
+            int wallHeight = (int) (RCJMS.SCREEN_HEIGHT / projectedDistance);
             int drawStart = Math.max(hitType == 2 ? (int) horizon : (int) (horizon - wallHeight / 2.0), 0);
             int drawEnd = Math.min((int) (horizon + wallHeight / 2.0), RCJMS.SCREEN_HEIGHT - 1);
 
@@ -345,7 +386,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             if (side == 0 && rayDirX > 0) wallX = 1.0 - wallX;
             if (side == 1 && rayDirY < 0) wallX = 1.0 - wallX;
 
-            double brightness = 1.0 - (perpendicularDistance / flashlightDistance);
+            double brightness = 1.0 - (projectedDistance / effectiveFlashlightDistance(wrongGeometry));
             brightness = Math.clamp(brightness, 0.03, 1.0);
 
             if (side == 1) brightness *= 0.85;
@@ -374,88 +415,102 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         });
 
         drawTimer();
+        int hudLine = 0;
+        if (wrongGeometry) drawGeometryBadge(hudLine++);
+        if (MAZE_3D) drawFloorIndicator(hudLine);
 
         if (isDebugMode && !isPaused) { drawMiniMap(); drawFpsCounter(); }
         if (isPaused) drawPauseMenu();
     }
     private void renderHorizontalSurfaces(double dirX, double dirY, double planeX, double planeY, double horizon) {
-        final double playerHeight = 1.0, ceilingHeight = 1.0;
         final double minDistance = 0.0001;
+        final boolean hyperbolic = GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG;
 
         double leftRayX = dirX - planeX, leftRayY = dirY - planeY;
         double rightRayX = dirX + planeX,  rightRayY = dirY + planeY;
-        int firstFloorY = Math.max(0, (int) Math.ceil(horizon));
 
-        parallelRange(firstFloorY, RCJMS.SCREEN_HEIGHT, y -> {
+        parallelRange(Math.max(0, (int) Math.ceil(horizon)), RCJMS.SCREEN_HEIGHT, y -> {
             if ((y - horizon) < minDistance) return;
 
-            double rowDistance = playerHeight * RCJMS.SCREEN_HEIGHT / (2.0 * (y - horizon));
+            double rowDistance = RCJMS.SCREEN_HEIGHT / (2.0 * (y - horizon));
+            double brightnessDistance = hyperbolic ? HyperbolicMath.hyperbolicDistance(rowDistance, HYPERBOLIC_CURVATURE) : rowDistance;
 
             double floorX = playerX + rowDistance * leftRayX;
             double floorY = playerY + rowDistance * leftRayY;
 
-            int offset = y * RCJMS.SCREEN_WIDTH;
-
             for (int x = 0; x < RCJMS.SCREEN_WIDTH; x++) {
-                double brightness = 1.0 - (rowDistance / flashlightDistance);
-
+                double brightness = 1.0 - (brightnessDistance / effectiveFlashlightDistance(hyperbolic));
                 brightness = Math.clamp(brightness, 0.05, 1.0);
-                pixels[offset + x] = applyBrightness(sampleTexture(floorTexture, floorX, floorY, floorBaseColor), brightness);
+
+                int color = sampleTexture(floorTexture, floorX, floorY, floorBaseColor);
+                if (MAZE_3D) color = tintStairs(color, floorX, floorY);
+                pixels[y * RCJMS.SCREEN_WIDTH + x] = applyBrightness(color, brightness);
 
                 floorX += rowDistance * (rightRayX - leftRayX) / RCJMS.SCREEN_WIDTH;
                 floorY += rowDistance * (rightRayY - leftRayY) / RCJMS.SCREEN_WIDTH;
             }
         });
 
-        int lastCeilingY = Math.min(RCJMS.SCREEN_HEIGHT - 1, (int) Math.floor(horizon) - 1);
-        parallelRange(0, lastCeilingY + 1, y -> {
-            double row = horizon - y;
-            if (row < minDistance) return;
-            double rowDistance = ceilingHeight * RCJMS.SCREEN_HEIGHT / (2.0 * row);
+        parallelRange(0, Math.min(RCJMS.SCREEN_HEIGHT - 1, (int) Math.floor(horizon) - 1) + 1, y -> {
+            if (horizon - y < minDistance) return;
+            double rowDistance =  RCJMS.SCREEN_HEIGHT / (2.0 * (horizon - y));
+            double brightnessDistance = hyperbolic ? HyperbolicMath.hyperbolicDistance(rowDistance, HYPERBOLIC_CURVATURE) : rowDistance;
 
-            double ceilingStepX = rowDistance * (rightRayX - leftRayX) / RCJMS.SCREEN_WIDTH;
-            double ceilingStepY = rowDistance * (rightRayY - leftRayY) / RCJMS.SCREEN_WIDTH;
             double ceilingX = playerX + rowDistance * leftRayX;
             double ceilingY = playerY + rowDistance * leftRayY;
 
-            int offset = y * RCJMS.SCREEN_WIDTH;
-
             for (int x = 0; x < RCJMS.SCREEN_WIDTH; x++) {
                 int color = sampleTexture(ceilingTexture, ceilingX, ceilingY, ceilingBaseColor);
-                double brightness = 1.0 - (rowDistance / flashlightDistance);
+                double brightness = 1.0 - (brightnessDistance / effectiveFlashlightDistance(hyperbolic));
                 brightness = Math.clamp(brightness, 0.05, 1.0);
-                pixels[offset + x] = applyBrightness(color, brightness);
+                pixels[y * RCJMS.SCREEN_WIDTH + x] = applyBrightness(color, brightness);
 
-                ceilingX += ceilingStepX;
-                ceilingY += ceilingStepY;
+                ceilingX += rowDistance * (rightRayX - leftRayX) / RCJMS.SCREEN_WIDTH;
+                ceilingY += rowDistance * (rightRayY - leftRayY) / RCJMS.SCREEN_WIDTH;
             }
         });
     }
-    private int sampleTexture(int[][] texture, double worldX, double worldY, int baseColor) {
-        int textureHeight = getTextureHeight(texture);
-        int textureWidth = getTextureWidth(texture);
+    private double effectiveFlashlightDistance(boolean hyperbolic) { return hyperbolic ? flashlightDistance * 1.6 : flashlightDistance; }
+    private int tintStairs(int color, double worldX, double worldY) {
+        int fx = (int) Math.floor(worldX), fy = (int) Math.floor(worldY);
+        if (fx < 0 || fy < 0 || fx >= MAZE_WIDTH || fy >= MAZE_HEIGHT) return color;
 
+        int cell = map[fy][fx];
+        if (cell == 3) return tintColor(color, 0x3399FF, 0.45);
+        if (cell == 4) return tintColor(color, 0xFFAA33, 0.45);
+        return color;
+    }
+    private int tintColor(int color, int tint, double amount) {
+        int r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
+        int tr = (tint >> 16) & 255, tg = (tint >> 8) & 255, tb = tint & 255;
+
+        r = (int) (r * (1 - amount) + tr * amount);
+        g = (int) (g * (1 - amount) + tg * amount);
+        b = (int) (b * (1 - amount) + tb * amount);
+
+        return (r << 16) | (g << 8) | b;
+    }
+    private int applyBrightness(int color, double brightness) {
+        int r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
+
+        r = (int)(r * brightness);
+        g = (int)(g * brightness);
+        b = (int)(b * brightness);
+
+        return (r << 16) | (g << 8) | b;
+    }
+    private int sampleTexture(int[][] texture, double worldX, double worldY, int baseColor) {
+        int textureHeight = getTextureHeight(texture), textureWidth = getTextureWidth(texture);
         if (textureWidth <= 0 || textureHeight <= 0) return baseColor;
 
-        int texX = (int) ((worldX - Math.floor(worldX)) * textureWidth);
-        int texY = (int) ((worldY - Math.floor(worldY)) * textureHeight);
-
-        return texture[Math.clamp(texY, 0, textureHeight - 1)][Math.clamp(texX, 0, textureWidth - 1)];
-    }
-    private int getTextureWidth(int[][] texture) {
-        if (texture == null || texture.length == 0) return 0;
-        return texture[0] == null ? 0 : texture[0].length;
-    }
-    private int getTextureHeight(int[][] texture) {
-        if (texture == null || texture.length == 0) return 0;
-        int width = getTextureWidth(texture);
-        if (width == 0) return 0;
-
-        for (int[] ints : texture) if (ints == null || ints.length != width) return 0;
-        return texture.length;
+        return texture[Math.clamp((int)((worldY - Math.floor(worldY)) * textureHeight), 0, textureHeight - 1)]
+                [Math.clamp((int)((worldX - Math.floor(worldX)) * textureWidth), 0, textureWidth - 1)];
     }
     //endregion
+
+    //region HUD
     private void drawMiniMap() {
+        if (GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG) { drawCoolMiniMap(); return; }
         int mapWidth = map[0].length, mapHeight = map.length;
         double scale = Math.min((double) MINI_MAP_WIDTH / mapWidth, (double) MINI_MAP_HEIGHT / mapHeight);
 
@@ -467,6 +522,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 int color = 0x000000;
                 if (map[y][x] == 1) color = 0xFFFFFF;
                 if (map[y][x] == 2) color = 0x00FF00;
+                if (map[y][x] == 3) color = 0x3399FF;
+                if (map[y][x] == 4) color = 0xFFAA33;
 
                 int startX = offsetX + (int) (x * scale);
                 int startY = offsetY + (int) (y * scale);
@@ -478,22 +535,74 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             }
         }
 
-        int playerSize = Math.max(1, (int) Math.floor(scale * 0.25));
+        int playerSize = Math.max(1, (int)Math.floor(scale * 0.25));
         for (int yy = -playerSize; yy <= playerSize; yy++) {
             for (int xx = -playerSize; xx <= playerSize; xx++) {
-                int px = offsetX + (int) (playerX * scale) + xx;
-                int py = offsetY + (int) (playerY * scale) + yy;
+                int px = offsetX + (int)(playerX * scale) + xx;
+                int py = offsetY + (int)(playerY * scale) + yy;
                 if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT) pixels[px + py * RCJMS.SCREEN_WIDTH] = 0xFF0000;
             }
         }
     }
-    private void trackFps() {
-        frameCounter++;
-        long now = System.currentTimeMillis();
-        if (now - fpsWindowStart >= 1000) {
-            currentFps = frameCounter;
-            frameCounter = 0;
-            fpsWindowStart = now;
+    private void drawCoolMiniMap() {
+        int diskRadiusPx = Math.min(MINI_MAP_WIDTH, MINI_MAP_HEIGHT) / 2;
+        int centerX = 10 + diskRadiusPx, centerY = 10 + diskRadiusPx;
+
+        for (int yy = -diskRadiusPx; yy <= diskRadiusPx; yy++) {
+            for (int xx = -diskRadiusPx; xx <= diskRadiusPx; xx++) {
+                if (xx * xx + yy * yy > diskRadiusPx * diskRadiusPx) continue;
+                int px = 10 + diskRadiusPx + xx, py = centerY + yy;
+                if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT) pixels[px + py * RCJMS.SCREEN_WIDTH] = 0x0A0A14;
+            }
+        }
+
+        for (int y = 0; y < map[0].length; y++) {
+            for (int x = 0; x < map.length; x++) {
+                if (map[y][x] == 0) continue;
+
+                double diskR = HyperbolicMath.poincareRadius(Math.hypot((x + 0.5) - playerX, (y + 0.5) - playerY), HYPERBOLIC_CURVATURE);
+                if (diskR >= 0.995) continue;
+
+                double angle = Math.atan2((y + 0.5) - playerY, (x + 0.5) - playerX);
+                int color = map[y][x] == 2 ? 0x00FF00 : map[y][x] == 3 ? 0x3399FF : map[y][x] == 4 ? 0xFFAA33 : 0xFFFFFF;
+                int cellPixelSize = Math.max(1, (int) Math.round((1.0 - diskR) * 4));
+
+                for (int oy = -cellPixelSize; oy <= cellPixelSize; oy++) {
+                    for (int ox = -cellPixelSize; ox <= cellPixelSize; ox++) {
+                        if (ox * ox + oy * oy > cellPixelSize * cellPixelSize) continue;
+                        int fx = centerX + (int)Math.round(Math.cos(angle) * diskR * diskRadiusPx) + ox;
+                        int fy = centerY + (int)Math.round(Math.sin(angle) * diskR * diskRadiusPx) + oy;
+                        if (fx < 0 || fy < 0 || fx >= RCJMS.SCREEN_WIDTH || fy >= RCJMS.SCREEN_HEIGHT) continue;
+                        if ((fx - centerX) * (fx - centerX) + (fy - centerY) * (fy - centerY) > diskRadiusPx * diskRadiusPx) continue;
+                        pixels[fx + fy * RCJMS.SCREEN_WIDTH] = color;
+                    }
+                }
+            }
+        }
+        for (double a = 0; a < Math.PI * 2; a += 0.01) {
+            int px = centerX + (int) Math.round(Math.cos(a) * diskRadiusPx);
+            int py = centerY + (int) Math.round(Math.sin(a) * diskRadiusPx);
+            if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT) pixels[px + py * RCJMS.SCREEN_WIDTH] = 0x8888FF;
+        }
+        int tickLen = diskRadiusPx - 4;
+        drawMiniMapLine(centerX, centerY, centerX + (int)Math.round(Math.cos(cameraAngle) * tickLen),
+                centerY + (int)Math.round(Math.sin(cameraAngle) * tickLen), 0xFFAA00);
+        int playerSize = 3;
+        for (int yy = -playerSize; yy <= playerSize; yy++) {
+            for (int xx = -playerSize; xx <= playerSize; xx++) {
+                int px = centerX + xx, py = centerY + yy;
+                if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT) pixels[px + py * RCJMS.SCREEN_WIDTH] = 0xFF0000;
+            }
+        }
+    }
+    private void drawMiniMapLine(int x0, int y0, int x1, int y1, int color) {
+        int dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1, dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1, err = dx + dy;
+        while (true) {
+            if (x0 >= 0 && y0 >= 0 && x0 < RCJMS.SCREEN_WIDTH && y0 < RCJMS.SCREEN_HEIGHT) pixels[x0 + y0 * RCJMS.SCREEN_WIDTH] = color;
+            if (x0 == x1 && y0 == y1) break;
+            int e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x0 += sx; }
+            if (e2 <= dx) { err += dx; y0 += sy; }
         }
     }
     private void drawFpsCounter() {
@@ -508,9 +617,16 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         g2d.drawString(fpsText, 38, RCJMS.SCREEN_HEIGHT - 28);
         g2d.dispose();
     }
-    //endregion
+    private void trackFps() {
+        frameCounter++;
+        if (System.currentTimeMillis() - fpsWindowStart >= 1000) {
+            currentFps = frameCounter;
+            frameCounter = 0;
+            fpsWindowStart = System.currentTimeMillis();
+        }
+    }
     private void drawTimer() {
-        Graphics2D g = bufferedImage.createGraphics();
+        Graphics2D g2d = bufferedImage.createGraphics();
         elapsedSeconds = ((isPaused ? pauseStartTime : System.currentTimeMillis()) - gameStartTime - pausedTime) / 1000;
 
         long hours = elapsedSeconds / 3600;
@@ -519,47 +635,61 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         String timerText = String.format("%02d:%02d:%02d", hours, minutes, seconds);
 
-        g.setFont(new Font("Consolas", Font.BOLD, 24));
-        g.setColor(Color.BLACK);
-        g.drawString(timerText, RCJMS.SCREEN_WIDTH - 156, 34);
+        g2d.setFont(new Font("Consolas", Font.BOLD, 24));
+        g2d.setColor(Color.BLACK);
+        g2d.drawString(timerText, RCJMS.SCREEN_WIDTH - 156, 34);
 
-        g.setColor(Color.WHITE);
-        g.drawString(timerText, RCJMS.SCREEN_WIDTH - 158, 32);
-        g.dispose();
+        g2d.setColor(Color.WHITE);
+        g2d.drawString(timerText, RCJMS.SCREEN_WIDTH - 158, 32);
+        g2d.dispose();
     }
+    private void drawGeometryBadge(int line) {
+        Graphics2D g2d = bufferedImage.createGraphics();
+        String text = NSLocalizedString.get("gv.wrong_geometry");
 
+        g2d.setFont(new Font("Consolas", Font.BOLD, 16));
+        g2d.setColor(Color.BLACK);
+        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 202, RCJMS.SCREEN_HEIGHT - (26 + line * 24) + 2);
+        g2d.setColor(new Color(150, 170, 255));
+        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 200, RCJMS.SCREEN_HEIGHT - (26 + line * 24));
+        g2d.dispose();
+    }
+    private void drawFloorIndicator(int line) {
+        Graphics2D g2d = bufferedImage.createGraphics();
+        String text = NSLocalizedString.get("gv.floor") + (currentFloor + 1) + "/" + map3D.length;
+
+        g2d.setFont(new Font("Consolas", Font.BOLD, 16));
+        g2d.setColor(Color.BLACK);
+        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 202, RCJMS.SCREEN_HEIGHT - (26 + line * 24) + 2);
+        g2d.setColor(new Color(255, 200, 120));
+        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 200, RCJMS.SCREEN_HEIGHT - (26 + line * 24));
+        g2d.dispose();
+    }
     private void drawPauseMenu() {
-        Graphics2D g = bufferedImage.createGraphics();
-        g.setColor(new Color(0,0,0,180));
-        g.fillRect(0,0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
+        Graphics2D g2d = bufferedImage.createGraphics();
+        g2d.setColor(new Color(0,0,0,180));
+        g2d.fillRect(0,0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
 
         String pausedText = NSLocalizedString.get("gv.paused");
 
-        g.setColor(Color.WHITE);
-        g.setFont(new Font("Arial", Font.BOLD, 80));
-        int pausedWidth = g.getFontMetrics().stringWidth(pausedText);
-        g.drawString(pausedText, (RCJMS.SCREEN_WIDTH - pausedWidth) / 2, RCJMS.SCREEN_HEIGHT / 2 - 50);
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Arial", Font.BOLD, 80));
+        int pausedWidth = g2d.getFontMetrics().stringWidth(pausedText);
+        g2d.drawString(pausedText, (RCJMS.SCREEN_WIDTH - pausedWidth) / 2, RCJMS.SCREEN_HEIGHT / 2 - 50);
 
-        g.setFont(new Font("Arial", Font.PLAIN, 20));
-        g.drawString(NSLocalizedString.get("gv.continue"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 20);
-        g.drawString(NSLocalizedString.get("gv.restart"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 50);
-        g.drawString(NSLocalizedString.get("run"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 80);
-        g.drawString(NSLocalizedString.get("gv.movement_speed") + ((shift) ? runSpeed : moveSpeed), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 110);
-        g.drawString(NSLocalizedString.get("gv.mouse_sensitivity") + mouseSensitivity, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 140);
-        g.drawString(NSLocalizedString.get("gv.no_clip") + noClip, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 170);
+        g2d.setFont(new Font("Arial", Font.PLAIN, 20));
+        g2d.drawString(NSLocalizedString.get("gv.continue"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 20);
+        g2d.drawString(NSLocalizedString.get("gv.restart"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 50);
+        g2d.drawString(NSLocalizedString.get("run"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 80);
+        g2d.drawString(NSLocalizedString.get("gv.no_clip") + noClip, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 110);
+        g2d.drawString(NSLocalizedString.get("gv.geometry") + NSLocalizedString.get(
+                GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG ? "gv.wrong_geometry" : "gv.euclidean_mode"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 140);
+        if (MAZE_3D) g2d.drawString(NSLocalizedString.get("gv.floor") + (currentFloor + 1) + "/" + map3D.length,
+                RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 170);
 
-        g.dispose();
+        g2d.dispose();
     }
-    private int applyBrightness(int color, double brightness) {
-        int r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
-
-        r = (int)(r * brightness);
-        g = (int)(g * brightness);
-        b = (int)(b * brightness);
-
-        return (r << 16) | (g << 8) | b;
-    }
-//endregion
+    //endregion
 
     //region INPUT
     @Override public void keyPressed(KeyEvent e) {
@@ -571,6 +701,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (key == KeyEvent.VK_B) isDebugMode = !isDebugMode;
         if (key == KeyEvent.VK_SHIFT) shift = true;
         if (key == KeyEvent.VK_F1) noClip = !noClip;
+        if (key == KeyEvent.VK_G) GEOMETRY_MODE = GEOMETRY_MODE == MazeGenerator.GeometryMode.EUCLIDEAN
+                ? MazeGenerator.GeometryMode.WRONG : MazeGenerator.GeometryMode.EUCLIDEAN;
         if (key == KeyEvent.VK_ESCAPE) {
             isPaused = !isPaused;
             if (isPaused) {
@@ -597,14 +729,22 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 } catch (IOException ex) {throw new RuntimeException(ex);}
                 return;
             }
-            else if (mazeSeed != null) mazeGenerator = new MazeGenerator(MAZE_WIDTH, MAZE_HEIGHT, mazeSeed);
-            else mazeGenerator = new MazeGenerator(MAZE_WIDTH, MAZE_HEIGHT);
+            else if (MAZE_3D) {
+                mazeGenerator3D = mazeSeed != null ? new MazeGenerator3D(MAZE_WIDTH, MAZE_HEIGHT, MAZE_FLOORS, mazeSeed, GEOMETRY_MODE)
+                        : new MazeGenerator3D(MAZE_WIDTH, MAZE_HEIGHT, MAZE_FLOORS, GEOMETRY_MODE);
+                map3D = mazeGenerator3D.generate(MAZE_MODE);
+                currentFloor = 0;
+                map = map3D[currentFloor];
+            }
+            else {
+                if (mazeSeed != null) mazeGenerator = new MazeGenerator(MAZE_WIDTH, MAZE_HEIGHT, mazeSeed, GEOMETRY_MODE);
+                else mazeGenerator = new MazeGenerator(MAZE_WIDTH, MAZE_HEIGHT, GEOMETRY_MODE);
+                map = mazeGenerator.generate(MAZE_MODE);
+            }
 
-            map = mazeGenerator.generate(MAZE_MODE);
-            playerX = 1.5;
-            playerY = 1.5;
-            cameraAngle = 0;
-            cameraPitch = 0;
+            playerX = playerY = 1.5;
+            cameraAngle = cameraPitch = 0;
+            onStairsLastFrame = false;
             gameStartTime = System.currentTimeMillis();
             pausedTime = 0;
         }

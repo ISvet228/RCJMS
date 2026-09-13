@@ -8,6 +8,7 @@ import java.awt.geom.AffineTransform;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Random;
 
 public class MainMenuView extends JPanel {
@@ -36,6 +37,7 @@ public class MainMenuView extends JPanel {
 
     private final StyledLabel mazeDimensionsLabel = createLabel(currentStyle,"mm.maze_dimensions");
     private final StyledLabel modeLabel = createLabel(currentStyle,"mm.mode");
+    private final StyledLabel floorsLabel = createLabel(currentStyle, "mm.floors_count");
     private final StyledLabel xLabel = createLabel(currentStyle,"X");
     private final StyledLabel yLabel = createLabel(currentStyle,"Y");
     private final StyledLabel seedLabel = createLabel(currentStyle,"mm.custom_seed");
@@ -45,7 +47,10 @@ public class MainMenuView extends JPanel {
     private final StyledTextField xField = new StyledTextField(currentStyle,"25");
     private final StyledTextField yField = new StyledTextField(currentStyle, "25");
     private final StyledTextField seedField = new StyledTextField(currentStyle, "");
+    private final StyledTextField floorsField = new StyledTextField(currentStyle, "3");
 
+    private final StyledToggle geometryToggle = new StyledToggle(currentStyle, "mm.wrong_geometry");
+    private final StyledToggle mode3DToggle = new StyledToggle(currentStyle, "mm.3d_mode");
     private StyledToggle fullscreenToggle;
     private boolean fullscreen = false;
 
@@ -67,8 +72,14 @@ public class MainMenuView extends JPanel {
         title.setTextColor(new Color(255, 127, 0));
         title.setDepthColor(Color.cyan);
         title.addActionListener((ActionEvent e) -> title.setText(title.getText().equals("RCJMS") ? "RayCasting Java Maze Simulator" : "RCJMS"));
+
         xField.setHorizontalAlignment(JLabel.CENTER);
         yField.setHorizontalAlignment(JLabel.CENTER);
+
+        floorsLabel.setVisible(false);
+        floorsField.setHorizontalAlignment(JLabel.CENTER);
+        floorsField.setVisible(false);
+        mode3DToggle.addActionListener(ev -> { floorsLabel.setVisible(mode3DToggle.isSelected()); floorsField.setVisible(mode3DToggle.isSelected()); });
 
         add(title);
         add(playButton);
@@ -81,12 +92,16 @@ public class MainMenuView extends JPanel {
         add(modeBox);
         add(mazeDimensionsLabel);
         add(modeLabel);
+        add(floorsLabel);
         add(xLabel);
         add(yLabel);
         add(seedLabel);
         add(yField);
         add(xField);
         add(seedField);
+        add(floorsField);
+        add(geometryToggle);
+        add(mode3DToggle);
 
         for (int i = 0; i < 80; i++) stars.add(createRandomStar());
 
@@ -227,19 +242,27 @@ public class MainMenuView extends JPanel {
     }
     private void StartGameView() {
         try {
+            GameView gameView;
             int mazeWidth = Math.clamp(Integer.parseInt(xField.getText()), 5, 200);
             int mazeHeight = Math.clamp(Integer.parseInt(yField.getText()), 5, 200);
             int mode = modeBox.getSelectedIndex();
+            int geometryMode = geometryToggle.isSelected() ? 1 : 0;
+
             String seedText = seedField.getText().trim();
-            if (seedText.isEmpty()) RCJMS.instance.ChangeView(RCJMS.instance.gameView = new GameView(mazeWidth, mazeHeight, mode), "RayCast Me!");
-            else {
-                long seed;
+            Long seed = null;
+            if (!seedText.isEmpty()) {
                 try {seed = Long.parseLong(seedText);}
-                catch (NumberFormatException ex) {seed = seedText.hashCode();}
-                RCJMS.instance.ChangeView(RCJMS.instance.gameView = new GameView(mazeWidth, mazeHeight, mode, seed), "RayCast Me!");
+                catch (NumberFormatException ex) {seed = (long) seedText.hashCode();}
             }
+            int layers = !floorsField.getText().trim().isEmpty() ? Math.clamp(Integer.parseInt(floorsField.getText()), 2, 20) : 3;
+            if (mode3DToggle.isSelected())
+                gameView = seed == null ? new GameView(mazeWidth, mazeHeight, mode, geometryMode, layers) : new GameView(mazeWidth, mazeHeight, mode, geometryMode, seed, layers);
+            else gameView = seed == null ? new GameView(mazeWidth, mazeHeight, mode, geometryMode) : new GameView(mazeWidth, mazeHeight, mode, geometryMode, seed);
+
+            RCJMS.instance.ChangeView(RCJMS.instance.gameView = gameView, "RayCast Me!");
             RCJMS.instance.gameView.start();
-        } catch (NumberFormatException | IOException ex) {
+        }
+        catch (NumberFormatException | IOException ex) {
             JOptionPane.showMessageDialog(this, "mm.maze_size_error", "mm.invalid_input", JOptionPane.ERROR_MESSAGE);
         }
     }
@@ -291,6 +314,8 @@ public class MainMenuView extends JPanel {
 
         setScaledBounds(title, 300, 45, 400, 130, scale, backgroundX, backgroundY);
 
+        setScaledBounds(modeBox, 90, 305, 220, 40, scale, backgroundX, backgroundY);
+
         setScaledBounds(playButton, 390, 280, 220, 60, scale, backgroundX, backgroundY);
         setScaledBounds(textureEditorButton, 395, 350, 210, 40, scale, backgroundX, backgroundY);
         setScaledBounds(mapEditorButton, 400, 400, 200, 35, scale, backgroundX, backgroundY);
@@ -299,17 +324,20 @@ public class MainMenuView extends JPanel {
         setScaledBounds(settingsButton, RCJMS.SCREEN_WIDTH - 80, 20, 60, 60, scale, backgroundX, backgroundY);
         setScaledBounds(infoButton, 20, RCJMS.SCREEN_HEIGHT - 80, 60, 60, scale, backgroundX, backgroundY);
 
-        setScaledBounds(modeBox, 90, 305, 220, 40, scale, backgroundX, backgroundY);
-
         setScaledBounds(mazeDimensionsLabel, 660, 270, 270, 30, scale, backgroundX, backgroundY);
         setScaledBounds(modeLabel, 100, 270, 200, 30, scale, backgroundX, backgroundY);
         setScaledBounds(xLabel, 650, 315, 30, 35, scale, backgroundX, backgroundY);
         setScaledBounds(yLabel, 790, 315, 30, 35, scale, backgroundX, backgroundY);
         setScaledBounds(seedLabel, 400, 180, 200, 30, scale, backgroundX, backgroundY);
+        setScaledBounds(floorsLabel, 90, 431, 130, 30, scale, backgroundX, backgroundY);
 
         setScaledBounds(yField, 820, 310, 90, 45, scale, backgroundX, backgroundY);
         setScaledBounds(xField, 680, 310, 90, 45, scale, backgroundX, backgroundY);
         setScaledBounds(seedField, 400, 220, 200, 40, scale, backgroundX, backgroundY);
+        setScaledBounds(floorsField, 225, 428, 75, 36, scale, backgroundX, backgroundY);
+
+        setScaledBounds(geometryToggle, 90, 353, 220, 34, scale, backgroundX, backgroundY);
+        setScaledBounds(mode3DToggle, 90, 393, 220, 34, scale, backgroundX, backgroundY);
     }
     private void setScaledBounds(JComponent component, int x, int y, int width, int height, double scale, int backgroundX, int backgroundY) {
         component.setBounds(backgroundX + (int) (x * scale), backgroundY + (int) (y * scale), Math.max(1, (int) (width * scale)), Math.max(1, (int) (height * scale)));
@@ -350,7 +378,7 @@ public class MainMenuView extends JPanel {
                 if (!language.isBlank()) return language;
             }
         } catch (IOException ex) { ex.printStackTrace(); }
-        return java.util.Locale.getDefault().getLanguage();
+        return Locale.getDefault().getLanguage();
     }
 
     private void saveTheme(Style style) {
@@ -370,13 +398,13 @@ public class MainMenuView extends JPanel {
     }
     private void SyncAllUI(Style style) {
         modeBox.setStyle(style);
-        xField.setStyle(style);
-        yField.setStyle(style);
-        seedField.setStyle(style);
+        geometryToggle.setStyle(style);
+        mode3DToggle.setStyle(style);
 
+        for (StyledTextField STF : new StyledTextField[]{xField, yField, floorsField, seedField}) if (STF != null) STF.setStyle(style);
         for (StyledButton SB : new StyledButton[]{playButton, textureEditorButton, mapEditorButton, creditsButton, exitButton, settingsButton, infoButton, settingsCloseButton, infoCloseButton})
             if (SB != null) SB.setStyle(style);
-        for (StyledLabel SL : new StyledLabel[]{mazeDimensionsLabel, modeLabel, xLabel, yLabel, seedLabel, themesTitle, languageTitle})
+        for (StyledLabel SL : new StyledLabel[]{mazeDimensionsLabel, modeLabel, xLabel, yLabel, seedLabel, floorsLabel, themesTitle, languageTitle})
             if (SL != null) SL.setStyle(style);
         if (fullscreenToggle != null) fullscreenToggle.setStyle(style);
         if (languageBox != null) languageBox.setStyle(style);
