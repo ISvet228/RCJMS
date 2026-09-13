@@ -111,6 +111,8 @@
 "cv.ljubo" = "Ljubo For Collision Fix And Walk Enchantments";
 "cv.fungun" = "fUnGuN StyleUI Help";
 "cv.useful_resources" = "Useful Resources";
+"cv.hyperbolic_geometry" = "Hyperbolic Geometry aka Wrong Geometry"
+"cv.bfs" = "Breadth-first search aka BFS"
 "cv.thanks" = "Thanks For Watching Credits";
 "cv.another_project" = "I Also Have Another Projects:";
 

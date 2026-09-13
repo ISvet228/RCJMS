@@ -111,6 +111,8 @@
 "cv.ljubo" = "Ljubo — за исправление коллизий и улучшения передвижения";
 "cv.fungun" = "fUnGuN — помощь со StyleUI";
 "cv.useful_resources" = "Полезные ресурсы";
+"cv.hyperbolic_geometry" = "Гиперболическая Геометрия ака Сломанная Геометрия"
+"cv.bfs" = "Поиск в Ширину aka BFS"
 "cv.thanks" = "Спасибо, что посмотрели титры";
 "cv.another_project" = "У меня есть ещё один проект:";
 
