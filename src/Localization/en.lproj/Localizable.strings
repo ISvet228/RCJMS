@@ -36,6 +36,7 @@
 "gv.euclidean" = "Euclidean";
 "gv.wrong_geometry" = "Wrong Geometry!";
 "gv.floor" = "Floor: ";
+"gv.exit_hint" = "Ctrl + C - Exit"
 
 //Victory View vv.
 "vv.victory" = "Victory!";

@@ -4,6 +4,7 @@ import javax.swing.*; //Frame Library
 import java.awt.*; //Graphics Library
 import java.awt.event.*; //Input Library
 import java.awt.image.*; //Buffer Library
+import java.awt.geom.Point2D;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,6 +21,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     public static double HYPERBOLIC_CURVATURE = HyperbolicMath.DEFAULT_CURVATURE;
     public static boolean MAZE_3D = false;
     public static int MAZE_FLOORS = 1;
+    public static double STAIR_ANIMATION_SPEED = 1.0; // multiplier for the floor-transition animation; higher = faster
 
     //region Dependencies
     private MazeGenerator mazeGenerator;
@@ -87,6 +89,20 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region FPS Counter
     private int frameCounter = 0, currentFps = 0;
     private long fpsWindowStart = System.currentTimeMillis();
+    //endregion
+
+    //region Floor Transition Animation
+    private static final double FADE_OUT_DURATION = 0.6;
+    private static final double FADE_IN_DURATION = 0.6;
+    private static final double CAPTION_ROLL_DURATION = 0.5;
+    private static final double CAPTION_HOLD_DURATION = 0.9;
+    private static final double CAPTION_FADE_DURATION = 0.4;
+
+    private boolean isFloorTransitioning = false;
+    private boolean floorSwitchApplied = false;
+    private double floorTransitionTime = 0;
+    private int transitionFromFloor = 0;
+    private int transitionToFloor = 0;
     //endregion
     //endregion
 
@@ -224,7 +240,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 render(); repaint();
                 trackFps();
 
-                try {Thread.sleep(5); //FPS limit, you can experiment with it, but lower sleeptime means more artifacts
+                try {Thread.sleep(10); //FPS limit, you can experiment with it, but lower sleeptime means more artifacts
                 } catch (Exception ignored) {}
             }
         } finally {
@@ -232,6 +248,28 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         }
     }
     private void update(double deltaTiime) {
+        if (isFloorTransitioning) {
+            double speed = Math.max(0.05, STAIR_ANIMATION_SPEED);
+            floorTransitionTime += deltaTiime * speed;
+
+            if (!floorSwitchApplied && floorTransitionTime >= FADE_OUT_DURATION) {
+                currentFloor = transitionToFloor;
+                map = map3D[currentFloor];
+                floorSwitchApplied = true;
+            }
+
+            double controlsLockedUntil = FADE_OUT_DURATION + FADE_IN_DURATION;
+            double totalDuration = controlsLockedUntil + CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION + CAPTION_FADE_DURATION;
+
+            if (floorTransitionTime >= totalDuration) {
+                isFloorTransitioning = false;
+                floorSwitchApplied = false;
+                floorTransitionTime = 0;
+            }
+
+            if (floorTransitionTime < controlsLockedUntil) return; //controls stay taken away during the darken/lighten pass
+        }
+
         double speed = ((shift) ? runSpeed : moveSpeed) * deltaTiime;
 
         double strafeX = Math.cos(cameraAngle + Math.PI / 2);
@@ -304,10 +342,18 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private void handleStairs(int cellType) {
         boolean onStairsNow = cellType == 3 || cellType == 4;
 
-        if (onStairsNow && !onStairsLastFrame) {
-            if (cellType == 3 && currentFloor < map3D.length - 1) currentFloor++;
-            else if (cellType == 4 && currentFloor > 0) currentFloor--;
-            map = map3D[currentFloor];
+        if (onStairsNow && !onStairsLastFrame && !isFloorTransitioning) {
+            int targetFloor = currentFloor;
+            if (cellType == 3 && currentFloor < map3D.length - 1) targetFloor = currentFloor + 1;
+            else if (cellType == 4 && currentFloor > 0) targetFloor = currentFloor - 1;
+
+            if (targetFloor != currentFloor) {
+                transitionFromFloor = currentFloor;
+                transitionToFloor = targetFloor;
+                isFloorTransitioning = true;
+                floorSwitchApplied = false;
+                floorTransitionTime = 0;
+            }
         }
         onStairsLastFrame = onStairsNow;
     }
@@ -421,6 +467,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         if (isDebugMode && !isPaused) { drawMiniMap(); drawFpsCounter(); }
         if (isPaused) drawPauseMenu();
+        if (isFloorTransitioning) drawFloorTransitionEffects();
     }
     private void renderHorizontalSurfaces(double dirX, double dirY, double planeX, double planeY, double horizon) {
         final double minDistance = 0.0001;
@@ -611,10 +658,10 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         g2d.setFont(new Font("Consolas", Font.BOLD, 20));
         g2d.setColor(Color.BLACK);
-        g2d.drawString(fpsText, 40, RCJMS.SCREEN_HEIGHT - 30);
+        g2d.drawString(fpsText, 40, RCJMS.SCREEN_HEIGHT - 28);
 
         g2d.setColor(Color.GREEN);
-        g2d.drawString(fpsText, 38, RCJMS.SCREEN_HEIGHT - 28);
+        g2d.drawString(fpsText, 38, RCJMS.SCREEN_HEIGHT - 30);
         g2d.dispose();
     }
     private void trackFps() {
@@ -649,7 +696,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         g2d.setFont(new Font("Consolas", Font.BOLD, 16));
         g2d.setColor(Color.BLACK);
-        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 202, RCJMS.SCREEN_HEIGHT - (26 + line * 24) + 2);
+        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 198, RCJMS.SCREEN_HEIGHT - (26 + line * 24) + 2);
         g2d.setColor(new Color(150, 170, 255));
         g2d.drawString(text, RCJMS.SCREEN_WIDTH - 200, RCJMS.SCREEN_HEIGHT - (26 + line * 24));
         g2d.dispose();
@@ -660,7 +707,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         g2d.setFont(new Font("Consolas", Font.BOLD, 16));
         g2d.setColor(Color.BLACK);
-        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 202, RCJMS.SCREEN_HEIGHT - (26 + line * 24) + 2);
+        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 198, RCJMS.SCREEN_HEIGHT - (26 + line * 24) + 2);
         g2d.setColor(new Color(255, 200, 120));
         g2d.drawString(text, RCJMS.SCREEN_WIDTH - 200, RCJMS.SCREEN_HEIGHT - (26 + line * 24));
         g2d.dispose();
@@ -687,6 +734,109 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (MAZE_3D) g2d.drawString(NSLocalizedString.get("gv.floor") + (currentFloor + 1) + "/" + map3D.length,
                 RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 170);
 
+        int exitHintY = RCJMS.SCREEN_HEIGHT / 2 + 170 + (MAZE_3D ? 30 : 0);
+        g2d.drawString(NSLocalizedString.get("gv.exit_hint"), RCJMS.SCREEN_WIDTH / 2 - 90, exitHintY);
+
+        g2d.dispose();
+    }
+    private void drawFloorTransitionEffects() {
+        if (floorTransitionTime < FADE_OUT_DURATION)
+            drawStairTransitionOverlay((float)Math.clamp(floorTransitionTime / FADE_OUT_DURATION, 0.0, 1.0), true);
+        else if (floorTransitionTime < (FADE_OUT_DURATION + FADE_IN_DURATION))
+            drawStairTransitionOverlay((float)Math.clamp((floorTransitionTime - FADE_OUT_DURATION) / FADE_IN_DURATION, 0.0, 1.0), false);
+        else {
+            double captionTime = floorTransitionTime - (FADE_OUT_DURATION + FADE_IN_DURATION);
+            if (captionTime < (CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION + CAPTION_FADE_DURATION)) drawFloorCaption(captionTime);
+        }
+    }
+    private void drawStairTransitionOverlay(float progress, boolean closing) {
+        Graphics2D g2d = bufferedImage.createGraphics();
+        float centerX = RCJMS.SCREEN_WIDTH / 2f;
+        float centerY = RCJMS.SCREEN_HEIGHT / 2f;
+
+        float edgeParam = closing ? progress : (1f - progress);
+        float[] fractions = {0f, Math.clamp(1f - edgeParam - 0.16f, 0f, 1f), Math.clamp(1f - edgeParam, 0f, 1f), 1f};
+
+        for (int i = 1; i < fractions.length; i++) if (fractions[i] <= fractions[i - 1]) fractions[i] = fractions[i - 1] + 0.0001f;
+        if (fractions[3] > 1f) {
+            float overflow = fractions[3] - 1f;
+            for (int i = 0; i < fractions.length; i++) fractions[i] = Math.max(0f, fractions[i] - overflow);
+            fractions[3] = 1f;
+        }
+
+        Color transparent = new Color(0, 0, 0, 0);
+        Color opaque = new Color(0, 0, 0, 255);
+        Color[] colors = {transparent, transparent, opaque, opaque};
+        RadialGradientPaint paint = new RadialGradientPaint(new Point2D.Float(centerX, centerY), (float)Math.hypot(centerX, centerY), fractions, colors);
+
+        Paint oldPaint = g2d.getPaint();
+        g2d.setPaint(paint);
+        g2d.fillRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
+        g2d.setPaint(oldPaint);
+        g2d.dispose();
+    }
+    private void drawFloorCaption(double captionTime) {
+        Graphics2D g2d = bufferedImage.createGraphics();
+        g2d.setFont(new Font("Consolas", Font.BOLD, 56));
+        FontMetrics fm = g2d.getFontMetrics();
+
+        float alpha;
+        double rollProgress;
+
+        if (captionTime < CAPTION_ROLL_DURATION) {
+            alpha = Math.clamp((float) (captionTime / Math.max(0.001, CAPTION_ROLL_DURATION * 0.4)), 0f, 1f);
+            float inv = 1f - Math.clamp((float)(captionTime / CAPTION_ROLL_DURATION), 0f, 1f);
+            rollProgress = 1f - Math.pow(inv, 3);
+        } else if (captionTime < (CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION)) {
+            alpha = 1f;
+            rollProgress = 1;
+        } else {
+            alpha = Math.clamp((float) (1.0 - (captionTime - (CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION)) / CAPTION_FADE_DURATION), 0f, 1f);
+            rollProgress = 1;
+        }
+
+        String prefix = NSLocalizedString.get("gv.floor");
+        String suffix = "/" + map3D.length;
+        String oldNumber = String.valueOf(transitionFromFloor + 1);
+        String newNumber = String.valueOf(transitionToFloor + 1);
+
+        int prefixWidth = fm.stringWidth(prefix);
+        int numWidth = Math.max(fm.stringWidth(oldNumber), fm.stringWidth(newNumber));
+
+        int baseX = (RCJMS.SCREEN_WIDTH - (prefixWidth + numWidth +  fm.stringWidth(suffix))) / 2;
+        int rowHeight = fm.getHeight();
+
+        Composite oldComposite = g2d.getComposite();
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+
+        g2d.setColor(Color.BLACK);
+        g2d.drawString(prefix, baseX + 2, 112);
+        g2d.setColor(Color.WHITE);
+        g2d.drawString(prefix, baseX, 110);
+
+        int numX = baseX + prefixWidth;
+        Shape oldClip = g2d.getClip();
+        g2d.clipRect(numX, 110 - fm.getAscent(), numWidth, rowHeight);
+
+        int slideOffset = (int) (rollProgress * rowHeight);
+        g2d.setColor(Color.BLACK);
+        g2d.drawString(oldNumber, numX + 2, 112 - slideOffset);
+        g2d.setColor(Color.WHITE);
+        g2d.drawString(oldNumber, numX, 110 - slideOffset);
+
+        g2d.setColor(Color.BLACK);
+        g2d.drawString(newNumber, numX + 2, 112 + rowHeight - slideOffset);
+        g2d.setColor(Color.WHITE);
+        g2d.drawString(newNumber, numX, 110 + rowHeight - slideOffset);
+
+        g2d.setClip(oldClip);
+
+        g2d.setColor(Color.BLACK);
+        g2d.drawString(suffix, numX + numWidth + 2, 110 + 2);
+        g2d.setColor(Color.WHITE);
+        g2d.drawString(suffix, numX + numWidth, 110);
+
+        g2d.setComposite(oldComposite);
         g2d.dispose();
     }
     //endregion
@@ -701,8 +851,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (key == KeyEvent.VK_B) isDebugMode = !isDebugMode;
         if (key == KeyEvent.VK_SHIFT) shift = true;
         if (key == KeyEvent.VK_F1) noClip = !noClip;
-        if (key == KeyEvent.VK_G) GEOMETRY_MODE = GEOMETRY_MODE == MazeGenerator.GeometryMode.EUCLIDEAN
-                ? MazeGenerator.GeometryMode.WRONG : MazeGenerator.GeometryMode.EUCLIDEAN;
         if (key == KeyEvent.VK_ESCAPE) {
             isPaused = !isPaused;
             if (isPaused) {
@@ -712,6 +860,13 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 pausedTime += System.currentTimeMillis() - pauseStartTime;
                 hideCursor();
             }
+        }
+        if (isPaused && e.isControlDown() && key == KeyEvent.VK_C) {
+            isGameRunning = false;
+            showCursor();
+            RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu");
+            gameThread.interrupt();
+            return;
         }
         if (key == KeyEvent.VK_R) {
             if (isPaused) {
@@ -745,6 +900,9 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             playerX = playerY = 1.5;
             cameraAngle = cameraPitch = 0;
             onStairsLastFrame = false;
+            isFloorTransitioning = false;
+            floorSwitchApplied = false;
+            floorTransitionTime = 0;
             gameStartTime = System.currentTimeMillis();
             pausedTime = 0;
         }
@@ -759,6 +917,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     @Override public void mouseMoved(MouseEvent e) {
         if (isPaused) return;
+        if (isFloorTransitioning && floorTransitionTime < FADE_OUT_DURATION + FADE_IN_DURATION) return;
         if (isRecentering) {
             isRecentering = false;
             return;
