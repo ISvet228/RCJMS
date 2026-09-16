@@ -37,14 +37,14 @@ public class VictoryView extends JPanel {
         timeLabel.setLocalizationFormat("vv.victory_time", () -> new Object[]{
                 elapsedSeconds / 3600, (elapsedSeconds % 3600) / 60, elapsedSeconds % 60});
         timeLabel.setForeground(Color.WHITE);
-        timeLabel.setFont(new Font("Arial", Font.BOLD, 25));
+        timeLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 25));
         add(timeLabel);
 
-        restartButton.setFont(new Font("Arial", Font.BOLD, 32));
+        restartButton.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 32));
         restartButton.addActionListener(e -> {RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu");});
         add(restartButton);
 
-        exitButton.setFont(new Font("Arial", Font.BOLD, 18));
+        exitButton.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
         exitButton.addActionListener(e -> System.exit(0));
         add(exitButton);
 

@@ -165,9 +165,8 @@ public class CreditsView extends JPanel {
     private void drawCredits(Graphics2D g2) {
         int baseFontSize = 28, lineHeight = 45;
 
-        Font normalFont = new Font("Arial", Font.PLAIN, baseFontSize);
-        Font linkFont = new Font("Arial", Font.PLAIN, baseFontSize);
-        Font titleFont = new Font("Arial", Font.BOLD, 40);
+        Font baseFont = new Font(Font.SANS_SERIF, Font.PLAIN, baseFontSize);
+        Font titleFont = new Font(Font.SANS_SERIF, Font.BOLD, 40);
 
         double startY = RCJMS.SCREEN_HEIGHT + 100;
 
@@ -194,7 +193,7 @@ public class CreditsView extends JPanel {
 
             if (y < -lineHeight || y > RCJMS.SCREEN_HEIGHT + lineHeight) continue;
 
-            Font font = line.url != null ? linkFont : normalFont;
+            Font font = baseFont;
 
             if (i == 0 && !line.text.isEmpty()) font = titleFont;
             g2.setFont(font);
@@ -229,7 +228,7 @@ public class CreditsView extends JPanel {
             if (line.url == null || line.text.isEmpty()) continue;
             double y = scrollY + i * lineHeight;
 
-            Font font = new Font("Arial", Font.PLAIN, 28);
+            Font font = new Font(Font.SANS_SERIF, Font.PLAIN, 28);
             FontMetrics fm = getFontMetrics(font);
 
             int textWidth = fm.stringWidth(line.text);

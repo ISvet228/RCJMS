@@ -670,7 +670,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         Graphics2D g2d = bufferedImage.createGraphics();
         String fpsText = "FPS: " + currentFps;
 
-        g2d.setFont(new Font("Consolas", Font.BOLD, 20));
+        g2d.setFont(new Font(Font.MONOSPACED, Font.BOLD, 20));
         g2d.setColor(Color.BLACK);
         g2d.drawString(fpsText, 40, RCJMS.SCREEN_HEIGHT - 28);
 
@@ -696,7 +696,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         String timerText = String.format("%02d:%02d:%02d", hours, minutes, seconds);
 
-        g2d.setFont(new Font("Consolas", Font.BOLD, 24));
+        g2d.setFont(new Font(Font.MONOSPACED, Font.BOLD, 24));
         g2d.setColor(Color.BLACK);
         g2d.drawString(timerText, RCJMS.SCREEN_WIDTH - 156, 34);
 
@@ -708,7 +708,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         Graphics2D g2d = bufferedImage.createGraphics();
         String text = NSLocalizedString.get("gv.wrong_geometry");
 
-        g2d.setFont(new Font("Consolas", Font.BOLD, 16));
+        g2d.setFont(new Font(Font.MONOSPACED, Font.BOLD, 16));
         g2d.setColor(Color.BLACK);
         g2d.drawString(text, RCJMS.SCREEN_WIDTH - 198, RCJMS.SCREEN_HEIGHT - (26 + line * 24) + 2);
         g2d.setColor(new Color(150, 170, 255));
@@ -719,7 +719,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         Graphics2D g2d = bufferedImage.createGraphics();
         String text = NSLocalizedString.get("gv.floor") + (currentFloor + 1) + "/" + map3D.length;
 
-        g2d.setFont(new Font("Consolas", Font.BOLD, 16));
+        g2d.setFont(new Font(Font.MONOSPACED, Font.BOLD, 16));
         g2d.setColor(Color.BLACK);
         g2d.drawString(text, RCJMS.SCREEN_WIDTH - 198, RCJMS.SCREEN_HEIGHT - (26 + line * 24) + 2);
         g2d.setColor(new Color(255, 200, 120));
@@ -734,11 +734,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         String pausedText = NSLocalizedString.get("gv.paused");
 
         g2d.setColor(Color.WHITE);
-        g2d.setFont(new Font("Arial", Font.BOLD, 80));
+        g2d.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 80));
         int pausedWidth = g2d.getFontMetrics().stringWidth(pausedText);
         g2d.drawString(pausedText, (RCJMS.SCREEN_WIDTH - pausedWidth) / 2, RCJMS.SCREEN_HEIGHT / 2 - 50);
 
-        g2d.setFont(new Font("Arial", Font.PLAIN, 20));
+        g2d.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 20));
         g2d.drawString(NSLocalizedString.get("gv.continue"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 20);
         g2d.drawString(NSLocalizedString.get("gv.restart"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 50);
         g2d.drawString(NSLocalizedString.get("run"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 80);
@@ -791,7 +791,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     private void drawFloorCaption(double captionTime) {
         Graphics2D g2d = bufferedImage.createGraphics();
-        g2d.setFont(new Font("Consolas", Font.BOLD, 56));
+        g2d.setFont(new Font(Font.MONOSPACED, Font.BOLD, 56));
         FontMetrics fm = g2d.getFontMetrics();
 
         float alpha;

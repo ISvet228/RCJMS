@@ -202,7 +202,7 @@ public class MainMenuView extends JPanel {
 
             JLabel label = new JLabel("<html>if.controls<br>if.move<br>run</html>");
             label.setForeground(Color.WHITE);
-            label.setFont(new Font("Arial", Font.PLAIN, 16));
+            label.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 16));
 
             infoCloseButton = createButton(currentStyle, "close");
 
