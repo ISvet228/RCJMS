@@ -165,6 +165,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         mazeSeed = null;
         isCustomMap = true;
         MAZE_3D = false;
+        GEOMETRY_MODE = MazeGenerator.GeometryMode.EUCLIDEAN;
         MAZE_FLOORS = 1;
         map = customMap;
         MAZE_HEIGHT = map.length;
