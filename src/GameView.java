@@ -77,6 +77,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Other Stuff
     private boolean isGameRunning = false;
     private boolean isRecentering = false; //Mouse Recursion Helper
+    private boolean hasLastMousePos = false; //Wayland fallback delta-based mouse-look
+    private int lastMouseScreenX, lastMouseScreenY; //Wayland fallback cursor position
     private boolean isPaused = false;
     private boolean isDebugMode = false;
     private final boolean isCustomMap;
@@ -104,6 +106,16 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private int transitionFromFloor = 0;
     private int transitionToFloor = 0;
     //endregion
+
+    private static final boolean MOUSE_WARP_SUPPORTED = detectMouseWarpSupport();
+    private static boolean detectMouseWarpSupport() {
+        String os = System.getProperty("os.name", "").toLowerCase();
+        if (!(os.contains("nux") || os.contains("nix"))) return true;
+        String sessionType = System.getenv("XDG_SESSION_TYPE");
+        if (sessionType != null && sessionType.equalsIgnoreCase("wayland")) return false;
+        String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
+        return waylandDisplay == null || waylandDisplay.isEmpty();
+    }
     //endregion
 
     // region Constructors
@@ -184,8 +196,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
 
     //region Helpers
-    private void hideCursor() { setCursor(invisibleCursor); }
-    private void showCursor() { setCursor(Cursor.getDefaultCursor()); }
+    private void hideCursor() { setCursor(invisibleCursor); hasLastMousePos = false; }
+    private void showCursor() { setCursor(Cursor.getDefaultCursor()); hasLastMousePos = false; }
     @Override public void addNotify() {
         super.addNotify();
         SwingUtilities.invokeLater(this::requestFocusInWindow);
@@ -352,6 +364,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 transitionFromFloor = currentFloor;
                 transitionToFloor = targetFloor;
                 isFloorTransitioning = true;
+                hasLastMousePos = false; //avoid a mouse-look jump once the transition ends
                 floorSwitchApplied = false;
                 floorTransitionTime = 0;
             }
@@ -919,15 +932,13 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     @Override public void mouseMoved(MouseEvent e) {
         if (isPaused) return;
         if (isFloorTransitioning && floorTransitionTime < FADE_OUT_DURATION + FADE_IN_DURATION) return;
-        if (isRecentering) {
-            isRecentering = false;
-            return;
-        }
-
-        Point panelLocation = getLocationOnScreen();
-
-        int centerX = panelLocation.x + getWidth() / 2;
-        int centerY = panelLocation.y + getHeight() / 2;
+        if (MOUSE_WARP_SUPPORTED) mouseMovedWithWarp(e);
+        else mouseMovedWithDelta(e);
+    }
+    private void mouseMovedWithWarp(MouseEvent e) {
+        if (isRecentering) { isRecentering = false; return; }
+        int centerX = getLocationOnScreen().x + getWidth() / 2;
+        int centerY = getLocationOnScreen().y + getHeight() / 2;
 
         cameraAngle += (e.getXOnScreen() - centerX) * mouseSensitivity;
         cameraPitch -= (e.getYOnScreen() - centerY) * mouseSensitivity;
@@ -935,6 +946,27 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         isRecentering = true;
         cursorRobot.mouseMove(centerX, centerY);
+    }
+    private void mouseMovedWithDelta(MouseEvent e) {
+        int x = e.getXOnScreen();
+        int y = e.getYOnScreen();
+
+        if (!hasLastMousePos) {
+            lastMouseScreenX = x;
+            lastMouseScreenY = y;
+            hasLastMousePos = true;
+            return;
+        }
+
+        int dx = x - lastMouseScreenX;
+        int dy = y - lastMouseScreenY;
+
+        cameraAngle += dx * mouseSensitivity;
+        cameraPitch -= dy * mouseSensitivity;
+        cameraPitch = Math.clamp(cameraPitch, -1.2, 1.2);
+
+        lastMouseScreenX = x;
+        lastMouseScreenY = y;
     }
     //endregion
 
