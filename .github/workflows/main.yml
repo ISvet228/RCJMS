@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.os }}
+    name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -24,46 +24,57 @@ jobs:
             platform: Linux
             archive: RCJMS-Linux.zip
 
-          - os: macos-15-intel
+          - os: macos-15
             platform: macOS
             archive: RCJMS-macOS.zip
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          submodules: recursive
 
       - name: Setup JDK 21
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
-          java-package: jdk
+          architecture: x64
 
       - name: Check Java
         run: java -version
 
-      - name: Build JAR
+      - name: Compile
         shell: bash
         run: |
+          rm -rf build
           mkdir -p build
-          javac -d build $(find . -name "*.java" -not -path "./build/*")
-          jar --create --file RCJMS.jar --main-class RCJMS -C build .
+          find src -name "*.java" -print0 | xargs -0 javac -d build
+
+      - name: Create JAR
+        shell: bash
+        run: |
+          jar --create \
+            --file RCJMS.jar \
+            --main-class RCJMS \
+            -C build .
 
       - name: Prepare package
         shell: bash
         run: |
+          rm -rf package
           mkdir -p package
+
           cp RCJMS.jar package/
 
-          if [ -d "tmp" ]; then
-            cp -r tmp package/
+          if [ -d "src/Localization" ]; then
+            cp -r src/Localization package/
           fi
 
       - name: Build portable application
         shell: bash
         run: |
           rm -rf dist
-          mkdir -p dist
 
           jpackage \
             --input package \
@@ -73,7 +84,7 @@ jobs:
             --type app-image \
             --dest dist
 
-      - name: Create ZIP
+      - name: Create archive
         shell: bash
         run: |
           cd dist
@@ -90,25 +101,32 @@ jobs:
           name: RCJMS-${{ matrix.platform }}
           path: ${{ matrix.archive }}
 
+      - name: Upload JAR
+        if: matrix.platform == 'Linux'
+        uses: actions/upload-artifact@v5
+        with:
+          name: RCJMS-JAR
+          path: RCJMS.jar
+
   release:
     name: Upload release assets
     runs-on: ubuntu-latest
     needs: build
 
     steps:
-      - name: Download builds
+      - name: Download artifacts
         uses: actions/download-artifact@v6
         with:
           path: artifacts
+          merge-multiple: true
 
       - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          find artifacts -type f
-
           gh release upload \
             "${{ github.event.release.tag_name }}" \
-            artifacts/RCJMS-Windows/RCJMS-Windows.zip \
-            artifacts/RCJMS-Linux/RCJMS-Linux.zip \
-            artifacts/RCJMS-macOS/RCJMS-macOS.zip
+            artifacts/RCJMS.jar \
+            artifacts/RCJMS-Windows.zip \
+            artifacts/RCJMS-Linux.zip \
+            artifacts/RCJMS-macOS.zip
