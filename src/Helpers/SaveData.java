@@ -97,8 +97,8 @@ public final class SaveData {
     private static void save(Data data) throws IOException {
         Files.createDirectories(AppPaths.DATA_DIR);
         Path temp = AppPaths.SAVE_FILE.resolveSibling(AppPaths.SAVE_FILE.getFileName() + ".tmp");
-        try (BufferedWriter writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+        try (BufferedWriter writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+            writer.write("#Texture Version " + VERSION); writer.newLine(); writer.newLine();
             writer.write("[settings]"); writer.newLine();
             writer.write("language=" + safe(data.language)); writer.newLine();
             writer.write("theme=" + data.theme.name()); writer.newLine();
