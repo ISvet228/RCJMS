@@ -99,10 +99,20 @@ jobs:
         run: |
           7z a "${{ matrix.archive }}" dist/RCJMS
 
-      - name: Create Unix archive
-        if: matrix.platform != 'Windows'
+      - name: Create macOS archive
+        if: matrix.platform == 'macOS'
         shell: bash
         run: |
+          test -d dist/RCJMS.app
+          ditto -c -k --sequesterRsrc --keepParent \
+            dist/RCJMS.app \
+            "${{ matrix.archive }}"
+
+      - name: Create Linux archive
+        if: matrix.platform == 'Linux'
+        shell: bash
+        run: |
+          test -d dist/RCJMS
           cd dist
           zip -r "../${{ matrix.archive }}" RCJMS
 
