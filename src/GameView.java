@@ -310,7 +310,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 }
                 else {
                     repaint();
-                    try { Thread.sleep(10); }
+                    try { Thread.sleep(1); }
                     catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
                     nextVSyncTime = System.nanoTime();
                 }
