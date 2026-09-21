@@ -131,7 +131,7 @@ jobs:
 
   release:
     name: Upload Release Assets
-    if: github.event_name == 'release' && github.event.action == 'published'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: build
 
@@ -150,14 +150,18 @@ jobs:
           test -f artifacts/RCJMS-Linux.zip
           test -f artifacts/RCJMS-macOS.zip
 
-      - name: Upload Release assets
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "Complete Ver."
+          name: "Latest Tusted"
+          draft: false
+          prerelease: false
+          make_latest: true
+          files: |
+            artifacts/RCJMS.jar
+            artifacts/RCJMS-Windows.zip
+            artifacts/RCJMS-Linux.zip
+            artifacts/RCJMS-macOS.zip
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload \
-            "${{ github.event.release.tag_name }}" \
-            artifacts/RCJMS.jar \
-            artifacts/RCJMS-Windows.zip \
-            artifacts/RCJMS-Linux.zip \
-            artifacts/RCJMS-macOS.zip \
-            --clobber
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
