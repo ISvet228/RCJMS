@@ -1,8 +1,12 @@
-name: Build Release
+name: Build RCJMS
 
 on:
+  push:
+    branches:
+      - main
   release:
-    types: [published]
+    types:
+      - published
 
 permissions:
   contents: write
@@ -16,16 +20,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            platform: Windows
+          - platform: Windows
+            os: windows-latest
             archive: RCJMS-Windows.zip
 
-          - os: ubuntu-latest
-            platform: Linux
+          - platform: Linux
+            os: ubuntu-latest
             archive: RCJMS-Linux.zip
 
-          - os: macos-15
-            platform: macOS
+          - platform: macOS
+            os: macos-15
             archive: RCJMS-macOS.zip
 
     steps:
@@ -39,17 +43,22 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          architecture: x64
-
-      - name: Check Java
-        run: java -version
 
       - name: Compile
         shell: bash
         run: |
           rm -rf build
           mkdir -p build
-          find src -name "*.java" -print0 | xargs -0 javac -d build
+
+          find src -name "*.java" -print0 > sources.txt
+          javac -d build @sources.txt
+
+      - name: Copy resources
+        shell: bash
+        run: |
+          if [ -d src/Localization ]; then
+            cp -r src/Localization build/
+          fi
 
       - name: Create JAR
         shell: bash
@@ -59,41 +68,43 @@ jobs:
             --main-class RCJMS \
             -C build .
 
-      - name: Prepare package
+      - name: Test JAR
         shell: bash
         run: |
-          rm -rf package
-          mkdir -p package
+          test -f RCJMS.jar
+          jar --describe-module --file RCJMS.jar || true
+          jar tf RCJMS.jar
 
+      - name: Prepare jpackage input
+        shell: bash
+        run: |
+          rm -rf package dist
+          mkdir package
           cp RCJMS.jar package/
 
-          if [ -d "src/Localization" ]; then
-            cp -r src/Localization package/
-          fi
-
-      - name: Build portable application
+      - name: Create portable application
         shell: bash
         run: |
-          rm -rf dist
-
           jpackage \
+            --type app-image \
             --input package \
             --name RCJMS \
             --main-jar RCJMS.jar \
             --main-class RCJMS \
-            --type app-image \
             --dest dist
 
-      - name: Create archive
+      - name: Create Windows archive
+        if: matrix.platform == 'Windows'
+        shell: bash
+        run: |
+          7z a "${{ matrix.archive }}" dist/RCJMS
+
+      - name: Create Unix archive
+        if: matrix.platform != 'Windows'
         shell: bash
         run: |
           cd dist
-
-          if [ "${{ matrix.platform }}" = "Windows" ]; then
-            7z a "../${{ matrix.archive }}" RCJMS
-          else
-            zip -r "../${{ matrix.archive }}" RCJMS
-          fi
+          zip -r "../${{ matrix.archive }}" RCJMS
 
       - name: Upload portable build
         uses: actions/upload-artifact@v5
@@ -109,7 +120,8 @@ jobs:
           path: RCJMS.jar
 
   release:
-    name: Upload release assets
+    name: Upload Release Assets
+    if: github.event_name == 'release' && github.event.action == 'published'
     runs-on: ubuntu-latest
     needs: build
 
@@ -120,7 +132,15 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Upload to GitHub Release
+      - name: Verify artifacts
+        run: |
+          ls -lah artifacts
+          test -f artifacts/RCJMS.jar
+          test -f artifacts/RCJMS-Windows.zip
+          test -f artifacts/RCJMS-Linux.zip
+          test -f artifacts/RCJMS-macOS.zip
+
+      - name: Upload Release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -129,4 +149,5 @@ jobs:
             artifacts/RCJMS.jar \
             artifacts/RCJMS-Windows.zip \
             artifacts/RCJMS-Linux.zip \
-            artifacts/RCJMS-macOS.zip
+            artifacts/RCJMS-macOS.zip \
+            --clobber
