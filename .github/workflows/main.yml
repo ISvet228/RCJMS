@@ -50,8 +50,8 @@ jobs:
           rm -rf build
           mkdir -p build
 
-          mapfile -d '' sources < <(find src -name "*.java" -print0)
-          javac -d build "${sources[@]}"
+          find src -name "*.java" -print > sources.txt
+          javac -d build @sources.txt
 
       - name: Copy resources
         shell: bash
