@@ -3,8 +3,6 @@ import Helpers.*;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Random;
 
@@ -123,15 +121,7 @@ public class VictoryView extends JPanel {
         revalidate();
         repaint();
     }
-    private Style loadTheme() {
-        try {
-            if (Files.exists(AppPaths.THEME_FILE)) {
-                String name = Files.readString(AppPaths.THEME_FILE).trim();
-                return Style.valueOf(name);
-            }
-        } catch (IOException | IllegalArgumentException ex) { ex.printStackTrace(); }
-        return Style.FLAT;
-    }
+    private Style loadTheme() { return SaveData.load().theme; }
 }
 class Firework {
     double x, y, vx, vy;

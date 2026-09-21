@@ -6,15 +6,11 @@ import java.awt.event.*; //Input Library
 import java.awt.image.*; //Buffer Library
 import java.awt.geom.Point2D;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.*;
 import java.util.function.IntConsumer;
 
 public class GameView extends JPanel implements Runnable, KeyListener, MouseMotionListener {
     //region Variables
-    public static int MINI_MAP_WIDTH = 250;
-    public static int MINI_MAP_HEIGHT = 250;
+    public static int MINI_MAP_WIDTH = 250, MINI_MAP_HEIGHT = 250;
     public static int MAZE_WIDTH, MAZE_HEIGHT;
     public static MazeGenerator.FinishMode MAZE_MODE = MazeGenerator.FinishMode.RANDOM_EDGE;
     public static MazeGenerator.GeometryMode GEOMETRY_MODE = MazeGenerator.GeometryMode.EUCLIDEAN;
@@ -30,20 +26,22 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private int currentFloor = 0;
     private boolean onStairsLastFrame = false;
     private final BufferedImage bufferedImage;
+    private final BufferedImage renderImage;
     private final Cursor invisibleCursor;
     private Robot cursorRobot; //BOBR KURSOR JA PERDOLE
     private Thread gameThread;
     //endregion
 
-    private final int[] pixels; //BRUH JUST PIXELS IN IMAGE
+    private final int[] pixels, renderPixels; //PUXELS
+    private final int renderWidth, renderHeight;
     private int[][] map;
 
     private final Long mazeSeed;
 
-    private final int[][] wallTexture = TextureEditorView.readTexture(AppPaths.WALL_TEXTURE_FILE);
-    private final int[][] floorTexture = TextureEditorView.readTexture(AppPaths.FLOOR_TEXTURE_FILE);
-    private final int[][] ceilingTexture = TextureEditorView.readTexture(AppPaths.CEILING_TEXTURE_FILE);
-    private final int[][] finishTexture = TextureEditorView.readFinishTexture(AppPaths.FINISH_TEXTURE_FILE);
+    private final TextureEditorView.RuntimeTexture wallTexture = TextureEditorView.readRuntimeTexture(AppPaths.WALL_TEXTURE_FILE, TextureEditorView.MAX_TEXTURE_SIZE, TextureEditorView.MAX_TEXTURE_SIZE);
+    private final TextureEditorView.RuntimeTexture floorTexture = TextureEditorView.readRuntimeTexture(AppPaths.FLOOR_TEXTURE_FILE, TextureEditorView.MAX_TEXTURE_SIZE, TextureEditorView.MAX_TEXTURE_SIZE);
+    private final TextureEditorView.RuntimeTexture ceilingTexture = TextureEditorView.readRuntimeTexture(AppPaths.CEILING_TEXTURE_FILE, TextureEditorView.MAX_TEXTURE_SIZE, TextureEditorView.MAX_TEXTURE_SIZE);
+    private final TextureEditorView.RuntimeTexture finishTexture = TextureEditorView.readRuntimeTexture(AppPaths.FINISH_TEXTURE_FILE, TextureEditorView.MAX_TEXTURE_SIZE, TextureEditorView.MAX_FINISH_HEIGHT);
 
     private final int wallBaseColor = 0xECD485;
     private final int floorBaseColor = 0xD3AF63;
@@ -66,31 +64,33 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
 
     //region Multi - Thread render
-    private final int renderThreadCount = Math.max(2, Runtime.getRuntime().availableProcessors());
-    private final ExecutorService renderExecutor = Executors.newFixedThreadPool(renderThreadCount, r -> {
-        Thread t = new Thread(r, "GameViewRenderWorker");
-        t.setDaemon(true);
-        return t;
-    });
+    private final int renderThreadCount = Math.clamp(Runtime.getRuntime().availableProcessors(), 1, 8);
+    private final RenderWorkers renderWorkers = new RenderWorkers(renderThreadCount);
     //endregion
+
+    private static volatile double renderScale = 1.0;
+    private static volatile boolean vsync = false;
+    public static double getRenderScale() { return renderScale; }
+    public static void setRenderScale(double scale) { renderScale = Math.clamp(scale, 0.1, 1.0); }
+    public static boolean isVSyncEnabled() { return vsync; }
+    public static void setVSyncEnabled(boolean enabled) { vsync = enabled; }
 
     //region Other Stuff
     private boolean isGameRunning = false;
     private boolean isRecentering = false; //Mouse Recursion Helper
     private boolean hasLastMousePos = false; //Wayland fallback delta-based mouse-look
     private int lastMouseScreenX, lastMouseScreenY; //Wayland fallback cursor position
-    private boolean isPaused = false;
-    private boolean isDebugMode = false;
+    private boolean isPaused = false, isDebugMode = false;
     private final boolean isCustomMap;
     private long gameStartTime = System.currentTimeMillis();
-    private long pauseStartTime = 0;
-    private long pausedTime = 0;
-    private  long elapsedSeconds;
+    private long pauseStartTime = 0, pausedTime = 0, elapsedSeconds;
     //endregion
 
     //region FPS Counter
     private int frameCounter = 0, currentFps = 0;
     private long fpsWindowStart = System.currentTimeMillis();
+    private final Font fpsFont = new Font(Font.MONOSPACED, Font.BOLD, 20);
+    private final Font timerFont = new Font(Font.MONOSPACED, Font.BOLD, 24);
     //endregion
 
     //region Floor Transition Animation
@@ -100,11 +100,9 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private static final double CAPTION_HOLD_DURATION = 0.9;
     private static final double CAPTION_FADE_DURATION = 0.4;
 
-    private boolean isFloorTransitioning = false;
-    private boolean floorSwitchApplied = false;
+    private boolean isFloorTransitioning = false, floorSwitchApplied = false;
     private double floorTransitionTime = 0;
-    private int transitionFromFloor = 0;
-    private int transitionToFloor = 0;
+    private int transitionFromFloor = 0, transitionToFloor = 0;
     //endregion
 
     private static final boolean MOUSE_WARP_SUPPORTED = detectMouseWarpSupport();
@@ -132,6 +130,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         bufferedImage = new BufferedImage(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT, BufferedImage.TYPE_INT_RGB);
         pixels = ((DataBufferInt) bufferedImage.getRaster().getDataBuffer()).getData();
+        renderWidth = Math.max(1, (int) Math.round(RCJMS.SCREEN_WIDTH * renderScale));
+        renderHeight = Math.max(1, (int) Math.round(RCJMS.SCREEN_HEIGHT * renderScale));
+        renderImage = new BufferedImage(renderWidth, renderHeight, BufferedImage.TYPE_INT_RGB);
+        renderPixels = ((DataBufferInt) renderImage.getRaster().getDataBuffer()).getData();
+        cameraXCache = buildCameraXCache();
 
         mazeSeed = seed;
         isCustomMap = false;
@@ -139,7 +142,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         MAZE_MODE = MazeGenerator.FinishMode.values()[mazeMode];
 
         MAZE_3D = floors > 1;
-        MAZE_FLOORS = MAZE_3D ? Math.max(2, floors) : 1;
+        MAZE_FLOORS = MAZE_3D ? floors : 1;
 
         if (MAZE_3D) {
             mazeGenerator3D = mazeSeed != null ? new MazeGenerator3D(mazeWidth, mazeHeight, MAZE_FLOORS, mazeSeed, GEOMETRY_MODE)
@@ -156,7 +159,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                     : new MazeGenerator(MAZE_WIDTH = mazeWidth, MAZE_HEIGHT = mazeHeight, GEOMETRY_MODE);
             map = mazeGenerator.generate(MAZE_MODE);
         }
-
         addKeyListener(this);
         addMouseMotionListener(this);
 
@@ -174,6 +176,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         bufferedImage = new BufferedImage(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT, BufferedImage.TYPE_INT_RGB);
         pixels = ((DataBufferInt) bufferedImage.getRaster().getDataBuffer()).getData();
+        renderWidth = Math.max(1, (int) Math.round(RCJMS.SCREEN_WIDTH * renderScale));
+        renderHeight = Math.max(1, (int) Math.round(RCJMS.SCREEN_HEIGHT * renderScale));
+        renderImage = new BufferedImage(renderWidth, renderHeight, BufferedImage.TYPE_INT_RGB);
+        renderPixels = ((DataBufferInt) renderImage.getRaster().getDataBuffer()).getData();
+        cameraXCache = buildCameraXCache();
         mazeSeed = null;
         isCustomMap = true;
         MAZE_3D = false;
@@ -182,7 +189,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         map = customMap;
         MAZE_HEIGHT = map.length;
         MAZE_WIDTH = map[0].length;
-
         addKeyListener(this);
         addMouseMotionListener(this);
 
@@ -205,32 +211,72 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private void parallelRange(int start, int end, IntConsumer task) {
         int range = end - start;
         if (range <= 0) return;
-        int threads = Math.min(renderThreadCount, range);
-        int chunkSize = (int) Math.ceil(range / (double) threads);
-
-        List<Future<?>> futures = new ArrayList<>(threads);
-        for (int t = 0; t < threads; t++) {
-            int from = start + t * chunkSize;
-            int to = Math.min(end, from + chunkSize);
-            if (from >= to) continue;
-
-            futures.add(renderExecutor.submit(() -> { for (int i = from; i < to; i++) task.accept(i); }));
-        }
-        for (Future<?> future : futures) {
-            try { future.get(); }
-            catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
-            catch (Exception e) { throw new RuntimeException(e); }
-        }
+        renderWorkers.execute(start, end, task);
     }
-    private int getTextureWidth(int[][] texture) {
-        if (texture == null || texture.length == 0) return 0;
-        return texture[0] == null ? 0 : texture[0].length;
-    }
-    private int getTextureHeight(int[][] texture) {
-        if (texture == null || texture.length == 0) return 0;
-        if (getTextureWidth(texture) == 0) return 0;
-        for (int[] ints : texture) if (ints == null || ints.length != getTextureWidth(texture)) return 0;
-        return texture.length;
+
+    private static final class RenderWorkers {
+        private final Object lock = new Object();
+        private final Worker[] workers;
+        private IntConsumer task;
+        private int start, end, remaining;
+        private long generation;
+        private boolean stopping;
+
+        RenderWorkers(int count) {
+            workers = new Worker[count];
+            for (int i = 0; i < count; i++) {
+                workers[i] = new Worker("GameViewRenderWorker-" + i, i);
+                workers[i].start();
+            }
+        }
+
+        void execute(int start, int end, IntConsumer task) {
+            synchronized (lock) {
+                this.start = start;
+                this.end = end;
+                this.task = task;
+                remaining = workers.length;
+                generation++;
+                lock.notifyAll();
+                while (remaining > 0 && !stopping) {
+                    try { lock.wait(); }
+                    catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+                }
+            }
+        }
+        void shutdown() {
+            synchronized (lock) {
+                stopping = true;
+                lock.notifyAll();
+            }
+        }
+        private final class Worker extends Thread {
+            private long seenGeneration;
+            private final int index;
+            Worker(String name, int index) { super(name); this.index = index; setDaemon(true); }
+            @Override public void run() {
+                while (true) {
+                    IntConsumer localTask;
+                    int localStart, localEnd, index;
+                    synchronized (lock) {
+                        while (!stopping && seenGeneration == generation) {
+                            try { lock.wait(); }
+                            catch (InterruptedException e) { if (stopping) return; }
+                        }
+                        if (stopping) return;
+                        seenGeneration = generation;
+                        index = this.index;
+                        int range = end - start;
+                        int chunk = (range + workers.length - 1) / workers.length;
+                        localStart = start + index * chunk;
+                        localEnd = Math.min(end, localStart + chunk);
+                        localTask = task;
+                    }
+                    if (localStart < localEnd) for (int i = localStart; i < localEnd; i++) localTask.accept(i);
+                    synchronized (lock) { if (--remaining == 0) lock.notifyAll(); }
+                }
+            }
+        }
     }
     //endregion
 
@@ -243,21 +289,63 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     @Override public void run() { //OMG IT'S DA GAME CYCLE!!!
         try {
-            long lastFrameTime = System.nanoTime();
+            long lastFrameTime = System.nanoTime(), nextVSyncTime = lastFrameTime;
+            final long vsyncInterval = getDisplayRefreshIntervalNanos();
+
             while (isGameRunning) {
                 long currentFrameTime = System.nanoTime();
                 double deltaTime = (currentFrameTime - lastFrameTime) / 1_000_000_000.0;
                 lastFrameTime = currentFrameTime;
+                deltaTime = Math.min(deltaTime, 0.1);
                 if (!isPaused) update(deltaTime);
 
-                render(); repaint();
+                render();
+                if (isVSyncEnabled()) {
+                    paintFrameSynchronously();
+                    Toolkit.getDefaultToolkit().sync();
+                    nextVSyncTime += vsyncInterval;
+                    waitUntil(nextVSyncTime);
+                    long now = System.nanoTime();
+                    if (now > nextVSyncTime + vsyncInterval * 2) nextVSyncTime = now;
+                }
+                else {
+                    repaint();
+                    try { Thread.sleep(10); }
+                    catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+                    nextVSyncTime = System.nanoTime();
+                }
                 trackFps();
-
-                try {Thread.sleep(10); //FPS limit, you can experiment with it, but lower sleeptime means more artifacts
-                } catch (Exception ignored) {}
             }
-        } finally {
-            renderExecutor.shutdownNow(); //stop worker threads once the game loop ends
+        }
+        finally { renderWorkers.shutdown(); }
+    }
+    private long getDisplayRefreshIntervalNanos() {
+        int refreshRate = 60;
+        try {
+            GraphicsConfiguration gc = getGraphicsConfiguration();
+            if (gc != null && gc.getDevice() != null) {
+                int rate = gc.getDevice().getDisplayMode().getRefreshRate();
+                if (rate > 1 && rate <= 1000) refreshRate = rate;
+            }
+        } catch (Exception ignored) { }
+        return 1_000_000_000L / refreshRate;
+    }
+    private void paintFrameSynchronously() {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            try { SwingUtilities.invokeAndWait(() -> paintImmediately(0, 0, getWidth(), getHeight())); }
+            catch (Exception ignored) { }
+        }
+        else paintImmediately(0, 0, getWidth(), getHeight());
+    }
+    private void waitUntil(long targetNanos) {
+        while (true) {
+            long remaining = targetNanos - System.nanoTime();
+            if (remaining <= 0) return;
+            if (remaining > 2_000_000L) {
+                try { Thread.sleep(Math.max(1, (remaining - 1_000_000L) / 1_000_000L)); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+            }
+            else Thread.onSpinWait();
         }
     }
     private void update(double deltaTiime) {
@@ -285,26 +373,25 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         double speed = ((shift) ? runSpeed : moveSpeed) * deltaTiime;
 
-        double strafeX = Math.cos(cameraAngle + Math.PI / 2);
-        double strafeY = Math.sin(cameraAngle + Math.PI / 2);
+        double dirX = Math.cos(cameraAngle), dirY = Math.sin(cameraAngle);
         double nextX = playerX;
         double nextY = playerY;
 
         if (w) {
-            nextX += Math.cos(cameraAngle) * speed;
-            nextY += Math.sin(cameraAngle) * speed;
+            nextX += dirX * speed;
+            nextY += dirY * speed;
         }
         if (s) {
-            nextX -= Math.cos(cameraAngle) * speed;
-            nextY -= Math.sin(cameraAngle) * speed;
+            nextX -= dirX * speed;
+            nextY -= dirY * speed;
         }
         if (a) {
-            nextX -= strafeX * speed;
-            nextY -= strafeY * speed;
+            nextX -= -dirY * speed;
+            nextY -= dirX * speed;
         }
         if (d) {
-            nextX += strafeX * speed;
-            nextY += strafeY * speed;
+            nextX += -dirY * speed;
+            nextY += dirX * speed;
         }
 
         nextX = Math.clamp(nextX, 0.0001, MAZE_WIDTH - 0.0001);
@@ -374,40 +461,37 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion/
 
     //region Rendering
+    private final double[] cameraXCache;
+    private double[] buildCameraXCache() {
+        double[] values = new double[renderWidth];
+        for (int x = 0; x < values.length; x++) values[x] = 2.0 * x / (double) values.length - 1.0;
+        return values;
+    }
+
     private void render() {
         boolean wrongGeometry = GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG;
         double curvature = HYPERBOLIC_CURVATURE;
-
-        double dirX = Math.cos(cameraAngle);
-        double dirY = Math.sin(cameraAngle);
-
+        double dirX = Math.cos(cameraAngle), dirY = Math.sin(cameraAngle);
         double planeLength = Math.tan((wrongGeometry ? Math.toRadians(140) : Math.PI / 3.0) / 2.0);
-        double planeX = -dirY * planeLength;
-        double planeY =  dirX * planeLength;
+        double planeX = -dirY * planeLength, planeY = dirX * planeLength;
+        double horizon = renderHeight / 2.0 + cameraPitch * renderHeight / 2.0;
 
-        double horizon = RCJMS.SCREEN_HEIGHT / 2.0 + cameraPitch * RCJMS.SCREEN_HEIGHT / 2.0;
+        final int wallWidth = wallTexture.width, wallHeight = wallTexture.height;
+        final int finishWidth = finishTexture.width, finishHeight = finishTexture.height;
+        final int screenWidth = renderWidth, screenHeight = renderHeight;
+        final int[] wallPixels = wallTexture.pixels, finishPixels = finishTexture.pixels;
+        final int mapWidth = map[0].length, mapHeight = map.length;
+        final double lightDistance = effectiveFlashlightDistance(wrongGeometry);
+
         renderHorizontalSurfaces(dirX, dirY, planeX, planeY, horizon);
 
-        int textureHeight = getTextureHeight(wallTexture);
-        int textureWidth = getTextureWidth(wallTexture);
-        int finishTextureHeight = getTextureHeight(finishTexture);
-        int finishTextureWidth = getTextureWidth(finishTexture);
-
-        parallelRange(0, RCJMS.SCREEN_WIDTH, x -> {
-            double cameraX = 2.0 * x / (double) RCJMS.SCREEN_WIDTH - 1.0;
-
-            double rayDirX = dirX + planeX * cameraX;
-            double rayDirY = dirY + planeY * cameraX;
-
-            int mapX = (int) playerX;
-            int mapY = (int) playerY;
-
+        parallelRange(0, screenWidth, x -> {
+            double rayDirX = dirX + planeX * cameraXCache[x], rayDirY = dirY + planeY * cameraXCache[x];
+            int mapX = (int)playerX, mapY = (int)playerY;
             double deltaDistX = rayDirX == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / rayDirX);
             double deltaDistY = rayDirY == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / rayDirY);
-
-            double sideDistX = (rayDirX < 0 ? (playerX - mapX) : (mapX + 1.0 - playerX)) * deltaDistX;
-            double sideDistY = (rayDirY < 0 ? (playerY - mapY) : (mapY + 1.0 - playerY)) * deltaDistY;
-
+            double sideDistX = (rayDirX < 0 ? playerX - mapX : mapX + 1.0 - playerX) * deltaDistX;
+            double sideDistY = (rayDirY < 0 ? playerY - mapY : mapY + 1.0 - playerY) * deltaDistY;
             boolean hit = false;
             int side = 0, hitType = 0;
 
@@ -421,113 +505,99 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                     mapY += rayDirY < 0 ? -1 : 1;
                     side = 1;
                 }
-
-                if (mapX < 0 || mapY < 0 || mapX >= map[0].length || mapY >= map.length) break;
+                if (mapX < 0 || mapY < 0 || mapX >= mapWidth || mapY >= mapHeight) break;
                 hitType = map[mapY][mapX];
                 if (hitType == 1 || hitType == 2) hit = true;
             }
-
             if (!hit) return;
 
             double perpendicularDistance = side == 0 ? sideDistX - deltaDistX : sideDistY - deltaDistY;
             perpendicularDistance = Math.max(perpendicularDistance, 0.0001);
-
             double projectedDistance = wrongGeometry ? HyperbolicMath.hyperbolicDistance(perpendicularDistance, curvature) : perpendicularDistance;
-
-            int wallHeight = (int) (RCJMS.SCREEN_HEIGHT / projectedDistance);
-            int drawStart = Math.max(hitType == 2 ? (int) horizon : (int) (horizon - wallHeight / 2.0), 0);
-            int drawEnd = Math.min((int) (horizon + wallHeight / 2.0), RCJMS.SCREEN_HEIGHT - 1);
-
+            int wallHeightPx = (int) (screenHeight / projectedDistance);
+            int drawStart = Math.max(hitType == 2 ? (int) horizon : (int) (horizon - wallHeightPx / 2.0), 0);
+            int drawEnd = Math.min((int) (horizon + wallHeightPx / 2.0), screenHeight - 1);
             if (drawStart > drawEnd) return;
-            double wallX;
-            wallX = side == 0 ?  playerY + perpendicularDistance * rayDirY : playerX + perpendicularDistance * rayDirX;
-            wallX -= Math.floor(wallX);
 
+            double wallX = side == 0 ? playerY + perpendicularDistance * rayDirY : playerX + perpendicularDistance * rayDirX;
+            wallX -= Math.floor(wallX);
             if (side == 0 && rayDirX > 0) wallX = 1.0 - wallX;
             if (side == 1 && rayDirY < 0) wallX = 1.0 - wallX;
 
-            double brightness = 1.0 - (projectedDistance / effectiveFlashlightDistance(wrongGeometry));
-            brightness = Math.clamp(brightness, 0.03, 1.0);
-
+            double brightness = Math.clamp(1.0 - projectedDistance / lightDistance, 0.03, 1.0);
             if (side == 1) brightness *= 0.85;
-
-            int offset = drawStart * RCJMS.SCREEN_WIDTH;
+            int texX = Math.min((int)(wallX * (hitType == 2 ? finishWidth : wallWidth)), (hitType == 2 ? finishWidth : wallWidth) - 1);
+            if (texX < 0) texX = 0;
+            int offset = drawStart * screenWidth + x;
 
             for (int y = drawStart; y <= drawEnd; y++) {
-                double wallPosition;
-                if (hitType == 2) wallPosition = (y - horizon) / Math.max(wallHeight / 2.0, 1.0);
-                else wallPosition = (y - (horizon - wallHeight / 2.0)) / Math.max(wallHeight, 1.0);
-                wallPosition = Math.clamp(wallPosition, 0.0, 0.999999);
-
+                double wallPosition = hitType == 2
+                        ? (y - horizon) / Math.max(wallHeightPx / 2.0, 1.0)
+                        : (y - (horizon - wallHeightPx / 2.0)) / Math.max(wallHeightPx, 1.0);
+                int texY = (int)(Math.clamp(wallPosition, 0.0, 0.999999) * (hitType == 2 ? finishHeight : wallHeight));
                 int color;
-                if (hitType == 2) {
-                    if (finishTextureWidth > 0 && finishTextureHeight > 0)
-                        color = finishTexture[Math.clamp((int) (wallPosition * finishTextureHeight), 0, finishTextureHeight - 1)]
-                                [Math.clamp((int) (wallX * finishTextureWidth), 0, finishTextureWidth - 1)];
-                    else color = 0x33FF66;
-                } else if (textureWidth > 0 && textureHeight > 0) {
-                    color = wallTexture[Math.clamp((int) (wallPosition * textureHeight), 0, textureHeight - 1)][Math.clamp((int) (wallX * textureWidth), 0, textureWidth - 1)];
-                } else color = wallBaseColor;
-
-                pixels[offset + x] = applyBrightness(color, brightness);
-                offset += RCJMS.SCREEN_WIDTH;
+                if (hitType == 2 && finishWidth > 0 && finishHeight > 0) color = finishPixels[texY * finishWidth + texX];
+                else if (hitType != 2 && wallWidth > 0 && wallHeight > 0) color = wallPixels[texY * wallWidth + texX];
+                else color = hitType == 2 ? 0x33FF66 : wallBaseColor;
+                renderPixels[offset] = applyBrightness(color, brightness);
+                offset += screenWidth;
             }
         });
+
+        if (renderScale == 1.0) System.arraycopy(renderPixels, 0, pixels, 0, pixels.length);
+        else {
+            Graphics2D g2d = bufferedImage.createGraphics();
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            g2d.drawImage(renderImage, 0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT, null);
+            g2d.dispose();
+        }
 
         drawTimer();
         int hudLine = 0;
         if (wrongGeometry) drawGeometryBadge(hudLine++);
         if (MAZE_3D) drawFloorIndicator(hudLine);
-
         if (isDebugMode && !isPaused) { drawMiniMap(); drawFpsCounter(); }
         if (isPaused) drawPauseMenu();
         if (isFloorTransitioning) drawFloorTransitionEffects();
     }
+
     private void renderHorizontalSurfaces(double dirX, double dirY, double planeX, double planeY, double horizon) {
-        final double minDistance = 0.0001;
         final boolean hyperbolic = GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG;
+        final double minDistance = 0.0001, lightDistance = effectiveFlashlightDistance(hyperbolic);
+        final double leftRayX = dirX - planeX, leftRayY = dirY - planeY;
+        final double rayStepX = (2.0 * planeX) / renderWidth, rayStepY = (2.0 * planeY) / renderWidth;
+        final int width = renderWidth;
 
-        double leftRayX = dirX - planeX, leftRayY = dirY - planeY;
-        double rightRayX = dirX + planeX,  rightRayY = dirY + planeY;
-
-        parallelRange(Math.max(0, (int) Math.ceil(horizon)), RCJMS.SCREEN_HEIGHT, y -> {
-            if ((y - horizon) < minDistance) return;
-
-            double rowDistance = RCJMS.SCREEN_HEIGHT / (2.0 * (y - horizon));
-            double brightnessDistance = hyperbolic ? HyperbolicMath.hyperbolicDistance(rowDistance, HYPERBOLIC_CURVATURE) : rowDistance;
-
-            double floorX = playerX + rowDistance * leftRayX;
-            double floorY = playerY + rowDistance * leftRayY;
-
-            for (int x = 0; x < RCJMS.SCREEN_WIDTH; x++) {
-                double brightness = 1.0 - (brightnessDistance / effectiveFlashlightDistance(hyperbolic));
-                brightness = Math.clamp(brightness, 0.05, 1.0);
-
-                int color = sampleTexture(floorTexture, floorX, floorY, floorBaseColor);
-                if (MAZE_3D) color = tintStairs(color, floorX, floorY);
-                pixels[y * RCJMS.SCREEN_WIDTH + x] = applyBrightness(color, brightness);
-
-                floorX += rowDistance * (rightRayX - leftRayX) / RCJMS.SCREEN_WIDTH;
-                floorY += rowDistance * (rightRayY - leftRayY) / RCJMS.SCREEN_WIDTH;
+        parallelRange(Math.max(0, (int)Math.ceil(horizon)), renderHeight, y -> {
+            double delta = y - horizon;
+            if (delta < minDistance) return;
+            double rowDistance = renderHeight / (2.0 * delta);
+            double brightness = Math.clamp(1.0 - (hyperbolic ? HyperbolicMath.hyperbolicDistance(rowDistance, HYPERBOLIC_CURVATURE) : rowDistance) / lightDistance, 0.05, 1.0);
+            double worldX = playerX + rowDistance * leftRayX, worldY = playerY + rowDistance * leftRayY;
+            double stepX = rowDistance * rayStepX, stepY = rowDistance * rayStepY;
+            int offset = y * width;
+            for (int x = 0; x < width; x++) {
+                int color = sampleTexture(floorTexture, worldX, worldY, floorBaseColor);
+                if (MAZE_3D) color = tintStairs(color, worldX, worldY);
+                renderPixels[offset + x] = applyBrightness(color, brightness);
+                worldX += stepX; worldY += stepY;
             }
         });
 
-        parallelRange(0, Math.min(RCJMS.SCREEN_HEIGHT - 1, (int) Math.floor(horizon) - 1) + 1, y -> {
-            if (horizon - y < minDistance) return;
-            double rowDistance =  RCJMS.SCREEN_HEIGHT / (2.0 * (horizon - y));
-            double brightnessDistance = hyperbolic ? HyperbolicMath.hyperbolicDistance(rowDistance, HYPERBOLIC_CURVATURE) : rowDistance;
-
-            double ceilingX = playerX + rowDistance * leftRayX;
-            double ceilingY = playerY + rowDistance * leftRayY;
-
-            for (int x = 0; x < RCJMS.SCREEN_WIDTH; x++) {
-                int color = sampleTexture(ceilingTexture, ceilingX, ceilingY, ceilingBaseColor);
-                double brightness = 1.0 - (brightnessDistance / effectiveFlashlightDistance(hyperbolic));
-                brightness = Math.clamp(brightness, 0.05, 1.0);
-                pixels[y * RCJMS.SCREEN_WIDTH + x] = applyBrightness(color, brightness);
-
-                ceilingX += rowDistance * (rightRayX - leftRayX) / RCJMS.SCREEN_WIDTH;
-                ceilingY += rowDistance * (rightRayY - leftRayY) / RCJMS.SCREEN_WIDTH;
+        parallelRange(0, Math.min(renderHeight - 1, (int)Math.floor(horizon) - 1) + 1, y -> {
+            double delta = horizon - y;
+            if (delta < minDistance) return;
+            double rowDistance = renderHeight / (2.0 * delta);
+            double brightness = Math.clamp(1.0 - (hyperbolic ? HyperbolicMath.hyperbolicDistance(rowDistance, HYPERBOLIC_CURVATURE) : rowDistance) / lightDistance, 0.05, 1.0);
+            double worldX = playerX + rowDistance * leftRayX;
+            double worldY = playerY + rowDistance * leftRayY;
+            double stepX = rowDistance * rayStepX;
+            double stepY = rowDistance * rayStepY;
+            int offset = y * width;
+            for (int x = 0; x < width; x++) {
+                int color = sampleTexture(ceilingTexture, worldX, worldY, ceilingBaseColor);
+                renderPixels[offset + x] = applyBrightness(color, brightness);
+                worldX += stepX; worldY += stepY;
             }
         });
     }
@@ -535,7 +605,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private int tintStairs(int color, double worldX, double worldY) {
         int fx = (int) Math.floor(worldX), fy = (int) Math.floor(worldY);
         if (fx < 0 || fy < 0 || fx >= MAZE_WIDTH || fy >= MAZE_HEIGHT) return color;
-
         int cell = map[fy][fx];
         if (cell == 3) return tintColor(color, 0x3399FF, 0.45);
         if (cell == 4) return tintColor(color, 0xFFAA33, 0.45);
@@ -544,28 +613,23 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private int tintColor(int color, int tint, double amount) {
         int r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
         int tr = (tint >> 16) & 255, tg = (tint >> 8) & 255, tb = tint & 255;
-
-        r = (int) (r * (1 - amount) + tr * amount);
-        g = (int) (g * (1 - amount) + tg * amount);
-        b = (int) (b * (1 - amount) + tb * amount);
-
+        r = (int)(r * (1 - amount) + tr * amount); g = (int)(g * (1 - amount) + tg * amount); b = (int)(b * (1 - amount) + tb * amount);
         return (r << 16) | (g << 8) | b;
     }
     private int applyBrightness(int color, double brightness) {
-        int r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
-
-        r = (int)(r * brightness);
-        g = (int)(g * brightness);
-        b = (int)(b * brightness);
-
+        int r = (int)(((color >> 16) & 255) * brightness);
+        int g = (int)(((color >> 8) & 255) * brightness);
+        int b = (int)((color & 255) * brightness);
         return (r << 16) | (g << 8) | b;
     }
-    private int sampleTexture(int[][] texture, double worldX, double worldY, int baseColor) {
-        int textureHeight = getTextureHeight(texture), textureWidth = getTextureWidth(texture);
-        if (textureWidth <= 0 || textureHeight <= 0) return baseColor;
-
-        return texture[Math.clamp((int)((worldY - Math.floor(worldY)) * textureHeight), 0, textureHeight - 1)]
-                [Math.clamp((int)((worldX - Math.floor(worldX)) * textureWidth), 0, textureWidth - 1)];
+    private int sampleTexture(TextureEditorView.RuntimeTexture texture, double worldX, double worldY, int baseColor) {
+        int width = texture.width, height = texture.height;
+        if (width <= 0 || height <= 0) return baseColor;
+        double fracX = worldX - Math.floor(worldX);
+        double fracY = worldY - Math.floor(worldY);
+        int tx = Math.min((int)(fracX * width), width - 1);
+        int ty = Math.min((int)(fracY * height), height - 1);
+        return texture.pixels[ty * width + tx];
     }
     //endregion
 
@@ -586,10 +650,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 if (map[y][x] == 3) color = 0x3399FF;
                 if (map[y][x] == 4) color = 0xFFAA33;
 
-                int startX = offsetX + (int) (x * scale);
-                int startY = offsetY + (int) (y * scale);
-                int endX = offsetX + (int) ((x + 1) * scale);
-                int endY = offsetY + (int) ((y + 1) * scale);
+                int startX = offsetX + (int) (x * scale), startY = offsetY + (int) (y * scale);
+                int endX = offsetX + (int) ((x + 1) * scale), endY = offsetY + (int) ((y + 1) * scale);
 
                 for (int py = startY; py < endY; py++) for (int px = startX; px < endX; px++)
                     if (px >= 0 && py >= 0 && px < RCJMS.SCREEN_WIDTH && py < RCJMS.SCREEN_HEIGHT) pixels[px + py * RCJMS.SCREEN_WIDTH] = color;
@@ -670,7 +732,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         Graphics2D g2d = bufferedImage.createGraphics();
         String fpsText = "FPS: " + currentFps;
 
-        g2d.setFont(new Font(Font.MONOSPACED, Font.BOLD, 20));
+        g2d.setFont(fpsFont);
         g2d.setColor(Color.BLACK);
         g2d.drawString(fpsText, 40, RCJMS.SCREEN_HEIGHT - 28);
 
@@ -696,7 +758,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         String timerText = String.format("%02d:%02d:%02d", hours, minutes, seconds);
 
-        g2d.setFont(new Font(Font.MONOSPACED, Font.BOLD, 24));
+        g2d.setFont(timerFont);
         g2d.setColor(Color.BLACK);
         g2d.drawString(timerText, RCJMS.SCREEN_WIDTH - 156, 34);
 

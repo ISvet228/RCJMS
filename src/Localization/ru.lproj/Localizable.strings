@@ -23,6 +23,7 @@
 "st.flat" = "Плоская";
 "st.neumorphic" = "Неоморфная";
 "st.glass" = "Стекло";
+"st.render_scale" = "Качество рендера";
 
 "if.info" = "Информация";
 "if.controls" = "Управление:";

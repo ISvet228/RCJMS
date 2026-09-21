@@ -8,7 +8,6 @@ import java.awt.geom.AffineTransform;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.ArrayList;
-import java.util.Locale;
 import java.util.Random;
 
 public class MainMenuView extends JPanel {
@@ -16,7 +15,7 @@ public class MainMenuView extends JPanel {
     private final ArrayList<Star> stars = new ArrayList<>();
     private final Random random = new Random();
 
-    private Style currentStyle = loadTheme();
+    private Style currentStyle = SaveData.load().theme;
 
     private final Animated3DText title = new Animated3DText("RCJMS", Animated3DText.AnimationType.ROTATE);
 
@@ -33,7 +32,8 @@ public class MainMenuView extends JPanel {
     private final StyledComboBox modeBox = new StyledComboBox(currentStyle, modes);
     private final String[] languages = {"en", "ru"};
     private final String[] languageNames = {"English", "Русский"};
-    private StyledComboBox languageBox;
+    private final String[] renderScales = {"100%", "75%", "50%", "10%"};
+    private StyledComboBox languageBox, renderScaleBox;
 
     private final StyledLabel mazeDimensionsLabel = createLabel(currentStyle,"mm.maze_dimensions");
     private final StyledLabel modeLabel = createLabel(currentStyle,"mm.mode");
@@ -43,6 +43,7 @@ public class MainMenuView extends JPanel {
     private final StyledLabel seedLabel = createLabel(currentStyle,"mm.custom_seed");
     private final StyledLabel languageTitle = createLabel(currentStyle, "st.language");
     private final StyledLabel themesTitle = createLabel(currentStyle, "st.themes");
+    private final StyledLabel renderScaleTitle = createLabel(currentStyle, "st.render_scale");
 
     private final StyledTextField xField = new StyledTextField(currentStyle,"25");
     private final StyledTextField yField = new StyledTextField(currentStyle, "25");
@@ -51,7 +52,7 @@ public class MainMenuView extends JPanel {
 
     private final StyledToggle geometryToggle = new StyledToggle(currentStyle, "mm.wrong_geometry");
     private final StyledToggle mode3DToggle = new StyledToggle(currentStyle, "mm.3d_mode");
-    private StyledToggle fullscreenToggle;
+    private StyledToggle fullscreenToggle, vsyncToggle;
     private boolean fullscreen = false;
 
     private JDialog settingsDialog, infoDialog;
@@ -59,7 +60,10 @@ public class MainMenuView extends JPanel {
     //endregion
 
     public MainMenuView() {
-        NSLocalizedString.setLanguage(loadLanguage());
+        SaveData.Data savedData = SaveData.load();
+        GameView.setRenderScale(savedData.renderScale);
+        GameView.setVSyncEnabled(savedData.vsync);
+        NSLocalizedString.setLanguage(savedData.language);
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setLayout(null);
 
@@ -120,6 +124,13 @@ public class MainMenuView extends JPanel {
             fullscreenToggle.setSelected(fullscreen);
             fullscreenToggle.addActionListener(ev -> setFullscreen(fullscreenToggle.isSelected()));
 
+            vsyncToggle = new StyledToggle(currentStyle, "VSync");
+            vsyncToggle.setSelected(GameView.isVSyncEnabled());
+            vsyncToggle.addActionListener(ev -> {
+                GameView.setVSyncEnabled(vsyncToggle.isSelected());
+                saveSettings();
+            });
+
             StyledButton flatButton = createButton(Style.FLAT, "st.flat");
             StyledButton neumorphicButton = createButton(Style.NEUMORPHIC, "st.neumorphic");
             StyledButton glassButton = createButton(Style.GLASS, "st.glass");
@@ -153,6 +164,17 @@ public class MainMenuView extends JPanel {
 
             themesTitle.setForeground(Color.WHITE);
             themesTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
+            renderScaleTitle.setForeground(Color.WHITE);
+            renderScaleTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+            renderScaleBox = new StyledComboBox(currentStyle, renderScales);
+            int renderScaleIndex = GameView.getRenderScale() >= 0.99 ? 0 : GameView.getRenderScale() >= 0.74 ? 1 : GameView.getRenderScale() >= 0.49 ? 2 : 3;
+            renderScaleBox.setSelectedIndex(renderScaleIndex);
+            renderScaleBox.addActionListener(ev -> {
+                int index = renderScaleBox.getSelectedIndex();
+                GameView.setRenderScale(index == 0 ? 1.0 : index == 1 ? 0.75 : index == 2 ? 0.5 : 0.1);
+                saveSettings();
+            });
 
             JPanel themeRow = new JPanel(new GridLayout(1, 3, 8, 0));
             themeRow.setOpaque(false);
@@ -171,10 +193,21 @@ public class MainMenuView extends JPanel {
             themesBlock.add(themesTitle);
             themesBlock.add(Box.createVerticalStrut(8));
             themesBlock.add(themeRow);
+            themesBlock.add(Box.createVerticalStrut(16));
+            themesBlock.add(renderScaleTitle);
+            themesBlock.add(Box.createVerticalStrut(8));
+            themesBlock.add(renderScaleBox);
+            themesBlock.add(Box.createVerticalStrut(8));
+            themesBlock.add(vsyncToggle);
+
+            JPanel toggleRow = new JPanel(new GridLayout(1, 2, 8, 0));
+            toggleRow.setOpaque(false);
+            toggleRow.add(fullscreenToggle);
+            toggleRow.add(vsyncToggle);
 
             JPanel contentPanel = new JPanel(new BorderLayout(0, 16));
             contentPanel.setOpaque(false);
-            contentPanel.add(fullscreenToggle, BorderLayout.NORTH);
+            contentPanel.add(toggleRow, BorderLayout.NORTH);
             contentPanel.add(themesBlock, BorderLayout.CENTER);
 
             JPanel panel = new JPanel(new BorderLayout(0, 16));
@@ -366,48 +399,28 @@ public class MainMenuView extends JPanel {
 
     //region Saves
     private void saveLanguage(String language) {
-        try {
-            Files.createDirectories(AppPaths.DATA_DIR);
-            Files.writeString(AppPaths.LANGUAGE_FILE, language);
-        } catch (IOException ex) { ex.printStackTrace(); }
+        try { SaveData.saveSettings(language, currentStyle, GameView.getRenderScale(), GameView.isVSyncEnabled()); }
+        catch (IOException ex) { ex.printStackTrace(); }
     }
-    private String loadLanguage() {
-        try {
-            if (Files.exists(AppPaths.LANGUAGE_FILE)) {
-                String language = Files.readString(AppPaths.LANGUAGE_FILE).trim();
-                if (!language.isBlank()) return language;
-            }
-        } catch (IOException ex) { ex.printStackTrace(); }
-        return Locale.getDefault().getLanguage();
-    }
-
     private void saveTheme(Style style) {
-        try {
-            Files.createDirectories(AppPaths.DATA_DIR);
-            Files.writeString(AppPaths.THEME_FILE, style.name());
-        } catch (IOException ex) { ex.printStackTrace(); }
+        try { SaveData.saveSettings(NSLocalizedString.getLanguage(), style, GameView.getRenderScale(), GameView.isVSyncEnabled()); }
+        catch (IOException ex) { ex.printStackTrace(); }
     }
-    private Style loadTheme() {
-        try {
-            if (Files.exists(AppPaths.THEME_FILE)) {
-                String name = Files.readString(AppPaths.THEME_FILE).trim();
-                return Style.valueOf(name);
-            }
-        } catch (IOException | IllegalArgumentException ex) { ex.printStackTrace(); }
-        return Style.FLAT;
+    private void saveSettings() {
+        try { SaveData.saveSettings(NSLocalizedString.getLanguage(), currentStyle, GameView.getRenderScale(), GameView.isVSyncEnabled()); }
+        catch (IOException ex) { ex.printStackTrace(); }
     }
     private void SyncAllUI(Style style) {
-        modeBox.setStyle(style);
-        geometryToggle.setStyle(style);
-        mode3DToggle.setStyle(style);
-
-        for (StyledTextField STF : new StyledTextField[]{xField, yField, floorsField, seedField}) if (STF != null) STF.setStyle(style);
+        for (StyledTextField STF : new StyledTextField[]{xField, yField, floorsField, seedField})
+            if (STF != null) STF.setStyle(style);
         for (StyledButton SB : new StyledButton[]{playButton, textureEditorButton, mapEditorButton, creditsButton, exitButton, settingsButton, infoButton, settingsCloseButton, infoCloseButton})
             if (SB != null) SB.setStyle(style);
-        for (StyledLabel SL : new StyledLabel[]{mazeDimensionsLabel, modeLabel, xLabel, yLabel, seedLabel, floorsLabel, themesTitle, languageTitle})
+        for (StyledLabel SL : new StyledLabel[]{mazeDimensionsLabel, modeLabel, xLabel, yLabel, floorsLabel, seedLabel, themesTitle, languageTitle, renderScaleTitle})
             if (SL != null) SL.setStyle(style);
-        if (fullscreenToggle != null) fullscreenToggle.setStyle(style);
-        if (languageBox != null) languageBox.setStyle(style);
+        for (StyledComboBox SCB : new StyledComboBox[]{modeBox, languageBox, renderScaleBox})
+            if  (SCB != null) SCB.setStyle(style);
+        for (StyledToggle ST : new StyledToggle[]{geometryToggle, mode3DToggle, fullscreenToggle, vsyncToggle})
+            if (ST != null) ST.setStyle(style);
     }
     //endregion
 

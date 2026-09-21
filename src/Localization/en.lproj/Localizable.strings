@@ -22,6 +22,7 @@
 "st.flat" = "Flat";
 "st.neumorphic" = "Neumorphic";
 "st.glass" = "Glass";
+"st.render_scale" = "Render quality";
 
 "if.info" = "Info";
 "if.controls" = "Controls:";

@@ -1,12 +1,11 @@
 import StyleUI.*;
-import Helpers.AppPaths;
+import Helpers.*;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 
@@ -584,7 +583,7 @@ public class MapEditorView extends JPanel {
         }
         try {
             Files.createDirectories(AppPaths.DATA_DIR);
-            Path file = AppPaths.MAP_FILE;
+            Path file = AppPaths.SAVE_FILE;
             writeMap(file);
 
             java.util.List<int[]> exits = findExits();
@@ -608,58 +607,23 @@ public class MapEditorView extends JPanel {
     }
 
     private void writeMap(Path file) throws IOException {
-        try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-            writer.write("# Map width=" + mapWidth + " height=" + mapHeight);
-            writer.newLine();
-            writer.write("# 0=Path, 1=Wall, 2=Finish");
-            writer.newLine();
-
-            for (int y = 0; y < mapHeight; y++) {
-                for (int x = 0; x < mapWidth; x++) {
-                    if (x > 0) writer.write(",");
-                    writer.write(String.valueOf(map[y][x]));
-                }
-                writer.newLine();
-            }
-        }
+        SaveData.saveMap(map, NSLocalizedString.getLanguage(), currentStyle, GameView.getRenderScale());
     }
 
     public static int[][] readMap(Path file) throws IOException {
-        if (!Files.exists(file)) return new int[0][0];
-
-        java.util.List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
-        java.util.List<int[]> rows = new ArrayList<>();
-        int expectedWidth = -1;
-
-        for (String original : lines) {
-            String line = original.trim();
-            if (line.isEmpty() || line.startsWith("#")) continue;
-
-            String[] values = line.split("[,;\\s]+");
-            if (expectedWidth == -1) expectedWidth = values.length;
-            if (values.length != expectedWidth) throw new IOException("Invalid map: rows have different widths.");
-
-            int[] row = new int[values.length];
-
-            for (int x = 0; x < values.length; x++) {
-                int value;
-                try { value = Integer.parseInt(values[x]); }
-                catch (NumberFormatException e) { throw new IOException("Invalid map value: " + values[x], e); }
-
-                if (value < PATH || value > FINISH) throw new IOException("Invalid block value: " + value + ". Expected 0, 1 or 2.");
-                row[x] = value;
-            }
-            rows.add(row);
-        }
-        if (rows.isEmpty()) return new int[0][0];
-
-        int height = rows.size();
-        int width = expectedWidth;
+        SaveData.Data data = SaveData.load();
+        if (data.map == null || data.map.length == 0) return new int[0][0];
+        int height = data.map.length;
+        int width = data.map[0].length;
         if (height < MIN_MAP_SIZE || height > MAX_MAP_SIZE) throw new IOException("Map height must be between " + MIN_MAP_SIZE + " and " + MAX_MAP_SIZE);
         if (width < MIN_MAP_SIZE || width > MAX_MAP_SIZE) throw new IOException("Map width must be between " + MIN_MAP_SIZE + " and " + MAX_MAP_SIZE);
         if ((height & 1) == 0) throw new IOException("Map height must be odd.");
         if ((width & 1) == 0) throw new IOException("Map width must be odd.");
-        return rows.toArray(new int[0][]);
+        for (int[] row : data.map) {
+            if (row.length != width) throw new IOException("Invalid map: rows have different widths.");
+            for (int value : row) if (value < PATH || value > FINISH) throw new IOException("Invalid block value: " + value + ". Expected 0, 1 or 2.");
+        }
+        return data.map;
     }
     //endregion
 
@@ -827,13 +791,5 @@ public class MapEditorView extends JPanel {
     }
     //endregion
 
-    private Style loadTheme() {
-        try {
-            if (Files.exists(AppPaths.THEME_FILE)) {
-                String name = Files.readString(AppPaths.THEME_FILE).trim();
-                return Style.valueOf(name);
-            }
-        } catch (IOException | IllegalArgumentException ex) { ex.printStackTrace(); }
-        return Style.FLAT;
-    }
+    private Style loadTheme() { return SaveData.load().theme; }
 }

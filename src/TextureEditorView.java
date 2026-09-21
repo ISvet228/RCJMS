@@ -1,5 +1,6 @@
 import StyleUI.*;
 import Helpers.AppPaths;
+import Helpers.SaveData;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -20,8 +21,7 @@ public class TextureEditorView extends JPanel {
     public enum TextureMode {WALLS, FLOOR, CEILING, FINISH}
     private enum Tool {SELECT, BRUSH, FILL, ERASER}
 
-    public static final int MIN_TEXTURE_SIZE = 1, MAX_TEXTURE_SIZE = 512;
-    public static final int MAX_FINISH_HEIGHT = 256;
+    public static final int MIN_TEXTURE_SIZE = 1, MAX_TEXTURE_SIZE = 512, MAX_FINISH_HEIGHT = 256;
     private static final int ABSOLUTE_MAX_TEXTURE_DIMENSION = 4096;
     private static final int MIN_TOOL_SIZE = 1, MAX_TOOL_SIZE = 10;
 
@@ -29,25 +29,27 @@ public class TextureEditorView extends JPanel {
     private static final int ORIGINAL_FLOOR_COLOR = 0xD3AF63;
     private static final int ORIGINAL_CEILING_COLOR = 0x816E1E;
     private static final int ORIGINAL_FINISH_COLOR = 0x33FF66;
+
     private static final int EMPTY_COLOR = -1;
     private static final int SAVED_EMPTY_COLOR = 0xFFFFFF;
     private static final int TEXTURE_FILE_MAGIC = 0x52435458; //RCTX Extension Token
-    private static final int TEXTURE_FORMAT_VERSION = 1;
+    private static final int TEXTURE_FORMAT_VERSION = 2;
+    private static final int RCTX_PIXEL_RGB888 = 0, RCTX_PIXEL_PALETTE8 = 1, RCTX_FLAG_DEFLATE = 1;
 
     private final TextureCanvas textureCanvas = new TextureCanvas();
     private final JPanel colorPreview = new JPanel();
 
-    StyledButton wallsButton = new StyledButton(currentStyle, "te.walls");
-    StyledButton floorButton = new StyledButton(currentStyle, "te.floor");
-    StyledButton ceilingButton = new StyledButton(currentStyle, "te.ceiling");
-    StyledButton finishButton = new StyledButton(currentStyle, "te.finish");
-    StyledButton exitButton = new StyledButton(currentStyle, "exit");
-    StyledButton applyButton = new StyledButton(currentStyle,"te.apply_to_cell");
-    StyledButton fillButton = new StyledButton(currentStyle, "te.fill_texture");
-    StyledButton resetButton = new StyledButton(currentStyle, "reset");
-    StyledButton saveButton = new StyledButton(currentStyle, "te.save");
-    StyledButton resetAllButton = new StyledButton(currentStyle, "reset");
-    StyledButton importPngButton = new StyledButton(currentStyle, "te.import_png");
+    private final StyledButton wallsButton = new StyledButton(currentStyle, "te.walls");
+    private final StyledButton floorButton = new StyledButton(currentStyle, "te.floor");
+    private final StyledButton ceilingButton = new StyledButton(currentStyle, "te.ceiling");
+    private final StyledButton finishButton = new StyledButton(currentStyle, "te.finish");
+    private final StyledButton exitButton = new StyledButton(currentStyle, "exit");
+    private final StyledButton applyButton = new StyledButton(currentStyle,"te.apply_to_cell");
+    private final StyledButton fillButton = new StyledButton(currentStyle, "te.fill_texture");
+    private final StyledButton resetButton = new StyledButton(currentStyle, "reset");
+    private final StyledButton saveButton = new StyledButton(currentStyle, "te.save");
+    private final StyledButton resetAllButton = new StyledButton(currentStyle, "reset");
+    private final StyledButton importPngButton = new StyledButton(currentStyle, "te.import_png");
 
     private final StyledLabel widthLabel = new StyledLabel(currentStyle, "");
     private final StyledLabel heightLabel = new StyledLabel(currentStyle, "");
@@ -93,8 +95,7 @@ public class TextureEditorView extends JPanel {
     private int selectedX = -1, selectedY = -1;
     private boolean updatingSizeControls = false;
     private static final int MAX_HISTORY = 10;
-    private final Deque<EditorState> undoHistory = new ArrayDeque<>();
-    private final Deque<EditorState> redoHistory = new ArrayDeque<>();
+    private final Deque<EditorState> undoHistory = new ArrayDeque<>(), redoHistory = new ArrayDeque<>();
     private boolean historyRestoring = false;
     private boolean mouseHistoryStarted = false;
     //endregion
@@ -229,7 +230,7 @@ public class TextureEditorView extends JPanel {
         slider.setPaintTicks(true);
         slider.setPaintLabels(true);
         slider.setOpaque(false);
-        slider.setPreferredSize(new Dimension(140, 32)); // фикс — не даём дефолтные 180x44 распирать строку
+        slider.setPreferredSize(new Dimension(140, 32));
     }
 
     private void configureToolSizeSlider(StyledSlider slider) {
@@ -809,58 +810,132 @@ public class TextureEditorView extends JPanel {
         writeTexture(AppPaths.FINISH_TEXTURE_FILE, finishTexture);
         return AppPaths.DATA_DIR;
     }
-
-    public static int[][] readTexture(Path file) throws IOException {return readTexture(file, MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE);}
-    public static int[][] readFinishTexture(Path file) throws IOException {return readTexture(file, MAX_TEXTURE_SIZE, MAX_FINISH_HEIGHT);}
     public static int[][] readTexture(Path file, int maxWidth, int maxHeight) throws IOException {
-        if (!Files.exists(file)) return new int[0][0];
+        RuntimeTexture texture = readRuntimeTexture(file, maxWidth, maxHeight);
+        return texture.toMatrix();
+    }
+
+    public static RuntimeTexture readRuntimeTexture(Path file, int maxWidth, int maxHeight) throws IOException {
+        if (!Files.exists(file)) return RuntimeTexture.empty();
 
         try (DataInputStream in = new DataInputStream(new BufferedInputStream(Files.newInputStream(file)))) {
             int magic = in.readInt();
-            if (magic != TEXTURE_FILE_MAGIC) throw new IOException("Invalid texture file (bad signature): " + file);
+            if (magic != TEXTURE_FILE_MAGIC) throw new IOException("Invalid RCTX file (bad signature): " + file);
 
-            in.readUnsignedByte();
-            int width = in.readUnsignedShort(), height = in.readUnsignedShort();
+            int version = in.readUnsignedByte();
+            if (version != TEXTURE_FORMAT_VERSION) throw new IOException("Unsupported RCTX version " + version + ": " + file);
 
-            if (width <= 0 || height <= 0) return new int[0][0];
-            if (width > maxWidth || height > maxHeight) throw new IOException("Texture is larger than " + maxWidth + "x" + maxHeight + ": " + file);
+            int width = in.readUnsignedShort();
+            int height = in.readUnsignedShort();
+            int pixelFormat = in.readUnsignedByte();
+            int flags = in.readUnsignedByte();
+            int paletteSize = in.readUnsignedShort();
+            int payloadLength = in.readInt();
+            int rawLength = in.readInt();
 
-            int[][] texture = new int[height][width];
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    int r = in.readUnsignedByte();
-                    int g = in.readUnsignedByte();
-                    int b = in.readUnsignedByte();
-                    texture[y][x] = (r << 16) | (g << 8) | b;
+            if (width <= 0 || height <= 0 || width > maxWidth || height > maxHeight) throw new IOException("Invalid RCTX dimensions: " + width + "x" + height + " in " + file);
+            if (payloadLength < 0 || rawLength < 0 || rawLength > maxWidth * (long) maxHeight * 3L + 4096L) throw new IOException("Invalid RCTX payload size: " + file);
+            if (pixelFormat != RCTX_PIXEL_RGB888 && pixelFormat != RCTX_PIXEL_PALETTE8) throw new IOException("Unsupported RCTX pixel format " + pixelFormat + ": " + file);
+            if (pixelFormat == RCTX_PIXEL_PALETTE8 && (paletteSize < 1 || paletteSize > 256)) throw new IOException("Invalid RCTX palette size: " + paletteSize + ": " + file);
+            if (pixelFormat == RCTX_PIXEL_RGB888 && paletteSize != 0) throw new IOException("Unexpected RCTX palette data: " + file);
+
+            int expectedRawLength = pixelFormat == RCTX_PIXEL_PALETTE8 ? width * height : width * height * 3;
+            if (rawLength != expectedRawLength) throw new IOException("Invalid RCTX raw size: " + file);
+
+            int[] palette = null;
+            if (pixelFormat == RCTX_PIXEL_PALETTE8) {
+                palette = new int[paletteSize];
+                for (int i = 0; i < paletteSize; i++) palette[i] = (in.readUnsignedByte() << 16) | (in.readUnsignedByte() << 8) | in.readUnsignedByte();
+            }
+
+            byte[] payload = in.readNBytes(payloadLength);
+            if (payload.length != payloadLength) throw new IOException("RCTX file is truncated: " + file);
+
+            byte[] raw = (flags & RCTX_FLAG_DEFLATE) != 0 ? inflate(payload, rawLength) : payload;
+            if (raw.length != rawLength) throw new IOException("Invalid RCTX decompressed size: " + file);
+
+            int[] pixels = new int[width * height];
+            if (pixelFormat == RCTX_PIXEL_PALETTE8) {
+                for (int i = 0; i < pixels.length; i++) {
+                    int index = raw[i] & 0xFF;
+                    if (index >= palette.length) throw new IOException("Invalid RCTX palette index: " + file);
+                    pixels[i] = palette[index];
                 }
             }
-            return texture;
-        } catch (EOFException ex) {
-            throw new IOException("Texture file is truncated or corrupted: " + file, ex);
+            else for (int i = 0, p = 0; i < pixels.length; i++) pixels[i] = ((raw[p++] & 0xFF) << 16) | ((raw[p++] & 0xFF) << 8) | (raw[p++] & 0xFF);
+            return new RuntimeTexture(width, height, pixels);
+        }
+        catch (EOFException ex) { throw new IOException("RCTX file is truncated or corrupted: " + file, ex); }
+    }
+    private static byte[] inflate(byte[] compressed, int expectedLength) throws IOException {
+        try (java.util.zip.InflaterInputStream inflater = new java.util.zip.InflaterInputStream(new ByteArrayInputStream(compressed));
+             ByteArrayOutputStream out = new ByteArrayOutputStream(expectedLength)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = inflater.read(buffer)) != -1) out.write(buffer, 0, read);
+            return out.toByteArray();
         }
     }
     private static void writeTexture(Path file, int[][] texture) throws IOException {
-        int width = isValidTexture(texture) ? texture[0].length : 0;
-        int height = isValidTexture(texture) ? texture.length : 0;
+        int width = isValidTexture(texture) ? texture[0].length : 0,  height = isValidTexture(texture) ? texture.length : 0;
+        if (width <= 0 || height <= 0) throw new IOException("Cannot save an empty texture: " + file);
+
+        int[] flat = new int[width * height];
+        java.util.HashMap<Integer, Integer> paletteMap = new java.util.HashMap<>();
+        int[] palette = new int[256];
+        int paletteSize = 0;
+        boolean palettePossible = true;
+
+        for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
+            int color = texture[y][x] == EMPTY_COLOR ? SAVED_EMPTY_COLOR : texture[y][x] & 0xFFFFFF;
+            flat[y * width + x] = color;
+            if (palettePossible && !paletteMap.containsKey(color)) {
+                if (paletteSize == 256) palettePossible = false;
+                else { paletteMap.put(color, paletteSize); palette[paletteSize++] = color; }
+            }
+        }
+
+        int pixelFormat = palettePossible ? RCTX_PIXEL_PALETTE8 : RCTX_PIXEL_RGB888;
+        byte[] raw;
+        if (pixelFormat == RCTX_PIXEL_PALETTE8) {
+            raw = new byte[flat.length];
+            for (int i = 0; i < flat.length; i++) raw[i] = (byte)(int)paletteMap.get(flat[i]);
+        } else {
+            raw = new byte[flat.length * 3];
+            for (int i = 0, p = 0; i < flat.length; i++) {
+                int color = flat[i];
+                raw[p++] = (byte)(color >> 16);
+                raw[p++] = (byte)(color >> 8);
+                raw[p++] = (byte)color;
+            }
+        }
+
+        byte[] compressed = deflate(raw);
+        boolean useCompression = compressed.length < raw.length;
+        byte[] payload = useCompression ? compressed : raw;
+        int flags = useCompression ? RCTX_FLAG_DEFLATE : 0;
 
         try (DataOutputStream out = new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(file, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)))) {
             out.writeInt(TEXTURE_FILE_MAGIC);
             out.writeByte(TEXTURE_FORMAT_VERSION);
             out.writeShort(width);
             out.writeShort(height);
-
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    int color = texture[y][x];
-                    if (color == EMPTY_COLOR) color = SAVED_EMPTY_COLOR;
-                    color &= 0xFFFFFF;
-
-                    out.writeByte((color >> 16) & 0xFF);
-                    out.writeByte((color >> 8) & 0xFF);
-                    out.writeByte(color & 0xFF);
-                }
+            out.writeByte(pixelFormat);
+            out.writeByte(flags);
+            out.writeShort(pixelFormat == RCTX_PIXEL_PALETTE8 ? paletteSize : 0);
+            out.writeInt(payload.length);
+            out.writeInt(raw.length);
+            if (pixelFormat == RCTX_PIXEL_PALETTE8) for (int i = 0; i < paletteSize; i++) {
+                int color = palette[i];
+                out.writeByte(color >> 16); out.writeByte(color >> 8); out.writeByte(color);
             }
+            out.write(payload);
         }
+    }
+    private static byte[] deflate(byte[] raw) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream(raw.length);
+        try (java.util.zip.DeflaterOutputStream deflater = new java.util.zip.DeflaterOutputStream(out)) { deflater.write(raw); }
+        return out.toByteArray();
     }
     public void loadTexturesFromTmp() throws IOException {
         int[][] walls = readTexture(AppPaths.WALL_TEXTURE_FILE, MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE);
@@ -873,14 +948,10 @@ public class TextureEditorView extends JPanel {
         int[] ceilingSize = sizeOf(ceiling, MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE);
         int[] finishSize = sizeOf(finish, MAX_TEXTURE_SIZE, MAX_FINISH_HEIGHT);
 
-        wallWidth = wallSize[0];
-        wallHeight = wallSize[1];
-        floorWidth = floorSize[0];
-        floorHeight = floorSize[1];
-        ceilingWidth = ceilingSize[0];
-        ceilingHeight = ceilingSize[1];
-        finishWidth = finishSize[0];
-        finishHeight = finishSize[1];
+        wallWidth = wallSize[0]; wallHeight = wallSize[1];
+        floorWidth = floorSize[0]; floorHeight = floorSize[1];
+        ceilingWidth = ceilingSize[0]; ceilingHeight = ceilingSize[1];
+        finishWidth = finishSize[0]; finishHeight = finishSize[1];
 
         wallTexture = normalizeTexture(walls, wallWidth, wallHeight);
         floorTexture = normalizeTexture(floor, floorWidth, floorHeight);
@@ -890,6 +961,20 @@ public class TextureEditorView extends JPanel {
         syncSizeControlsToMode();
         selectFirstCell();
         textureCanvas.rebuildGrid();
+    }
+
+    public static final class RuntimeTexture {
+        public final int width, height;
+        public final int[] pixels;
+
+        private RuntimeTexture(int width, int height, int[] pixels) { this.width = width; this.height = height; this.pixels = pixels; }
+        static RuntimeTexture empty() { return new RuntimeTexture(0, 0, new int[0]); }
+        int[][] toMatrix() {
+            if (width == 0 || height == 0) return new int[0][0];
+            int[][] result = new int[height][width];
+            for (int y = 0; y < height; y++) System.arraycopy(pixels, y * width, result[y], 0, width);
+            return result;
+        }
     }
     //endregion
 
@@ -1218,13 +1303,5 @@ public class TextureEditorView extends JPanel {
             g2d.drawString(text, (viewportW - fm.stringWidth(text)) / 2, Math.max(18, (int) gridY - 8));
         }
     }
-    private Style loadTheme() {
-        try {
-            if (Files.exists(AppPaths.THEME_FILE)) {
-                String name = Files.readString(AppPaths.THEME_FILE).trim();
-                return Style.valueOf(name);
-            }
-        } catch (IOException | IllegalArgumentException ex) { ex.printStackTrace(); }
-        return Style.FLAT;
-    }
+    private Style loadTheme() { return SaveData.load().theme; }
 }
