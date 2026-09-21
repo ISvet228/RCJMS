@@ -5,7 +5,7 @@ import java.awt.*; //Graphics Library
 import java.awt.event.*; //Input Library
 import java.awt.image.*; //Buffer Library
 import java.awt.geom.Point2D;
-import java.io.IOException;
+import java.io.IOException; 
 import java.util.function.IntConsumer;
 
 public class GameView extends JPanel implements Runnable, KeyListener, MouseMotionListener {
