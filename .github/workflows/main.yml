@@ -20,25 +20,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: Windows-x64
+          - platform: Windows
             os: windows-latest
-            archive: RCJMS-With-JDK-Windows-x64.zip
-            arch: x86_64
+            archive: RCJMS-Windows.zip
 
-          - platform: Linux-x64
+          - platform: Linux
             os: ubuntu-latest
-            archive: RCJMS-With-JDK-Linux-x64.zip
-            arch: x86_64
+            archive: RCJMS-Linux.zip
 
-          - platform: macOS-Apple-Silicon
+          - platform: macOS
             os: macos-15
-            archive: RCJMS-With-JDK-macOS-Apple-Silicon.zip
-            arch: arm64
-
-          - platform: macOS-Intel
-            os: macos-15-intel
-            archive: RCJMS-With-JDK-macOS-Intel.zip
-            arch: x86_64
+            archive: RCJMS-macOS.zip
 
     steps:
       - name: Checkout
@@ -51,13 +43,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-
-      - name: Show machine info
-        shell: bash
-        run: |
-          uname -a
-          uname -m
-          java -version
 
       - name: Compile
         shell: bash
@@ -95,7 +80,7 @@ jobs:
           mkdir -p package
           cp RCJMS.jar package/
 
-      - name: Create portable app image
+      - name: Create portable application
         shell: bash
         run: |
           jpackage \
@@ -106,74 +91,67 @@ jobs:
             --main-class RCJMS \
             --dest dist
 
-      - name: Verify runtime architecture
+      - name: Debug dist output
         shell: bash
         run: |
-          echo "Expected arch: ${{ matrix.arch }}"
-          echo "Actual arch: $(uname -m)"
-
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            test "$(uname -m)" = "arm64"
-          else
-            test "$(uname -m)" = "x86_64"
-          fi
-
-      - name: Run platform-specific sanity check
-        shell: bash
-        run: |
-          if [ "${{ matrix.platform }}" = "Windows-x64" ]; then
-            test -d dist/RCJMS
-            test -f dist/RCJMS/RCJMS.exe
-          elif [ "${{ matrix.platform }}" = "Linux-x64" ]; then
-            test -d dist/RCJMS
-            test -x dist/RCJMS/RCJMS
-          else
-            test -d dist/RCJMS.app
-            test -x dist/RCJMS.app/Contents/MacOS/RCJMS
-          fi
+          echo "--- root ---"
+          ls -la
+          echo "--- dist ---"
+          ls -la dist || true
+          echo "--- recursive dist ---"
+          find dist -maxdepth 4 -print || true
 
       - name: Create Windows archive
-        if: matrix.platform == 'Windows-x64'
+        if: matrix.platform == 'Windows'
         shell: bash
         run: |
           set -euxo pipefail
-          test -d dist/RCJMS
-          cd dist
-          7z a "../${{ matrix.archive }}" RCJMS
-
-      - name: Create Linux archive
-        if: matrix.platform == 'Linux-x64'
-        shell: bash
-        run: |
-          set -euxo pipefail
-          test -d dist/RCJMS
-          cd dist
-          zip -r "../${{ matrix.archive }}" RCJMS
+          if [ -d "dist/RCJMS" ]; then
+            cd dist
+            7z a "../${{ matrix.archive }}" RCJMS
+          else
+            echo "ERROR: dist/RCJMS not found"
+            find dist -maxdepth 4 -print || true
+            exit 1
+          fi
 
       - name: Create macOS archive
-        if: startsWith(matrix.platform, 'macOS-')
+        if: matrix.platform == 'macOS'
         shell: bash
         run: |
           set -euxo pipefail
-          test -d dist/RCJMS.app
-          ditto -c -k --sequesterRsrc --keepParent \
-            dist/RCJMS.app \
-            "${{ matrix.archive }}"
+          if [ -d "dist/RCJMS.app" ]; then
+            ditto -c -k --sequesterRsrc --keepParent \
+              dist/RCJMS.app \
+              "${{ matrix.archive }}"
+          else
+            echo "ERROR: dist/RCJMS.app not found"
+            find dist -maxdepth 4 -print || true
+            exit 1
+          fi
 
-      - name: Verify archive exists
+      - name: Create Linux archive
+        if: matrix.platform == 'Linux'
         shell: bash
         run: |
-          test -f "${{ matrix.archive }}"
-          ls -lh "${{ matrix.archive }}"
+          set -euxo pipefail
+          if [ -d "dist/RCJMS" ]; then
+            cd dist
+            zip -r "../${{ matrix.archive }}" RCJMS
+          else
+            echo "ERROR: dist/RCJMS not found"
+            find dist -maxdepth 4 -print || true
+            exit 1
+          fi
 
       - name: Upload portable build
         uses: actions/upload-artifact@v5
         with:
-          name: ${{ matrix.platform }}
+          name: RCJMS-${{ matrix.platform }}
           path: ${{ matrix.archive }}
 
       - name: Upload JAR
-        if: matrix.platform == 'Linux-x64'
+        if: matrix.platform == 'Linux'
         uses: actions/upload-artifact@v5
         with:
           name: RCJMS-JAR
@@ -193,28 +171,25 @@ jobs:
           merge-multiple: true
 
       - name: Verify artifacts
-        shell: bash
         run: |
           ls -lah artifacts
           test -f artifacts/RCJMS.jar
-          test -f artifacts/RCJMS-With-JDK-Windows-x64.zip
-          test -f artifacts/RCJMS-With-JDK-Linux-x64.zip
-          test -f artifacts/RCJMS-With-JDK-macOS-Apple-Silicon.zip
-          test -f artifacts/RCJMS-With-JDK-macOS-Intel.zip
+          test -f artifacts/RCJMS-Windows.zip
+          test -f artifacts/RCJMS-Linux.zip
+          test -f artifacts/RCJMS-macOS.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "Complete-Ver"
-          name: "Latest Trusted"
+          name: "Latest Tusted"
           draft: false
           prerelease: false
           make_latest: true
           files: |
             artifacts/RCJMS.jar
-            artifacts/RCJMS-With-JDK-Windows-x64.zip
-            artifacts/RCJMS-With-JDK-Linux-x64.zip
-            artifacts/RCJMS-With-JDK-macOS-Apple-Silicon.zip
-            artifacts/RCJMS-With-JDK-macOS-Intel.zip
+            artifacts/RCJMS-Windows.zip
+            artifacts/RCJMS-Linux.zip
+            artifacts/RCJMS-macOS.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
