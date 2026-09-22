@@ -97,7 +97,9 @@ jobs:
         if: matrix.platform == 'Windows'
         shell: bash
         run: |
-          7z a "${{ matrix.archive }}" dist/RCJMS
+          test -d dist/RCJMS
+          cd dist/RCJMS
+          7z a "../../${{ matrix.archive }}" .
 
       - name: Create macOS archive
         if: matrix.platform == 'macOS'
@@ -113,8 +115,8 @@ jobs:
         shell: bash
         run: |
           test -d dist/RCJMS
-          cd dist
-          zip -r "../${{ matrix.archive }}" RCJMS
+          cd dist/RCJMS
+          zip -r "../../${{ matrix.archive }}" .
 
       - name: Upload portable build
         uses: actions/upload-artifact@v5
@@ -146,9 +148,9 @@ jobs:
         run: |
           ls -lah artifacts
           test -f artifacts/RCJMS.jar
-          test -f artifacts/RCJMS-Windows.zip
-          test -f artifacts/RCJMS-Linux.zip
-          test -f artifacts/RCJMS-macOS.zip
+          test -f artifacts/RCJMS-With-JDK-Windows.zip
+          test -f artifacts/RCJMS-With-JDK-Linux.zip
+          test -f artifacts/RCJMS-With-JDK-macOS.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
