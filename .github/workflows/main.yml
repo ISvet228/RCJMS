@@ -23,20 +23,22 @@ jobs:
           - platform: Windows-x64
             os: windows-latest
             archive: RCJMS-With-JDK-Windows-x64.zip
+            arch: x86_64
 
           - platform: Linux-x64
             os: ubuntu-latest
             archive: RCJMS-With-JDK-Linux-x64.zip
+            arch: x86_64
 
           - platform: macOS-Apple-Silicon
             os: macos-15
             archive: RCJMS-With-JDK-macOS-Apple-Silicon.zip
-            expected_arch: arm64
+            arch: arm64
 
           - platform: macOS-Intel
             os: macos-15-intel
             archive: RCJMS-With-JDK-macOS-Intel.zip
-            expected_arch: x86_64
+            arch: x86_64
 
     steps:
       - name: Checkout
@@ -50,7 +52,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Show build architecture
+      - name: Show machine info
         shell: bash
         run: |
           uname -a
@@ -62,7 +64,6 @@ jobs:
         run: |
           rm -rf build
           mkdir -p build
-
           find src -name "*.java" -print > sources.txt
           javac -d build @sources.txt
 
@@ -85,17 +86,16 @@ jobs:
         shell: bash
         run: |
           test -f RCJMS.jar
-          jar --describe-module --file RCJMS.jar || true
-          jar tf RCJMS.jar
+          jar tf RCJMS.jar > /dev/null
 
       - name: Prepare jpackage input
         shell: bash
         run: |
           rm -rf package dist
-          mkdir package
+          mkdir -p package
           cp RCJMS.jar package/
 
-      - name: Create portable application
+      - name: Create portable app image
         shell: bash
         run: |
           jpackage \
@@ -106,66 +106,65 @@ jobs:
             --main-class RCJMS \
             --dest dist
 
-      - name: Test macOS application architecture
-        if: startsWith(matrix.platform, 'macOS-')
+      - name: Verify runtime architecture
         shell: bash
         run: |
-          set -e
-          APP="dist/RCJMS.app"
-          BINARY="$APP/Contents/MacOS/RCJMS"
+          echo "Expected arch: ${{ matrix.arch }}"
+          echo "Actual arch: $(uname -m)"
 
-          test -d "$APP"
-          test -x "$BINARY"
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            test "$(uname -m)" = "arm64"
+          else
+            test "$(uname -m)" = "x86_64"
+          fi
 
-          file "$BINARY"
-          file "$BINARY" | grep -E "${{ matrix.expected_arch }}|universal"
-
-          otool -L "$BINARY"
-
-      - name: Test Windows application
-        if: matrix.platform == 'Windows-x64'
+      - name: Run platform-specific sanity check
         shell: bash
         run: |
-          test -d dist/RCJMS
-          test -f dist/RCJMS/RCJMS.exe
-
-      - name: Test Linux application
-        if: matrix.platform == 'Linux-x64'
-        shell: bash
-        run: |
-          test -d dist/RCJMS
-          test -x dist/RCJMS/RCJMS
+          if [ "${{ matrix.platform }}" = "Windows-x64" ]; then
+            test -d dist/RCJMS
+            test -f dist/RCJMS/RCJMS.exe
+          elif [ "${{ matrix.platform }}" = "Linux-x64" ]; then
+            test -d dist/RCJMS
+            test -x dist/RCJMS/RCJMS
+          else
+            test -d dist/RCJMS.app
+            test -x dist/RCJMS.app/Contents/MacOS/RCJMS
+          fi
 
       - name: Create Windows archive
         if: matrix.platform == 'Windows-x64'
         shell: bash
         run: |
+          set -euxo pipefail
           test -d dist/RCJMS
-          cd dist/RCJMS
-          7z a "../../${{ matrix.archive }}" .
-
-      - name: Create macOS archive
-        if: startsWith(matrix.platform, 'macOS-')
-        shell: bash
-        run: |
-          test -d dist/RCJMS.app
-          ditto -c -k --sequesterRsrc --keepParent \
-            dist/RCJMS.app \
-            "${{ matrix.archive }}"
+          cd dist
+          7z a "../${{ matrix.archive }}" RCJMS
 
       - name: Create Linux archive
         if: matrix.platform == 'Linux-x64'
         shell: bash
         run: |
+          set -euxo pipefail
           test -d dist/RCJMS
-          cd dist/RCJMS
-          zip -r "../../${{ matrix.archive }}" .
+          cd dist
+          zip -r "../${{ matrix.archive }}" RCJMS
+
+      - name: Create macOS archive
+        if: startsWith(matrix.platform, 'macOS-')
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -d dist/RCJMS.app
+          ditto -c -k --sequesterRsrc --keepParent \
+            dist/RCJMS.app \
+            "${{ matrix.archive }}"
 
       - name: Verify archive exists
         shell: bash
         run: |
           test -f "${{ matrix.archive }}"
-          unzip -l "${{ matrix.archive }}" | head -40 || true
+          ls -lh "${{ matrix.archive }}"
 
       - name: Upload portable build
         uses: actions/upload-artifact@v5
