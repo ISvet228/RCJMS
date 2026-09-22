@@ -20,17 +20,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: Windows
+          - platform: Windows-x64
             os: windows-latest
-            archive: RCJMS-With-JDK-Windows.zip
+            archive: RCJMS-With-JDK-Windows-x64.zip
 
-          - platform: Linux
+          - platform: Linux-x64
             os: ubuntu-latest
-            archive: RCJMS-With-JDK-Linux.zip
+            archive: RCJMS-With-JDK-Linux-x64.zip
 
-          - platform: macOS
+          - platform: macOS-Apple-Silicon
             os: macos-15
-            archive: RCJMS-With-JDK-macOS.zip
+            archive: RCJMS-With-JDK-macOS-Apple-Silicon.zip
+            expected_arch: arm64
+
+          - platform: macOS-Intel
+            os: macos-15-intel
+            archive: RCJMS-With-JDK-macOS-Intel.zip
+            expected_arch: x86_64
 
     steps:
       - name: Checkout
@@ -43,6 +49,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+
+      - name: Show build architecture
+        shell: bash
+        run: |
+          uname -a
+          uname -m
+          java -version
 
       - name: Compile
         shell: bash
@@ -93,8 +106,38 @@ jobs:
             --main-class RCJMS \
             --dest dist
 
+      - name: Test macOS application architecture
+        if: startsWith(matrix.platform, 'macOS-')
+        shell: bash
+        run: |
+          set -e
+          APP="dist/RCJMS.app"
+          BINARY="$APP/Contents/MacOS/RCJMS"
+
+          test -d "$APP"
+          test -x "$BINARY"
+
+          file "$BINARY"
+          file "$BINARY" | grep -E "${{ matrix.expected_arch }}|universal"
+
+          otool -L "$BINARY"
+
+      - name: Test Windows application
+        if: matrix.platform == 'Windows-x64'
+        shell: bash
+        run: |
+          test -d dist/RCJMS
+          test -f dist/RCJMS/RCJMS.exe
+
+      - name: Test Linux application
+        if: matrix.platform == 'Linux-x64'
+        shell: bash
+        run: |
+          test -d dist/RCJMS
+          test -x dist/RCJMS/RCJMS
+
       - name: Create Windows archive
-        if: matrix.platform == 'Windows'
+        if: matrix.platform == 'Windows-x64'
         shell: bash
         run: |
           test -d dist/RCJMS
@@ -102,7 +145,7 @@ jobs:
           7z a "../../${{ matrix.archive }}" .
 
       - name: Create macOS archive
-        if: matrix.platform == 'macOS'
+        if: startsWith(matrix.platform, 'macOS-')
         shell: bash
         run: |
           test -d dist/RCJMS.app
@@ -111,21 +154,27 @@ jobs:
             "${{ matrix.archive }}"
 
       - name: Create Linux archive
-        if: matrix.platform == 'Linux'
+        if: matrix.platform == 'Linux-x64'
         shell: bash
         run: |
           test -d dist/RCJMS
           cd dist/RCJMS
           zip -r "../../${{ matrix.archive }}" .
 
+      - name: Verify archive exists
+        shell: bash
+        run: |
+          test -f "${{ matrix.archive }}"
+          unzip -l "${{ matrix.archive }}" | head -40 || true
+
       - name: Upload portable build
         uses: actions/upload-artifact@v5
         with:
-          name: RCJMS-With-JDK-${{ matrix.platform }}
+          name: ${{ matrix.platform }}
           path: ${{ matrix.archive }}
 
       - name: Upload JAR
-        if: matrix.platform == 'Linux'
+        if: matrix.platform == 'Linux-x64'
         uses: actions/upload-artifact@v5
         with:
           name: RCJMS-JAR
@@ -145,25 +194,28 @@ jobs:
           merge-multiple: true
 
       - name: Verify artifacts
+        shell: bash
         run: |
           ls -lah artifacts
           test -f artifacts/RCJMS.jar
-          test -f artifacts/RCJMS-With-JDK-Windows.zip
-          test -f artifacts/RCJMS-With-JDK-Linux.zip
-          test -f artifacts/RCJMS-With-JDK-macOS.zip
+          test -f artifacts/RCJMS-With-JDK-Windows-x64.zip
+          test -f artifacts/RCJMS-With-JDK-Linux-x64.zip
+          test -f artifacts/RCJMS-With-JDK-macOS-Apple-Silicon.zip
+          test -f artifacts/RCJMS-With-JDK-macOS-Intel.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "Complete-Ver"
-          name: "Latest Tusted"
+          name: "Latest Trusted"
           draft: false
           prerelease: false
           make_latest: true
           files: |
             artifacts/RCJMS.jar
-            artifacts/RCJMS-With-JDK-Windows.zip
-            artifacts/RCJMS-With-JDK-Linux.zip
-            artifacts/RCJMS-With-JDK-macOS.zip
+            artifacts/RCJMS-With-JDK-Windows-x64.zip
+            artifacts/RCJMS-With-JDK-Linux-x64.zip
+            artifacts/RCJMS-With-JDK-macOS-Apple-Silicon.zip
+            artifacts/RCJMS-With-JDK-macOS-Intel.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
