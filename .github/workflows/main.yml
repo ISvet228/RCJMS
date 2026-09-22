@@ -22,15 +22,15 @@ jobs:
         include:
           - platform: Windows
             os: windows-latest
-            archive: RCJMS-Windows.zip
+            archive: RCJMS-With-JDK-Windows.zip
 
           - platform: Linux
             os: ubuntu-latest
-            archive: RCJMS-Linux.zip
+            archive: RCJMS-With-JDK-Linux.zip
 
           - platform: macOS
             os: macos-15
-            archive: RCJMS-macOS.zip
+            archive: RCJMS-With-JDK-macOS.zip
 
     steps:
       - name: Checkout
@@ -49,6 +49,7 @@ jobs:
         run: |
           rm -rf build
           mkdir -p build
+
           find src -name "*.java" -print > sources.txt
           javac -d build @sources.txt
 
@@ -71,13 +72,14 @@ jobs:
         shell: bash
         run: |
           test -f RCJMS.jar
-          jar tf RCJMS.jar > /dev/null
+          jar --describe-module --file RCJMS.jar || true
+          jar tf RCJMS.jar
 
       - name: Prepare jpackage input
         shell: bash
         run: |
           rm -rf package dist
-          mkdir -p package
+          mkdir package
           cp RCJMS.jar package/
 
       - name: Create portable application
@@ -91,63 +93,35 @@ jobs:
             --main-class RCJMS \
             --dest dist
 
-      - name: Debug dist output
-        shell: bash
-        run: |
-          echo "--- root ---"
-          ls -la
-          echo "--- dist ---"
-          ls -la dist || true
-          echo "--- recursive dist ---"
-          find dist -maxdepth 4 -print || true
-
       - name: Create Windows archive
         if: matrix.platform == 'Windows'
         shell: bash
         run: |
-          set -euxo pipefail
-          if [ -d "dist/RCJMS" ]; then
-            cd dist
-            7z a "../${{ matrix.archive }}" RCJMS
-          else
-            echo "ERROR: dist/RCJMS not found"
-            find dist -maxdepth 4 -print || true
-            exit 1
-          fi
+          test -d dist/RCJMS
+          cd dist/RCJMS
+          7z a "../../${{ matrix.archive }}" .
 
       - name: Create macOS archive
         if: matrix.platform == 'macOS'
         shell: bash
         run: |
-          set -euxo pipefail
-          if [ -d "dist/RCJMS.app" ]; then
-            ditto -c -k --sequesterRsrc --keepParent \
-              dist/RCJMS.app \
-              "${{ matrix.archive }}"
-          else
-            echo "ERROR: dist/RCJMS.app not found"
-            find dist -maxdepth 4 -print || true
-            exit 1
-          fi
+          test -d dist/RCJMS.app
+          ditto -c -k --sequesterRsrc --keepParent \
+            dist/RCJMS.app \
+            "${{ matrix.archive }}"
 
       - name: Create Linux archive
         if: matrix.platform == 'Linux'
         shell: bash
         run: |
-          set -euxo pipefail
-          if [ -d "dist/RCJMS" ]; then
-            cd dist
-            zip -r "../${{ matrix.archive }}" RCJMS
-          else
-            echo "ERROR: dist/RCJMS not found"
-            find dist -maxdepth 4 -print || true
-            exit 1
-          fi
+          test -d dist/RCJMS
+          cd dist/RCJMS
+          zip -r "../../${{ matrix.archive }}" .
 
       - name: Upload portable build
         uses: actions/upload-artifact@v5
         with:
-          name: RCJMS-${{ matrix.platform }}
+          name: RCJMS-With-JDK-${{ matrix.platform }}
           path: ${{ matrix.archive }}
 
       - name: Upload JAR
@@ -174,9 +148,9 @@ jobs:
         run: |
           ls -lah artifacts
           test -f artifacts/RCJMS.jar
-          test -f artifacts/RCJMS-Windows.zip
-          test -f artifacts/RCJMS-Linux.zip
-          test -f artifacts/RCJMS-macOS.zip
+          test -f artifacts/RCJMS-With-JDK-Windows.zip
+          test -f artifacts/RCJMS-With-JDK-Linux.zip
+          test -f artifacts/RCJMS-With-JDK-macOS.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -188,8 +162,8 @@ jobs:
           make_latest: true
           files: |
             artifacts/RCJMS.jar
-            artifacts/RCJMS-Windows.zip
-            artifacts/RCJMS-Linux.zip
-            artifacts/RCJMS-macOS.zip
+            artifacts/RCJMS-With-JDK-Windows.zip
+            artifacts/RCJMS-With-JDK-Linux.zip
+            artifacts/RCJMS-With-JDK-macOS.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
