@@ -148,9 +148,9 @@ jobs:
         run: |
           ls -lah artifacts
           test -f artifacts/RCJMS.jar
-          test -f artifacts/RCJMS-With-JDK-Windows.zip
-          test -f artifacts/RCJMS-With-JDK-Linux.zip
-          test -f artifacts/RCJMS-With-JDK-macOS.zip
+          test -f artifacts/RCJMS-Windows.zip
+          test -f artifacts/RCJMS-Linux.zip
+          test -f artifacts/RCJMS-macOS.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
