@@ -14,6 +14,9 @@
 "mm.3d_mode" = "3D (FLOORS)";
 "mm.floors_count" = "FLOORS";
 "mm.wrong_geometry" = "WRONG GEOMETRY";
+"mm.geometry" = "GEOMETRY";
+"mm.euclidean_geometry" = "EUCLIDEAN";
+"mm.looped_geometry" = "LOOPED";
 
 "st.settings" = "Settings";
 "st.fullscreen" = "Fullscreen";
@@ -22,7 +25,12 @@
 "st.flat" = "Flat";
 "st.neumorphic" = "Neumorphic";
 "st.glass" = "Glass";
-"st.render_scale" = "Render quality";
+"st.render_scale" = "Render scale";
+"st.resolution" = "Resolution";
+"st.ray_tracing" = "Ray Tracing";
+"st.ray_tracing_settings" = "Ray Tracing";
+"st.ray_tracing_quality" = "Ray Tracing Quality";
+"st.graphics" = "Graphics";
 
 "if.info" = "Info";
 "if.controls" = "Controls:";

@@ -14,7 +14,9 @@
 "mm.3d_mode" = "3D (ЭТАЖИ)";
 "mm.floors_count" = "ЭТАЖИ";
 "mm.wrong_geometry" = "СЛОМАННАЯ ГЕОМЕТРИЯ";
-"gv.exit_hint" = "Ctrl + C - Выход"
+"mm.geometry" = "ГЕОМЕТРИЯ";
+"mm.euclidean_geometry" = "ЕВКЛИДОВА";
+"mm.looped_geometry" = "ЗАКОЛЬЦОВАННАЯ";
 
 "st.settings" = "Настройки";
 "st.fullscreen" = "Полный экран";
@@ -24,6 +26,10 @@
 "st.neumorphic" = "Неоморфная";
 "st.glass" = "Стекло";
 "st.render_scale" = "Качество рендера";
+"st.resolution" = "Разрешение";
+"st.ray_tracing" = "Трассировка лучей";
+"st.ray_tracing_settings" = "Трассировка лучей";
+"st.ray_tracing_quality" = "Качество";
 
 "if.info" = "Информация";
 "if.controls" = "Управление:";
@@ -38,6 +44,7 @@
 "gv.euclidean" = "Евклидова";
 "gv.wrong_geometry" = "Сломанная Геометрия!";
 "gv.floor" = "Этаж: ";
+"gv.exit_hint" = "Ctrl + C - Выход"
 
 //Victory View vv.
 "vv.victory" = "Победа!";

@@ -4,13 +4,16 @@ import java.util.*;
 
 public class MazeGenerator {
     public enum FinishMode { OPPOSITE_CORNER, CENTER, RANDOM_EDGE }
-    public enum GeometryMode { EUCLIDEAN, WRONG }
+    public enum GeometryMode { EUCLIDEAN, WRONG, LOOPED}
 
-    private final int width;
-    private final int height;
+    public static final int OPEN = 0, WALL = 1, FINISH = 2, PORTAL = 5;
+
+    private final int width, height;
     private final int[][] maze;
     private final Random random;
     private final GeometryMode geometryMode;
+    private final PortalData portals = new PortalData();
+    public PortalData getPortals() { return portals; }
 
     //region Constructors
     public MazeGenerator(int width, int height, GeometryMode geometryMode) {
@@ -36,7 +39,97 @@ public class MazeGenerator {
         for (int y = 0; y < height; y++) Arrays.fill(maze[y], 1);
         carve(1, 1);
         addBranchesFUN();
+        generatePortals();
         return maze;
+    }
+    //endregion
+
+    //region Portals
+    private void generatePortals() {
+        if (geometryMode != GeometryMode.LOOPED) return;
+
+        List<int[]> deadEnds = findDeadEnds();
+        if (deadEnds.isEmpty()) return;
+        Collections.shuffle(deadEnds, random);
+
+        int used = 0;
+        int maxPairs = Math.max(1, (width * height) / 220);
+
+        int[] doorEnd = deadEnds.removeLast();
+        int roomSize = 5;
+        int[] block = null;
+        while (roomSize >= 3 && block == null) {
+            block = findFreeBlock(roomSize);
+            if (block == null) roomSize--;
+        }
+        if (block != null) {
+            for (int yy = block[1]; yy < block[1] + roomSize; yy++)
+                for (int xx = block[0]; xx < block[0] + roomSize; xx++)
+                    maze[yy][xx] = OPEN;
+
+            int exitX = block[0] + roomSize / 2, exitY = block[1] - 1;
+            int[] roomExit = {exitX, exitY, 0, -1};
+            linkPortalPair(doorEnd, roomExit);
+            used++;
+        }
+
+        for (int i = 0; i + 1 < deadEnds.size() && used < maxPairs; i += 2) {
+            linkPortalPair(deadEnds.get(i), deadEnds.get(i + 1));
+            used++;
+        }
+    }
+    private List<int[]> findDeadEnds() {
+        List<int[]> result = new ArrayList<>();
+        int[][] dirs = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+
+        for (int y = 1; y < height - 1; y++) {
+            for (int x = 1; x < width - 1; x++) {
+                if (maze[y][x] != OPEN) continue;
+                if (x == 1 && y == 1) continue;
+
+                int exits = 0, toNeighborX = 0, toNeighborY = 0;
+                for (int[] dir : dirs) {
+                    int ax = x + dir[0], ay = y + dir[1];
+                    if (ax < 0 || ay < 0 || ax >= width || ay >= height) continue;
+                    if (maze[ay][ax] == OPEN) { exits++; toNeighborX = dir[0]; toNeighborY = dir[1]; }
+                }
+                if (exits != 1) continue;
+
+                int normalDx = -toNeighborX, normalDy = -toNeighborY;
+                int px = x + normalDx, py = y + normalDy;
+                if (px <= 0 || py <= 0 || px >= width - 1 || py >= height - 1) continue;
+                if (maze[py][px] != WALL) continue;
+
+                int tx = -normalDy, ty = normalDx;
+                if (!isWallFlanked(x, y, tx, ty) || !isWallFlanked(px, py, tx, ty)) continue;
+
+                result.add(new int[]{px, py, normalDx, normalDy});
+            }
+        }
+        return result;
+    }
+    private boolean isWallFlanked(int cx, int cy, int tx, int ty) {
+        int lx = cx + tx, ly = cy + ty;
+        int rx = cx - tx, ry = cy - ty;
+        if (lx < 0 || ly < 0 || lx >= width || ly >= height || maze[ly][lx] != WALL) return false;
+        if (rx < 0 || ry < 0 || rx >= width || ry >= height || maze[ry][rx] != WALL) return false;
+        return true;
+    }
+    private int[] findFreeBlock(int size) {
+        for (int y = 2; y + size < height - 2; y++) {
+            outer:
+            for (int x = 2; x + size < width - 2; x++) {for (int yy = y - 1; yy <= y + size; yy++)
+                for (int xx = x - 1; xx <= x + size; xx++) if (maze[yy][xx] != WALL)
+                    continue outer;
+                return new int[]{x, y};
+            }
+        }
+        return null;
+    }
+    private void linkPortalPair(int[] a, int[] b) {
+        maze[a[1]][a[0]] = PORTAL;
+        maze[b[1]][b[0]] = PORTAL;
+        portals.link(a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3]);
     }
     //endregion
 
@@ -163,13 +256,13 @@ public class MazeGenerator {
         int y = 1;
 
         while (x != fx) {
-            maze[y][x] = 0;
+            if (maze[y][x] != PORTAL) maze[y][x] = 0;
             x += Integer.compare(fx, x);
         }
         while (y != fy) {
-            maze[y][x] = 0;
+            if (maze[y][x] != PORTAL) maze[y][x] = 0;
             y += Integer.compare(fy, y);
         }
-        maze[fy][fx] = 0;
+        if (maze[fy][fx] != PORTAL) maze[fy][fx] = 0;
     }
 }

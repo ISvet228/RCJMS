@@ -11,8 +11,10 @@ public class MazeGenerator3D {
     private final MazeGenerator.GeometryMode geometryMode;
 
     private int[][][] floors;
+    private PortalData[] floorPortals;
     private int[] entryX, entryY;
     private int finishFloor, finishX, finishY;
+    public PortalData getPortals(int floor) { return floorPortals[floor]; }
 
     //region Constructors
     public MazeGenerator3D(int width, int height, int floorCount, MazeGenerator.GeometryMode geometryMode) {
@@ -27,6 +29,7 @@ public class MazeGenerator3D {
     }
     public int[][][] generate(MazeGenerator.FinishMode mode) {
         floors = new int[floorCount][][];
+        floorPortals = new PortalData[floorCount];
         entryX = new int[floorCount];
         entryY = new int[floorCount];
 
@@ -34,6 +37,7 @@ public class MazeGenerator3D {
             Long floorSeed = seed != null ? seed + f * 104729L : null;
             MazeGenerator generator = floorSeed != null ? new MazeGenerator(width, height, floorSeed, geometryMode) : new MazeGenerator(width, height, geometryMode);
             floors[f] = generator.generateRaw();
+            floorPortals[f] = generator.getPortals();
         }
         entryX[0] = entryY[0] = 1;
 
@@ -153,9 +157,9 @@ public class MazeGenerator3D {
     }
     private void carveDirect(int[][] maze, int fromX, int fromY, int toX, int toY) {
         int x = fromX, y = fromY;
-        while (x != toX) { maze[y][x] = OPEN; x += Integer.compare(toX, x); }
-        while (y != toY) { maze[y][x] = OPEN; y += Integer.compare(toY, y); }
-        maze[toY][toX] = OPEN;
+        while (x != toX) { if (maze[y][x] != MazeGenerator.PORTAL) maze[y][x] = OPEN; x += Integer.compare(toX, x); }
+        while (y != toY) { if (maze[y][x] != MazeGenerator.PORTAL) maze[y][x] = OPEN; y += Integer.compare(toY, y); }
+        if (maze[toY][toX] != MazeGenerator.PORTAL) maze[toY][toX] = OPEN;
     }
     //endregion
 
