@@ -34,14 +34,9 @@ public final class NSLocalizedString {
     private static Path baseDirectory = Paths.get(".");
 
     static { reload(); installAutomaticTracking(); }
+    //endregion
 
-    public static final class LocalizedValue {
-        private final String key;
-        private LocalizedValue(String key) { this.key = key == null ? "" : key; }
-        public String getKey() { return key; }
-        public String get() { return localized(key); }
-        @Override public String toString() { return get(); }
-    }
+    //region Public API
     public static LocalizedValue of(String key) { return new LocalizedValue(key); }
     //endregion
 
@@ -207,7 +202,7 @@ public final class NSLocalizedString {
     }
     //endregion
 
-    //region Manual Something
+    //region Manual Refresh
     private static void refreshAll() {
         runOnEdt(() -> {
             List<Binding> copy;
@@ -365,6 +360,16 @@ public final class NSLocalizedString {
     private static void runOnEdt(Runnable runnable) {
         if (SwingUtilities.isEventDispatchThread()) runnable.run();
         else SwingUtilities.invokeLater(runnable);
+    }
+    //endregion
+
+    //region Nested Types
+    public static final class LocalizedValue {
+        private final String key;
+        private LocalizedValue(String key) { this.key = key == null ? "" : key; }
+        public String getKey() { return key; }
+        public String get() { return localized(key); }
+        @Override public String toString() { return get(); }
     }
     private record Binding(Runnable refresh) {}
     //endregion

@@ -62,6 +62,7 @@ public class CreditsView extends JPanel {
     private boolean finished = false;
     //endregion
 
+    //region Constructors
     public CreditsView() {
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setBackground(Color.BLACK);
@@ -79,7 +80,9 @@ public class CreditsView extends JPanel {
         scrollTimer.start();
         SwingUtilities.invokeLater(this::requestFocusInWindow);
     }
+    //endregion
 
+    //region Public API
     @Override public void addNotify() {
         super.addNotify();
         if (scrollTimer != null && !scrollTimer.isRunning()) scrollTimer.start();
@@ -89,6 +92,16 @@ public class CreditsView extends JPanel {
         NSLocalizedString.removeLanguageChangeListener(languageListener);
         super.removeNotify();
     }
+
+    public void returnToMenu() {
+        if (finished && scrollTimer == null) return;
+        finished = true;
+        if (scrollTimer != null) scrollTimer.stop();
+
+        try {RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu");}
+        catch (Exception ex) {ex.printStackTrace();}
+    }
+    //endregion
 
     //region Credits
     private void parseCredits() {
@@ -119,15 +132,6 @@ public class CreditsView extends JPanel {
         }
     }
     //endregion
-
-    public void returnToMenu() {
-        if (finished && scrollTimer == null) return;
-        finished = true;
-        if (scrollTimer != null) scrollTimer.stop();
-
-        try {RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu");}
-        catch (Exception ex) {ex.printStackTrace();}
-    }
 
     //region Layout
     private double getScale() {
@@ -214,7 +218,7 @@ public class CreditsView extends JPanel {
     }
     //endregion
 
-    //region Muuse
+    //region Mouse Input
     private CreditLine getClickedLine(int mouseX, int mouseY) {
         double scale = getScale();
         int offsetX = getOffsetX(scale);
@@ -250,9 +254,11 @@ public class CreditsView extends JPanel {
     }
     //endregion
 
+    //region Nested Types
     private static class CreditLine {
         String text, url;
         CreditLine(String text) { this.text = text; this.url = null; }
         CreditLine(String text, String url) { this.text = text; this.url = url; }
     }
+    //endregion
 }

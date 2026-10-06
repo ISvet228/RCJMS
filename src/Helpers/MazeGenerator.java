@@ -3,9 +3,7 @@ package Helpers;
 import java.util.*;
 
 public class MazeGenerator {
-    public enum FinishMode { OPPOSITE_CORNER, CENTER, RANDOM_EDGE }
-    public enum GeometryMode { EUCLIDEAN, WRONG, LOOPED}
-
+    //region Variables
     public static final int OPEN = 0, WALL = 1, FINISH = 2, PORTAL = 5;
 
     private final int width, height;
@@ -13,7 +11,7 @@ public class MazeGenerator {
     private final Random random;
     private final GeometryMode geometryMode;
     private final PortalData portals = new PortalData();
-    public PortalData getPortals() { return portals; }
+    //endregion
 
     //region Constructors
     public MazeGenerator(int width, int height, GeometryMode geometryMode) {
@@ -30,6 +28,10 @@ public class MazeGenerator {
         random = new Random(seed);
         this.geometryMode = geometryMode == null ? GeometryMode.EUCLIDEAN : geometryMode;
     }
+    //endregion
+
+    //region Public API
+    public PortalData getPortals() { return portals; }
     public int[][] generate(FinishMode mode) {
         generateRaw();
         placeFinish(mode);
@@ -78,7 +80,10 @@ public class MazeGenerator {
             used++;
         }
     }
-    private List<int[]> findDeadEnds() {
+    private List<int[]> findDeadEnds() { return findPortalSlots(maze); }
+
+    public static List<int[]> findPortalSlots(int[][] maze) {
+        int height = maze.length, width = maze[0].length;
         List<int[]> result = new ArrayList<>();
         int[][] dirs = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
 
@@ -95,25 +100,23 @@ public class MazeGenerator {
                 }
                 if (exits != 1) continue;
 
-                int normalDx = -toNeighborX, normalDy = -toNeighborY;
-                int px = x + normalDx, py = y + normalDy;
+                int px = x + (-toNeighborX), py = y + (-toNeighborY);
                 if (px <= 0 || py <= 0 || px >= width - 1 || py >= height - 1) continue;
                 if (maze[py][px] != WALL) continue;
+                if (isWallFlanked(maze, x, y, toNeighborY, -toNeighborX) || isWallFlanked(maze, px, py, toNeighborY, -toNeighborX)) continue;
 
-                int tx = -normalDy, ty = normalDx;
-                if (!isWallFlanked(x, y, tx, ty) || !isWallFlanked(px, py, tx, ty)) continue;
-
-                result.add(new int[]{px, py, normalDx, normalDy});
+                result.add(new int[]{px, py, -toNeighborX, -toNeighborY});
             }
         }
         return result;
     }
-    private boolean isWallFlanked(int cx, int cy, int tx, int ty) {
+    private static boolean isWallFlanked(int[][] maze, int cx, int cy, int tx, int ty) {
+        int height = maze.length, width = maze[0].length;
         int lx = cx + tx, ly = cy + ty;
         int rx = cx - tx, ry = cy - ty;
-        if (lx < 0 || ly < 0 || lx >= width || ly >= height || maze[ly][lx] != WALL) return false;
-        if (rx < 0 || ry < 0 || rx >= width || ry >= height || maze[ry][rx] != WALL) return false;
-        return true;
+        if (lx < 0 || ly < 0 || lx >= width || ly >= height || maze[ly][lx] != WALL) return true;
+        if (rx < 0 || ry < 0 || rx >= width || ry >= height || maze[ry][rx] != WALL) return true;
+        return false;
     }
     private int[] findFreeBlock(int size) {
         for (int y = 2; y + size < height - 2; y++) {
@@ -224,7 +227,7 @@ public class MazeGenerator {
         }
 
         if (!hasPath(fx, fy)) createDirectPath(fx, fy);
-        maze[fy][fx] = 2;
+        maze[fy][fx] = FINISH;
     }
     private boolean hasPath(int fx, int fy) {
         boolean[][] visited = new boolean[height][width];
@@ -265,4 +268,10 @@ public class MazeGenerator {
         }
         if (maze[fy][fx] != PORTAL) maze[fy][fx] = 0;
     }
+    //endregion
+
+    //region Enums
+    public enum FinishMode { OPPOSITE_CORNER, CENTER, RANDOM_EDGE }
+    public enum GeometryMode { EUCLIDEAN, WRONG, LOOPED}
+    //endregion
 }

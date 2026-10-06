@@ -18,9 +18,6 @@ public class TextureEditorView extends JPanel {
     //region Variables
     private final Style currentStyle = loadTheme();
 
-    public enum TextureMode {WALLS, FLOOR, CEILING, FINISH}
-    private enum Tool {SELECT, BRUSH, FILL, ERASER}
-
     public static final int MIN_TEXTURE_SIZE = 1, MAX_TEXTURE_SIZE = 512, MAX_FINISH_HEIGHT = 256;
     private static final int ABSOLUTE_MAX_TEXTURE_DIMENSION = 4096;
     private static final int MIN_TOOL_SIZE = 1, MAX_TOOL_SIZE = 10;
@@ -49,10 +46,8 @@ public class TextureEditorView extends JPanel {
     private final StyledButton resetButton = new StyledButton(currentStyle, "reset");
     private final StyledButton saveButton = new StyledButton(currentStyle, "te.save");
     private final StyledButton resetAllButton = new StyledButton(currentStyle, "reset");
-    private final StyledButton importPngButton = new StyledButton(currentStyle, "te.import_png");
+    private final StyledButton importPngButton = new StyledButton(currentStyle, "te.import_image");
 
-    private final StyledLabel widthLabel = new StyledLabel(currentStyle, "");
-    private final StyledLabel heightLabel = new StyledLabel(currentStyle, "");
     private final StyledLabel modeLabel = new StyledLabel(currentStyle, "");
     private final StyledLabel selectedCellLabel = new StyledLabel(currentStyle, "selected_none", false, false);
     private final StyledLabel brushSizeLabel = new StyledLabel(currentStyle, "");
@@ -72,6 +67,8 @@ public class TextureEditorView extends JPanel {
     private final StyledSlider eraserSizeSlider = new StyledSlider(currentStyle, MIN_TOOL_SIZE, MAX_TOOL_SIZE, 1);
 
     private final StyledTextField hexField = new StyledTextField(currentStyle, "FFFFFF");
+    private final StyledTextField widthField = new StyledTextField(currentStyle, "8");
+    private final StyledTextField heightField = new StyledTextField(currentStyle, "8");
 
     private final StyledToggleButton selectToolButton = new StyledToggleButton(currentStyle, "select");
     private final StyledToggleButton brushToolButton = new StyledToggleButton(currentStyle, "brush");
@@ -100,6 +97,7 @@ public class TextureEditorView extends JPanel {
     private boolean mouseHistoryStarted = false;
     //endregion
 
+    //region Constructors
     public TextureEditorView() throws IOException {
         setLayout(new BorderLayout(10, 10));
         setBorder(new EmptyBorder(10, 10, 10, 10));
@@ -109,7 +107,7 @@ public class TextureEditorView extends JPanel {
         buildRightPanel();
         buildCenter();
         buildBottomMenu();
-        setupUndoRedo();
+        setupKeyBinds();
 
         resetTextures();
         updateModeLabel();
@@ -121,18 +119,44 @@ public class TextureEditorView extends JPanel {
         undoHistory.clear();
         redoHistory.clear();
     }
-    private static int[][] createEmptyTexture(int width, int height) {
-        int[][] texture = new int[height][width];
-        for (int[] row : texture) Arrays.fill(row, EMPTY_COLOR);
-        return texture;
+    //endregion
+
+    //region Public API
+    public void resetTextures() {
+        if (!historyRestoring) saveHistoryState();
+        wallTexture = new int[][]{{ORIGINAL_WALL_COLOR}};
+        floorTexture = new int[][]{{ORIGINAL_FLOOR_COLOR}};
+        ceilingTexture = new int[][]{{ORIGINAL_CEILING_COLOR}};
+        finishTexture = new int[][]{{ORIGINAL_FINISH_COLOR}};
+
+        wallWidth = 1;
+        wallHeight = 1;
+        floorWidth = 1;
+        floorHeight = 1;
+        ceilingWidth = 1;
+        ceilingHeight = 1;
+        finishWidth = 1;
+        finishHeight = 1;
+
+        textureWidth = 1;
+        textureHeight = 1;
+
+        updatingSizeControls = true;
+        widthSlider.setMaximum(maxWidthForMode(mode));
+        heightSlider.setMaximum(maxHeightForMode(mode));
+        widthSlider.setValue(1);
+        heightSlider.setValue(1);
+        updatingSizeControls = false;
+
+        selectedX = 0;
+        selectedY = 0;
+
+        updateSizeLabels();
+        updateSelectedLabel();
+        setColorControls(getOriginalColorForMode(mode));
+        textureCanvas.rebuildGrid();
     }
-    private int[] sizeOf(int[][] texture) {return sizeOf(texture, MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE);}
-    private int[] sizeOf(int[][] texture, int maxWidth, int maxHeight) {
-        if (isValidTexture(texture)) return new int[]{ Math.clamp(texture[0].length, MIN_TEXTURE_SIZE, maxWidth), Math.clamp(texture.length, MIN_TEXTURE_SIZE, maxHeight)};
-        return new int[]{8, 8};
-    }
-    private static int maxWidthForMode(TextureMode m) {return MAX_TEXTURE_SIZE;}
-    private static int maxHeightForMode(TextureMode m) {return m == TextureMode.FINISH ? MAX_FINISH_HEIGHT : MAX_TEXTURE_SIZE;}
+    //endregion
 
     //region Builders
     private void buildTopMenu() {
@@ -169,16 +193,13 @@ public class TextureEditorView extends JPanel {
         modeLabel.setPreferredSize(new Dimension(150, 50));
         modePanel.add(modeLabel);
 
-        widthLabel.setForeground(Color.WHITE);
-        heightLabel.setForeground(Color.WHITE);
-        widthLabel.setPreferredSize(50, 22);
-        heightLabel.setPreferredSize(50, 22);
-
         configureSizeSlider(widthSlider);
         configureSizeSlider(heightSlider);
+        configureSizeField(widthField);
+        configureSizeField(heightField);
 
-        JPanel widthRow = buildLabeledSliderRow("width", widthSlider, widthLabel);
-        JPanel heightRow = buildLabeledSliderRow("height", heightSlider, heightLabel);
+        JPanel widthRow = buildLabeledSliderRow("width", widthSlider, widthField);
+        JPanel heightRow = buildLabeledSliderRow("height", heightSlider, heightField);
 
         widthSlider.addChangeListener(e -> {
             if (updatingSizeControls) return;
@@ -188,6 +209,11 @@ public class TextureEditorView extends JPanel {
             if (updatingSizeControls) return;
             setTextureSize(textureWidth, heightSlider.getValue());});
 
+        widthField.addActionListener(e -> applyWidthField());
+        widthField.addFocusListener(new FocusAdapter() {@Override public void focusLost(FocusEvent e) {applyWidthField();}});
+        heightField.addActionListener(e -> applyHeightField());
+        heightField.addFocusListener(new FocusAdapter() {@Override public void focusLost(FocusEvent e) {applyHeightField();}});
+
         stack.add(modePanel);
         stack.add(Box.createVerticalStrut(4));
         stack.add(widthRow);
@@ -196,7 +222,7 @@ public class TextureEditorView extends JPanel {
 
         exitButton.setFocusable(false);
 
-        exitButton.addActionListener(e -> {RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu");});
+        exitButton.addActionListener(e -> exitToMainMenu());
 
         JPanel exitPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 4));
         exitPanel.setOpaque(false);
@@ -207,7 +233,7 @@ public class TextureEditorView extends JPanel {
         add(top, BorderLayout.NORTH);
     }
 
-    private JPanel buildLabeledSliderRow(String labelText, StyledSlider slider, StyledLabel valueLabel) {
+    private JPanel buildLabeledSliderRow(String labelText, StyledSlider slider, StyledTextField valueField) {
         JPanel row = new JPanel(new BorderLayout(8, 0));
         row.setOpaque(false);
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -219,8 +245,28 @@ public class TextureEditorView extends JPanel {
 
         row.add(nameLabel, BorderLayout.WEST);
         row.add(slider, BorderLayout.CENTER);
-        row.add(valueLabel, BorderLayout.EAST);
+        row.add(valueField, BorderLayout.EAST);
         return row;
+    }
+    private void configureSizeField(StyledTextField field) {
+        field.setPreferredSize(new Dimension(64, 28));
+        field.setHorizontalAlignment(JTextField.CENTER);
+    }
+    private void applyWidthField() {
+        if (updatingSizeControls) return;
+        try {
+            int value = Integer.parseInt(widthField.getText().trim());
+            setTextureSize(value, textureHeight);
+        }
+        catch (NumberFormatException ignored) { updateSizeLabels(); }
+    }
+    private void applyHeightField() {
+        if (updatingSizeControls) return;
+        try {
+            int value = Integer.parseInt(heightField.getText().trim());
+            setTextureSize(textureWidth, value);
+        }
+        catch (NumberFormatException ignored) { updateSizeLabels(); }
     }
 
     private void configureSizeSlider(StyledSlider slider) {
@@ -401,13 +447,7 @@ public class TextureEditorView extends JPanel {
         buttons.setOpaque(false);
         buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        saveButton.addActionListener(e -> {
-            try {
-                Path folder = saveTexturesToTmp();
-                JOptionPane.showMessageDialog(this, "te.saved_to\n" + folder.toAbsolutePath(), "saved", JOptionPane.INFORMATION_MESSAGE);
-            } catch (IOException ex) {
-                JOptionPane.showMessageDialog(this, "te.could_not_save\n" + ex.getMessage(), "save_error", JOptionPane.ERROR_MESSAGE);}
-        });
+        saveButton.addActionListener(e -> saveWithDialog());
         resetAllButton.addActionListener(e -> resetTextures());
         importPngButton.addActionListener(e -> importPng());
 
@@ -474,55 +514,6 @@ public class TextureEditorView extends JPanel {
         modeLabel.setText("te.editing" + text);
     }
     //endregion
-
-    private void setTextureSize(int newWidth, int newHeight) {
-        newWidth = Math.clamp(newWidth, MIN_TEXTURE_SIZE, maxWidthForMode(mode));
-        newHeight = Math.clamp(newHeight, MIN_TEXTURE_SIZE, maxHeightForMode(mode));
-
-        if (newWidth == textureWidth && newHeight == textureHeight) {
-            updateSizeLabels();
-            return;
-        }
-        saveHistoryState();
-
-        int[][] resized = resizePreservingData(getCurrentTexture(), newWidth, newHeight);
-        setCurrentTexture(resized);
-
-        textureWidth = newWidth;
-        textureHeight = newHeight;
-        setSizeForMode(mode, newWidth, newHeight);
-
-        selectedX = selectedY = -1;
-
-        updatingSizeControls = true;
-        if (widthSlider.getValue() != newWidth) widthSlider.setValue(newWidth);
-        if (heightSlider.getValue() != newHeight) heightSlider.setValue(newHeight);
-        updatingSizeControls = false;
-
-        updateSizeLabels();
-        updateSelectedLabel();
-        textureCanvas.rebuildGrid();
-    }
-    private void updateSizeLabels() {
-        widthLabel.setText("te.w" + textureWidth);
-        heightLabel.setText("te.h" + textureHeight);
-    }
-    private void updateToolSizeLabels() {
-        brushSizeLabel.setText("brush_size" + brushSizeSlider.getValue());
-        eraserSizeLabel.setText("eraser_size" + eraserSizeSlider.getValue());
-    }
-    private int[][] resizePreservingData(int[][] source, int newWidth, int newHeight) {
-        int[][] result = createEmptyTexture(newWidth, newHeight);
-        if (source == null) return result;
-        int copyHeight = Math.min(source.length, newHeight);
-        for (int y = 0; y < copyHeight; y++) {
-            if (source[y] == null) continue;
-
-            int copyWidth = Math.min(source[y].length, newWidth);
-            System.arraycopy(source[y], 0, result[y], 0, copyWidth);
-        }
-        return result;
-    }
 
     //region Coloring
     private void selectCell(int x, int y) {
@@ -618,7 +609,7 @@ public class TextureEditorView extends JPanel {
     }
     //endregion
 
-    //region Colores
+    //region Color Controls
     private void openColorPicker() {
         final JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(this), "cp.choose_color", Dialog.ModalityType.APPLICATION_MODAL);
 
@@ -757,50 +748,7 @@ public class TextureEditorView extends JPanel {
     }
     //endregion
 
-    public void resetTextures() {
-        if (!historyRestoring) saveHistoryState();
-        wallTexture = new int[][]{{ORIGINAL_WALL_COLOR}};
-        floorTexture = new int[][]{{ORIGINAL_FLOOR_COLOR}};
-        ceilingTexture = new int[][]{{ORIGINAL_CEILING_COLOR}};
-        finishTexture = new int[][]{{ORIGINAL_FINISH_COLOR}};
-
-        wallWidth = 1;
-        wallHeight = 1;
-        floorWidth = 1;
-        floorHeight = 1;
-        ceilingWidth = 1;
-        ceilingHeight = 1;
-        finishWidth = 1;
-        finishHeight = 1;
-
-        textureWidth = 1;
-        textureHeight = 1;
-
-        updatingSizeControls = true;
-        widthSlider.setMaximum(maxWidthForMode(mode));
-        heightSlider.setMaximum(maxHeightForMode(mode));
-        widthSlider.setValue(1);
-        heightSlider.setValue(1);
-        updatingSizeControls = false;
-
-        selectedX = 0;
-        selectedY = 0;
-
-        updateSizeLabels();
-        updateSelectedLabel();
-        setColorControls(getOriginalColorForMode(mode));
-        textureCanvas.rebuildGrid();
-    }
-    private int getOriginalColorForMode(TextureMode m) {
-        return switch (m) {
-            case WALLS -> ORIGINAL_WALL_COLOR;
-            case FLOOR -> ORIGINAL_FLOOR_COLOR;
-            case CEILING -> ORIGINAL_CEILING_COLOR;
-            case FINISH -> ORIGINAL_FINISH_COLOR;
-        };
-    }
-
-    //region Texture RW-
+    //region Texture Saving And Loading
     public Path saveTexturesToTmp() throws IOException {
         Files.createDirectories(AppPaths.DATA_DIR);
 
@@ -962,32 +910,22 @@ public class TextureEditorView extends JPanel {
         selectFirstCell();
         textureCanvas.rebuildGrid();
     }
-
-    public static final class RuntimeTexture {
-        public final int width, height;
-        public final int[] pixels;
-
-        private RuntimeTexture(int width, int height, int[] pixels) { this.width = width; this.height = height; this.pixels = pixels; }
-        static RuntimeTexture empty() { return new RuntimeTexture(0, 0, new int[0]); }
-        int[][] toMatrix() {
-            if (width == 0 || height == 0) return new int[0][0];
-            int[][] result = new int[height][width];
-            for (int y = 0; y < height; y++) System.arraycopy(pixels, y * width, result[y], 0, width);
-            return result;
-        }
-    }
     //endregion
 
-    //region PNG Import
+    //region Image Import
     private void importPng() {
         JFileChooser chooser = new JFileChooser();
-        chooser.setFileFilter(new FileNameExtensionFilter("PNG Image", "png"));
+        String[] readerFormats = ImageIO.getReaderFileSuffixes();
+        java.util.List<String> extensions = new ArrayList<>();
+        for (String ext : readerFormats) if (ext != null && !ext.isBlank() && !extensions.contains(ext.toLowerCase(Locale.ROOT))) extensions.add(ext.toLowerCase(Locale.ROOT));
+        if (extensions.isEmpty()) extensions.add("png");
+        chooser.setFileFilter(new FileNameExtensionFilter("Image (" + String.join(", ", extensions) + ")", extensions.toArray(new String[0])));
 
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
 
         try {
             BufferedImage source = ImageIO.read(chooser.getSelectedFile());
-            if (source == null) throw new IOException("Unsupported or corrupted PNG file.");
+            if (source == null) throw new IOException("Unsupported or corrupted image file.");
 
             BufferedImage fitted = fitImageToBounds(source, maxWidthForMode(mode), maxHeightForMode(mode));
             int[][] imported = imageToTexture(fitted);
@@ -1041,6 +979,88 @@ public class TextureEditorView extends JPanel {
     }
     //endregion
 
+    //region Helpers
+    private static int[][] createEmptyTexture(int width, int height) {
+        int[][] texture = new int[height][width];
+        for (int[] row : texture) Arrays.fill(row, EMPTY_COLOR);
+        return texture;
+    }
+    private int[] sizeOf(int[][] texture) {return sizeOf(texture, MAX_TEXTURE_SIZE, MAX_TEXTURE_SIZE);}
+    private int[] sizeOf(int[][] texture, int maxWidth, int maxHeight) {
+        if (isValidTexture(texture)) return new int[]{ Math.clamp(texture[0].length, MIN_TEXTURE_SIZE, maxWidth), Math.clamp(texture.length, MIN_TEXTURE_SIZE, maxHeight)};
+        return new int[]{8, 8};
+    }
+    private static int maxWidthForMode(TextureMode m) {return MAX_TEXTURE_SIZE;}
+    private static int maxHeightForMode(TextureMode m) {return m == TextureMode.FINISH ? MAX_FINISH_HEIGHT : MAX_TEXTURE_SIZE;}
+
+    private void saveWithDialog() {
+        try {
+            Path folder = saveTexturesToTmp();
+            JOptionPane.showMessageDialog(this, "te.saved_to\n" + folder.toAbsolutePath(), "saved", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this, "te.could_not_save\n" + ex.getMessage(), "save_error", JOptionPane.ERROR_MESSAGE);}
+    }
+
+    private void setTextureSize(int newWidth, int newHeight) {
+        newWidth = Math.clamp(newWidth, MIN_TEXTURE_SIZE, maxWidthForMode(mode));
+        newHeight = Math.clamp(newHeight, MIN_TEXTURE_SIZE, maxHeightForMode(mode));
+
+        if (newWidth == textureWidth && newHeight == textureHeight) {
+            updateSizeLabels();
+            return;
+        }
+        saveHistoryState();
+
+        int[][] resized = resizePreservingData(getCurrentTexture(), newWidth, newHeight);
+        setCurrentTexture(resized);
+
+        textureWidth = newWidth;
+        textureHeight = newHeight;
+        setSizeForMode(mode, newWidth, newHeight);
+
+        selectedX = selectedY = -1;
+
+        updatingSizeControls = true;
+        if (widthSlider.getValue() != newWidth) widthSlider.setValue(newWidth);
+        if (heightSlider.getValue() != newHeight) heightSlider.setValue(newHeight);
+        updatingSizeControls = false;
+
+        updateSizeLabels();
+        updateSelectedLabel();
+        textureCanvas.rebuildGrid();
+    }
+    private void updateSizeLabels() {
+        boolean prev = updatingSizeControls;
+        updatingSizeControls = true;
+        if (!widthField.getText().equals(String.valueOf(textureWidth))) widthField.setText(String.valueOf(textureWidth));
+        if (!heightField.getText().equals(String.valueOf(textureHeight))) heightField.setText(String.valueOf(textureHeight));
+        updatingSizeControls = prev;
+    }
+    private void updateToolSizeLabels() {
+        brushSizeLabel.setText("brush_size" + brushSizeSlider.getValue());
+        eraserSizeLabel.setText("eraser_size" + eraserSizeSlider.getValue());
+    }
+    private int[][] resizePreservingData(int[][] source, int newWidth, int newHeight) {
+        int[][] result = createEmptyTexture(newWidth, newHeight);
+        if (source == null) return result;
+        int copyHeight = Math.min(source.length, newHeight);
+        for (int y = 0; y < copyHeight; y++) {
+            if (source[y] == null) continue;
+
+            int copyWidth = Math.min(source[y].length, newWidth);
+            System.arraycopy(source[y], 0, result[y], 0, copyWidth);
+        }
+        return result;
+    }
+    private int getOriginalColorForMode(TextureMode m) {
+        return switch (m) {
+            case WALLS -> ORIGINAL_WALL_COLOR;
+            case FLOOR -> ORIGINAL_FLOOR_COLOR;
+            case CEILING -> ORIGINAL_CEILING_COLOR;
+            case FINISH -> ORIGINAL_FINISH_COLOR;
+        };
+    }
+
     private static int[][] normalizeTexture(int[][] source, int width, int height) {
         int[][] result = createEmptyTexture(width, height);
         if (!isValidTexture(source)) return result;
@@ -1059,30 +1079,6 @@ public class TextureEditorView extends JPanel {
 
         for (int[] row : texture) if (row == null || row.length != width) return false;
         return true;
-    }
-    private static class EditorState {
-        private final int[][] wallTexture, floorTexture, ceilingTexture, finishTexture;
-        private final int wallWidth, wallHeight;
-        private final int floorWidth, floorHeight;
-        private final int ceilingWidth, ceilingHeight;
-        private final int finishWidth, finishHeight;
-
-        EditorState(int[][] wallTexture, int[][] floorTexture, int[][] ceilingTexture, int[][] finishTexture,
-                    int wallWidth, int wallHeight, int floorWidth, int floorHeight,
-                    int ceilingWidth, int ceilingHeight, int finishWidth, int finishHeight) {
-            this.wallTexture = copyTexture(wallTexture);
-            this.floorTexture = copyTexture(floorTexture);
-            this.ceilingTexture = copyTexture(ceilingTexture);
-            this.finishTexture = copyTexture(finishTexture);
-            this.wallWidth = wallWidth;
-            this.wallHeight = wallHeight;
-            this.floorWidth = floorWidth;
-            this.floorHeight = floorHeight;
-            this.ceilingWidth = ceilingWidth;
-            this.ceilingHeight = ceilingHeight;
-            this.finishWidth = finishWidth;
-            this.finishHeight = finishHeight;
-        }
     }
     private static int[][] copyTexture(int[][] texture) {
         if (texture == null) return null;
@@ -1137,13 +1133,85 @@ public class TextureEditorView extends JPanel {
         textureCanvas.refreshView();
         historyRestoring = false;
     }
-    private void setupUndoRedo() {
+    private void exitToMainMenu() {RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu");}
+    private void setupKeyBinds() {
         InputMap inputMap = getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         ActionMap actionMap = getActionMap();
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK), "undo");
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK), "redo");
         actionMap.put("undo", new AbstractAction() {@Override public void actionPerformed(ActionEvent e) {undo();}});
         actionMap.put("redo", new AbstractAction() {@Override public void actionPerformed(ActionEvent e) {redo();}});
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "exitEditor");
+        actionMap.put("exitEditor", new AbstractAction() {@Override public void actionPerformed(ActionEvent e) {exitToMainMenu();}});
+
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK), "saveTextures");
+        actionMap.put("saveTextures", new AbstractAction() {@Override public void actionPerformed(ActionEvent e) {saveWithDialog();}});
+
+        bindHotkey(inputMap, actionMap, KeyEvent.VK_1, () -> setMode(TextureMode.WALLS));
+        bindHotkey(inputMap, actionMap, KeyEvent.VK_2, () -> setMode(TextureMode.FLOOR));
+        bindHotkey(inputMap, actionMap, KeyEvent.VK_3, () -> setMode(TextureMode.CEILING));
+        bindHotkey(inputMap, actionMap, KeyEvent.VK_4, () -> setMode(TextureMode.FINISH));
+        bindHotkey(inputMap, actionMap, KeyEvent.VK_C, selectToolButton::doClick);
+        bindHotkey(inputMap, actionMap, KeyEvent.VK_V, brushToolButton::doClick);
+        bindHotkey(inputMap, actionMap, KeyEvent.VK_B, fillToolButton::doClick);
+        bindHotkey(inputMap, actionMap, KeyEvent.VK_N, eraserToolButton::doClick);
+    }
+    private void bindHotkey(InputMap inputMap, ActionMap actionMap, int keyCode, Runnable action) {
+        String name = "hotkey" + keyCode;
+        inputMap.put(KeyStroke.getKeyStroke(keyCode, 0), name);
+        actionMap.put(name, new AbstractAction() {@Override public void actionPerformed(ActionEvent e) {
+            if (KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() instanceof javax.swing.text.JTextComponent) return;
+            action.run();
+        }});
+    }
+    private void pickColorFromCell(int x, int y) {
+        if (x < 0 || y < 0 || x >= textureWidth || y >= textureHeight) return;
+        int color = getCurrentTexture()[y][x];
+        setColorControls(color == EMPTY_COLOR ? SAVED_EMPTY_COLOR : color);
+    }
+    private Style loadTheme() { return SaveData.load().theme; }
+    //endregion
+
+    //region Nested Types
+    public enum TextureMode {WALLS, FLOOR, CEILING, FINISH}
+    private enum Tool {SELECT, BRUSH, FILL, ERASER}
+
+    public static final class RuntimeTexture {
+        public final int width, height;
+        public final int[] pixels;
+
+        private RuntimeTexture(int width, int height, int[] pixels) { this.width = width; this.height = height; this.pixels = pixels; }
+        static RuntimeTexture empty() { return new RuntimeTexture(0, 0, new int[0]); }
+        int[][] toMatrix() {
+            if (width == 0 || height == 0) return new int[0][0];
+            int[][] result = new int[height][width];
+            for (int y = 0; y < height; y++) System.arraycopy(pixels, y * width, result[y], 0, width);
+            return result;
+        }
+    }
+    private static class EditorState {
+        private final int[][] wallTexture, floorTexture, ceilingTexture, finishTexture;
+        private final int wallWidth, wallHeight;
+        private final int floorWidth, floorHeight;
+        private final int ceilingWidth, ceilingHeight;
+        private final int finishWidth, finishHeight;
+
+        EditorState(int[][] wallTexture, int[][] floorTexture, int[][] ceilingTexture, int[][] finishTexture,
+                    int wallWidth, int wallHeight, int floorWidth, int floorHeight,
+                    int ceilingWidth, int ceilingHeight, int finishWidth, int finishHeight) {
+            this.wallTexture = copyTexture(wallTexture);
+            this.floorTexture = copyTexture(floorTexture);
+            this.ceilingTexture = copyTexture(ceilingTexture);
+            this.finishTexture = copyTexture(finishTexture);
+            this.wallWidth = wallWidth;
+            this.wallHeight = wallHeight;
+            this.floorWidth = floorWidth;
+            this.floorHeight = floorHeight;
+            this.ceilingWidth = ceilingWidth;
+            this.ceilingHeight = ceilingHeight;
+            this.finishWidth = finishWidth;
+            this.finishHeight = finishHeight;
+        }
     }
     private class TextureCanvas extends JPanel {
         private static final int ZOOM_ENABLE_SIZE = 64;
@@ -1154,6 +1222,7 @@ public class TextureEditorView extends JPanel {
         private static final int PAN_STEP_PIXELS = 40;
 
         private double gridX, gridY, gridSize, baseGridSize = 1;
+        private boolean pipetteDrag = false;
 
         private double zoom = MIN_ZOOM;
         private double panGridX = 0;
@@ -1169,14 +1238,19 @@ public class TextureEditorView extends JPanel {
                 @Override public void mousePressed(MouseEvent e) {
                     requestFocusInWindow();
                     mouseHistoryStarted = false;
+                    pipetteDrag = SwingUtilities.isRightMouseButton(e) && e.isAltDown();
+                    if (pipetteDrag) {
+                        pickColorFromCell((int) Math.floor((e.getX() - gridX) / Math.max(0.0001, gridSize)), (int) Math.floor((e.getY() - gridY) / Math.max(0.0001, gridSize)));
+                        return;
+                    }
                     if (currentTool == Tool.BRUSH || currentTool == Tool.ERASER) {
                         saveHistoryState();
                         mouseHistoryStarted = true;
                     }
                     handlePointerEvent(e.getX(), e.getY());
                 }
-                @Override public void mouseReleased(MouseEvent e) {mouseHistoryStarted = false;}
-                @Override public void mouseDragged(MouseEvent e) {if (currentTool == Tool.BRUSH || currentTool == Tool.ERASER) handlePointerEvent(e.getX(), e.getY());}
+                @Override public void mouseReleased(MouseEvent e) {mouseHistoryStarted = false; pipetteDrag = false;}
+                @Override public void mouseDragged(MouseEvent e) {if (!pipetteDrag && (currentTool == Tool.BRUSH || currentTool == Tool.ERASER)) handlePointerEvent(e.getX(), e.getY());}
             };
             addMouseListener(handler);
             addMouseMotionListener(handler);
@@ -1303,5 +1377,5 @@ public class TextureEditorView extends JPanel {
             g2d.drawString(text, (viewportW - fm.stringWidth(text)) / 2, Math.max(18, (int) gridY - 8));
         }
     }
-    private Style loadTheme() { return SaveData.load().theme; }
+    //endregion
 }

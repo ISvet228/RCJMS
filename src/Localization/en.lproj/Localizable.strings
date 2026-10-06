@@ -45,6 +45,7 @@
 "gv.euclidean" = "Euclidean";
 "gv.wrong_geometry" = "Wrong Geometry!";
 "gv.floor" = "Floor: ";
+"gv.seed" = "Seed: ";
 "gv.exit_hint" = "Ctrl + C - Exit"
 
 //Victory View vv.
@@ -70,7 +71,7 @@
 "te.fill_texture" = "Fill texture";
 "te.reset" = "Reset";
 "te.pick_a_tool" = "Pick a tool, pick a color, then click or drag on the grid.";
-"te.import_png" = "Import PNG";
+"te.import_image" = "Import Image";
 "te.save" = "Save";
 "te.saved_to" = "Textures saved to:";
 "te.could_not_save" = "Could not save textures:";
@@ -89,7 +90,7 @@
 "me.map_editor" = "Map Editor";
 "me.clear_map" = "Clear Map";
 "me.play_map" = "Play Map";
-"me.blocks_info" = "Start: (1, 1)    |    0 = Path    1 = Wall    2 = Finish";
+"me.blocks_info" = "Start: (1, 1)    |    0 = Path    1 = Wall    2 = Finish    3 = Stairs Up    4 = Stairs Down    5 = Portal";
 "me.select_a_tool" = "Select a tool and block, then click or drag on the map.";
 "me.path" = "0 - Path";
 "me.wall" = "1 - Wall";
@@ -108,6 +109,35 @@
 "me.finishes" = "Finishes: ";
 "me.reachable_finish" = "Reachable finish: (";
 "me.could_not_save_map" = "Could not save map:";
+"me.floor" = "Floor: ";
+"me.floors" = "Floors: ";
+"me.add_floor" = "+ Floor";
+"me.remove_floor" = "- Floor";
+"me.stairs_up" = "3 - Up";
+"me.stairs_down" = "4 - Down";
+"me.selected_stairs_up" = "Selected: Stairs Up (3)";
+"me.selected_stairs_down" = "Selected: Stairs Down (4)";
+"me.selected_portal" = "Selected: Portal (5)";
+"me.portal_tool" = "Portal";
+"me.portal_same_floor" = "Both ends of a portal must be on the same floor.";
+"me.portal_pick_second" = "First portal end placed. Now click a cell for the other end - on this floor or, after switching floors with the arrows, on any other one (click the same cell again to cancel).";
+"me.portals" = "Portals: ";
+"me.portal_hint" = "Portal tool: click any cell (except the start) for each end. The two ends can be on different floors. R - rotate direction. You pass through a portal in the direction of its arrow.";
+"me.portal_direction" = "Portal direction: ";
+"me.portal_already" = "There is already a portal in this cell.";
+"me.portal_not_on_start" = "A portal cannot be placed on the start.";
+"me.portal_exit_blocked" = "A portal leads into a wall (the cell right after its other end is a wall or outside the map). Move the portal or open that cell.";
+"me.portal_one_sided_tool" = "One-sided portal";
+"me.portal_one_sided_hint" = "One-sided portal: entrance and exit are on the same side. You enter along the arrow and come out of the same face (marked cyan). It can be linked with any other portal, also on another floor. R - rotate direction.";
+"me.geometry_for_test" = "Test geometry";
+"me.test_anyway" = "Test without validation";
+"me.load_map" = "Load Map";
+"me.load_from_seed" = "Load From Seed";
+"me.generate" = "Generate";
+"me.random_seed" = "Random";
+"me.seed_map_loaded" = "Map generated from the seed. You can edit it like any other map (Undo works).";
+"cancel" = "Cancel";
+"me.could_not_load_map" = "Could not load the saved map:";
 
 //Credits View cv.
 "cv.credits" = "Credits";

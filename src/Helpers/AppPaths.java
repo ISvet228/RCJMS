@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.*;
 
 public final class AppPaths {
+    //region Variables
     private static final String APP_FOLDER_NAME = "RCJMS";
     public static final Path DATA_DIR = resolveDataDir();
     public static final Path SAVE_FILE = DATA_DIR.resolve("save.rcjms");
@@ -11,9 +12,17 @@ public final class AppPaths {
     public static final Path FLOOR_TEXTURE_FILE = DATA_DIR.resolve("floortexture.rctx");
     public static final Path CEILING_TEXTURE_FILE = DATA_DIR.resolve("ceilingtexture.rctx");
     public static final Path FINISH_TEXTURE_FILE = DATA_DIR.resolve("finishtexture.rctx");
+    //endregion
 
+    //region Constructors
     private AppPaths() { }
+    //endregion
+
+    //region Public API
     public static Path file(String name) { return DATA_DIR.resolve(name); }
+    //endregion
+
+    //region Helpers
     private static Path resolveDataDir() {
         String os = System.getProperty("os.name", "").toLowerCase();
         String userHome = System.getProperty("user.home", ".");
@@ -37,4 +46,5 @@ public final class AppPaths {
         }
         return dataDir;
     }
+    //endregion
 }

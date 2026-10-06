@@ -69,7 +69,7 @@ public class MainMenuView extends JPanel {
     private final Timer starTimer;
     //endregion
 
-    //region Constructor
+    //region Constructors
     public MainMenuView() {
         applySavedSettings();
 
@@ -84,67 +84,14 @@ public class MainMenuView extends JPanel {
         });
 
         addComponents();
+        applySavedMazeSettings();
+        seedField.limitInput(SeedUtil.LENGTH, SeedUtil::isAllowedChar);
         setupMainButtons();
         settingsButton.addActionListener(e -> openSettingsDialog());
         infoButton.addActionListener(e -> openInfoDialog());
         for (int i = 0; i < 80; i++) stars.add(createRandomStar());
         starTimer = new Timer(16, e -> { updateStars(); repaint(); });
         starTimer.start();
-    }
-
-    private void setupTitle() {
-        title.setBaseFontSize(55f);
-        title.setAutoScale(true);
-        title.setAnimationSpeed(1.0);
-        title.setPulseAmount(0.06);
-        title.setRotationAmount(0.05);
-        title.setDepth(6);
-        title.setTextColor(new Color(255, 127, 0));
-        title.setDepthColor(Color.cyan);
-        title.addActionListener((ActionEvent e) -> title.setText(title.getText().equals("RCJMS") ? "RayCasting Java Maze Simulator" : "RCJMS"));
-    }
-    private void setupFields() {
-        xField.setHorizontalAlignment(JLabel.CENTER);
-        yField.setHorizontalAlignment(JLabel.CENTER);
-
-        floorsLabel.setVisible(false);
-        floorsField.setHorizontalAlignment(JLabel.CENTER);
-        floorsField.setVisible(false);
-    }
-    private void addComponents() {
-        add(title);
-        add(playButton);
-        add(textureEditorButton);
-        add(mapEditorButton);
-        add(creditsButton);
-        add(exitButton);
-        add(settingsButton);
-        add(infoButton);
-        add(modeBox);
-        add(mazeDimensionsLabel);
-        add(modeLabel);
-        add(geometryBox);
-        add(geometryLabel);
-        add(floorsLabel);
-        add(xLabel);
-        add(yLabel);
-        add(seedLabel);
-        add(yField);
-        add(xField);
-        add(seedField);
-        add(floorsField);
-        add(mode3DToggle);
-    }
-
-    private void setupMainButtons() {
-        playButton.addActionListener(e -> StartGameView());
-        textureEditorButton.addActionListener(e -> {
-            try { RCJMS.instance.ChangeView(RCJMS.instance.textureEditorView = new TextureEditorView(), "te.texture_editor"); }
-            catch (IOException ex) { throw new RuntimeException(ex);
-            }});
-        mapEditorButton.addActionListener(e -> RCJMS.instance.ChangeView(RCJMS.instance.mapEditorView = new MapEditorView(), "me.map_editor"));
-        creditsButton.addActionListener(e -> RCJMS.instance.ChangeView(RCJMS.instance.creditsView = new CreditsView(), "cv.credits"));
-        exitButton.addActionListener(e -> System.exit(0));
     }
     //endregion
 
@@ -268,7 +215,7 @@ public class MainMenuView extends JPanel {
         StyledButton glassButton = createThemeButton(Style.GLASS, "st.glass");
         ActionListener themeListener = ev -> {
             Style newStyle = ev.getSource() == flatButton ? Style.FLAT : ev.getSource() == neumorphicButton ? Style.NEUMORPHIC : Style.GLASS;
-            if (newStyle != currentStyle) { currentStyle = newStyle; saveSettings(NSLocalizedString.getLanguage(), newStyle); SyncAllUI(newStyle); }
+            if (newStyle != currentStyle) { currentStyle = newStyle; saveSettings(NSLocalizedString.getLanguage(), newStyle); syncAllUI(newStyle); }
         };
         flatButton.addActionListener(themeListener);
         neumorphicButton.addActionListener(themeListener);
@@ -339,39 +286,6 @@ public class MainMenuView extends JPanel {
     }
     //endregion
 
-    private void openInfoDialog() {
-        if (infoDialog != null && infoDialog.isVisible()) {
-            infoDialog.toFront();
-            return;
-        }
-
-        JLabel label = new JLabel("<html>if.controls<br>if.move<br>run</html>");
-        label.setForeground(Color.WHITE);
-        label.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 16));
-
-        infoCloseButton = createButton(currentStyle, "close");
-
-        JPanel panel = new JPanel(new BorderLayout(0, 16));
-        panel.setBackground(RCJMS.MY_FAV_GRAY);
-        panel.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
-        panel.add(label, BorderLayout.CENTER);
-
-        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        bottomPanel.setOpaque(false);
-        bottomPanel.add(infoCloseButton);
-        panel.add(bottomPanel, BorderLayout.SOUTH);
-
-        infoDialog = new JDialog();
-        NSLocalizedString.bind(infoDialog, "if.info", infoDialog::setTitle);
-        infoCloseButton.addActionListener(ev -> infoDialog.dispose());
-        infoDialog.setContentPane(panel);
-        infoDialog.pack();
-        infoDialog.setLocationRelativeTo(this);
-        infoDialog.setAlwaysOnTop(true);
-        infoDialog.setResizable(false);
-        infoDialog.setVisible(true);
-    }
-
     //region Settings Layout Helpers
     private JPanel createSettingsPage() {
         JPanel panel = new JPanel();
@@ -403,29 +317,63 @@ public class MainMenuView extends JPanel {
     }
     //endregion
 
+    //region Maze Settings
+    private void applySavedMazeSettings() {
+        SaveData.Data saved = SaveData.load();
+        xField.setText(String.valueOf(saved.mazeWidth));
+        yField.setText(String.valueOf(saved.mazeHeight));
+        floorsField.setText(String.valueOf(saved.mazeFloors));
+        modeBox.setSelectedIndex(saved.mazeFinishMode);
+        geometryBox.setSelectedIndex(saved.mazeGeometry);
+        mode3DToggle.setSelected(saved.maze3D);
+        floorsLabel.setVisible(saved.maze3D);
+        floorsField.setVisible(saved.maze3D);
+
+        modeBox.addActionListener(e -> saveMazeSettings());
+        geometryBox.addActionListener(e -> saveMazeSettings());
+        mode3DToggle.addActionListener(e -> saveMazeSettings());
+        java.awt.event.FocusAdapter saveOnLeave = new java.awt.event.FocusAdapter() {
+            @Override public void focusLost(java.awt.event.FocusEvent e) { saveMazeSettings(); }
+        };
+        xField.addFocusListener(saveOnLeave);
+        yField.addFocusListener(saveOnLeave);
+        floorsField.addFocusListener(saveOnLeave);
+    }
+    private void saveMazeSettings() {
+        SaveData.Data saved = SaveData.load();
+        try {
+            SaveData.saveMazeSettings(parseOr(xField.getText(), saved.mazeWidth), parseOr(yField.getText(), saved.mazeHeight),
+                    modeBox.getSelectedIndex(), geometryBox.getSelectedIndex(), mode3DToggle.isSelected(), parseOr(floorsField.getText(), saved.mazeFloors));
+        } catch (IOException ex) { ex.printStackTrace(); }
+    }
+    private static int parseOr(String text, int fallback) {
+        try { return Integer.parseInt(text.trim()); }
+        catch (NumberFormatException ex) { return fallback; }
+    }
+    //endregion
+
     //region Game Launch
-    private void StartGameView() {
+    private void startGameView() {
+        saveMazeSettings();
         try {
             GameView gameView = createGameView(Math.clamp(Integer.parseInt(xField.getText()), 5, 200), Math.clamp(Integer.parseInt(yField.getText()), 5, 200),
                     modeBox.getSelectedIndex(), geometryBox.getSelectedIndex(), parseSeed(), parseLayers());
-            RCJMS.instance.ChangeView(RCJMS.instance.gameView = gameView, "RayCast Me!");
+            RCJMS.instance.changeView(RCJMS.instance.gameView = gameView, "RayCast Me!");
             RCJMS.instance.gameView.start();
         }
         catch (NumberFormatException | IOException ex) {
             JOptionPane.showMessageDialog(this, "mm.maze_size_error", "mm.invalid_input", JOptionPane.ERROR_MESSAGE);
         }
     }
-    private Long parseSeed() {
-        String seedText = seedField.getText().trim();
-        if (seedText.isEmpty()) return null;
-        try { return Long.parseLong(seedText); }
-        catch (NumberFormatException ex) { return (long) seedText.hashCode(); }
+    private String parseSeed() {
+        String seedText = SeedUtil.normalize(seedField.getText());
+        return seedText.isEmpty() ? null : seedText;
     }
     private int parseLayers() {
         String text = floorsField.getText().trim();
         return text.isEmpty() ? 3 : Math.clamp(Integer.parseInt(text), 2, 20);
     }
-    private GameView createGameView(int w, int h, int mode, int geometry, Long seed, int layers) throws IOException {
+    private GameView createGameView(int w, int h, int mode, int geometry, String seed, int layers) throws IOException {
         if (mode3DToggle.isSelected()) return seed == null ? new GameView(w, h, mode, geometry, layers) : new GameView(w, h, mode, geometry, seed, layers);
         return seed == null ? new GameView(w, h, mode, geometry) : new GameView(w, h, mode, geometry, seed);
     }
@@ -526,7 +474,7 @@ public class MainMenuView extends JPanel {
             if (resolutionOptions[i][0] <= width) index = i;
         return index;
     }
-    private void SyncAllUI(Style style) {
+    private void syncAllUI(Style style) {
         for (StyledTextField STF : new StyledTextField[]{xField, yField, floorsField, seedField})
             if (STF != null) STF.setStyle(style);
         for (StyledButton SB : new StyledButton[]{playButton, textureEditorButton, mapEditorButton, creditsButton, exitButton, settingsButton, infoButton, settingsCloseButton, infoCloseButton})
@@ -540,7 +488,7 @@ public class MainMenuView extends JPanel {
     }
     //endregion
 
-    //region STARES
+    //region Stars
     private void drawStar(Graphics2D g2d, Star star) {
         AffineTransform old = g2d.getTransform();
         g2d.translate(star.x, star.y);
@@ -578,16 +526,97 @@ public class MainMenuView extends JPanel {
             }
         }
     }
-    static class Star {
-        private double x, y, speed, rotation, rotationSpeed;
-        private final int size;
-        public Star(double x, double y, int size, double speed, double rotation, double rotationSpeed) {
-            this.x = x; this.y = y; this.size = size; this.speed = speed; this.rotation = rotation; this.rotationSpeed = rotationSpeed;
-        }
-    }
     //endregion
 
     //region Helpers
+    private void setupTitle() {
+        title.setBaseFontSize(55f);
+        title.setAutoScale(true);
+        title.setAnimationSpeed(1.0);
+        title.setPulseAmount(0.06);
+        title.setRotationAmount(0.05);
+        title.setDepth(6);
+        title.setTextColor(new Color(255, 127, 0));
+        title.setDepthColor(Color.cyan);
+        title.addActionListener((ActionEvent e) -> title.setText(title.getText().equals("RCJMS") ? "RayCasting Java Maze Simulator" : "RCJMS"));
+    }
+    private void setupFields() {
+        xField.setHorizontalAlignment(JLabel.CENTER);
+        yField.setHorizontalAlignment(JLabel.CENTER);
+
+        floorsLabel.setVisible(false);
+        floorsField.setHorizontalAlignment(JLabel.CENTER);
+        floorsField.setVisible(false);
+    }
+    private void addComponents() {
+        add(title);
+        add(playButton);
+        add(textureEditorButton);
+        add(mapEditorButton);
+        add(creditsButton);
+        add(exitButton);
+        add(settingsButton);
+        add(infoButton);
+        add(modeBox);
+        add(mazeDimensionsLabel);
+        add(modeLabel);
+        add(geometryBox);
+        add(geometryLabel);
+        add(floorsLabel);
+        add(xLabel);
+        add(yLabel);
+        add(seedLabel);
+        add(yField);
+        add(xField);
+        add(seedField);
+        add(floorsField);
+        add(mode3DToggle);
+    }
+
+    private void setupMainButtons() {
+        playButton.addActionListener(e -> startGameView());
+        textureEditorButton.addActionListener(e -> {
+            try { RCJMS.instance.changeView(RCJMS.instance.textureEditorView = new TextureEditorView(), "te.texture_editor"); }
+            catch (IOException ex) { throw new RuntimeException(ex);
+            }});
+        mapEditorButton.addActionListener(e -> RCJMS.instance.changeView(RCJMS.instance.mapEditorView = new MapEditorView(), "me.map_editor"));
+        creditsButton.addActionListener(e -> RCJMS.instance.changeView(RCJMS.instance.creditsView = new CreditsView(), "cv.credits"));
+        exitButton.addActionListener(e -> System.exit(0));
+    }
+
+    private void openInfoDialog() {
+        if (infoDialog != null && infoDialog.isVisible()) {
+            infoDialog.toFront();
+            return;
+        }
+
+        JLabel label = new JLabel("<html>if.controls<br>if.move<br>run</html>");
+        label.setForeground(Color.WHITE);
+        label.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 16));
+
+        infoCloseButton = createButton(currentStyle, "close");
+
+        JPanel panel = new JPanel(new BorderLayout(0, 16));
+        panel.setBackground(RCJMS.MY_FAV_GRAY);
+        panel.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+        panel.add(label, BorderLayout.CENTER);
+
+        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        bottomPanel.setOpaque(false);
+        bottomPanel.add(infoCloseButton);
+        panel.add(bottomPanel, BorderLayout.SOUTH);
+
+        infoDialog = new JDialog();
+        NSLocalizedString.bind(infoDialog, "if.info", infoDialog::setTitle);
+        infoCloseButton.addActionListener(ev -> infoDialog.dispose());
+        infoDialog.setContentPane(panel);
+        infoDialog.pack();
+        infoDialog.setLocationRelativeTo(this);
+        infoDialog.setAlwaysOnTop(true);
+        infoDialog.setResizable(false);
+        infoDialog.setVisible(true);
+    }
+
     @Override public void addNotify() {
         super.addNotify();
         if (starTimer != null && !starTimer.isRunning()) starTimer.start();
@@ -610,6 +639,16 @@ public class MainMenuView extends JPanel {
         String[] labels = new String[resolutionOptions.length];
         for (int i = 0; i < resolutionOptions.length; i++) labels[i] = resolutionOptions[i][0] + "x" + resolutionOptions[i][1];
         return labels;
+    }
+    //endregion
+
+    //region Nested Types
+    static class Star {
+        private double x, y, speed, rotation, rotationSpeed;
+        private final int size;
+        public Star(double x, double y, int size, double speed, double rotation, double rotationSpeed) {
+            this.x = x; this.y = y; this.size = size; this.speed = speed; this.rotation = rotation; this.rotationSpeed = rotationSpeed;
+        }
     }
     //endregion
 }

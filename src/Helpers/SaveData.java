@@ -8,6 +8,7 @@ import java.nio.file.*;
 import java.util.*;
 
 public final class SaveData {
+    //region Variables
     public static final String VERSION = "1.95";
     public static final String DEFAULT_LANGUAGE = Locale.getDefault().getLanguage();
     public static final Style DEFAULT_THEME = Style.FLAT;
@@ -18,20 +19,14 @@ public final class SaveData {
     public static final int DEFAULT_WINDOW_WIDTH = 960;
     public static final int DEFAULT_WINDOW_HEIGHT = 540;
     public static final boolean DEFAULT_FULLSCREEN = false;
+    public static final int DEFAULT_MAZE_SIZE = 25, DEFAULT_MAZE_FLOORS = 3;
+    //endregion
 
+    //region Constructors
     private SaveData() { }
-    public static final class Data {
-        public String language = DEFAULT_LANGUAGE;
-        public Style theme = DEFAULT_THEME;
-        public double renderScale = DEFAULT_RENDER_SCALE;
-        public boolean vsync = DEFAULT_VSYNC;
-        public boolean rayTracing = DEFAULT_RAY_TRACING;
-        public int rayTracingQuality = DEFAULT_RAY_TRACING_QUALITY;
-        public int windowWidth = DEFAULT_WINDOW_WIDTH;
-        public int windowHeight = DEFAULT_WINDOW_HEIGHT;
-        public boolean fullscreen = DEFAULT_FULLSCREEN;
-        public int[][] map;
-    }
+    //endregion
+
+    //region Public API
     public static Data load() {
         Data data = new Data();
         Path file = AppPaths.SAVE_FILE;
@@ -42,13 +37,26 @@ public final class SaveData {
             List<int[]> rows = new ArrayList<>();
             int expectedWidth = -1;
             boolean readingMap = false;
+            boolean readingFloor = false;
+            int readingFloorIndex = -1;
+            boolean legacyMapValid = true;
+            Map<Integer, int[][]> floorRows = new TreeMap<>();
+            List<int[]> portalLinks = new ArrayList<>();
+            boolean portalsValid = true;
 
             for (String raw : lines) {
                 String line = raw.trim();
                 if (line.isEmpty() || line.startsWith("#")) continue;
                 if (line.startsWith("[") && line.endsWith("]")) {
+                    if (readingMap && !rows.isEmpty() && legacyMapValid) data.map = rows.toArray(new int[0][]);
+                    if (readingFloor && !rows.isEmpty()) floorRows.put(readingFloorIndex, rows.toArray(new int[0][]));
+
                     section = line.substring(1, line.length() - 1).trim().toLowerCase(Locale.ROOT);
                     readingMap = section.equals("map");
+                    readingFloor = section.matches("floor\\d+");
+                    readingFloorIndex = readingFloor ? Integer.parseInt(section.substring(5)) : -1;
+                    rows = new ArrayList<>();
+                    expectedWidth = -1;
                     continue;
                 }
 
@@ -74,22 +82,68 @@ public final class SaveData {
                         }
                     } catch (IllegalArgumentException ignored) { }
                 }
-                else if (readingMap) {
+                else if (section.equals("maze")) {
+                    int eq = line.indexOf('=');
+                    if (eq <= 0) continue;
+                    String key = line.substring(0, eq).trim();
+                    String value = line.substring(eq + 1).trim();
+                    try {
+                        switch (key) {
+                            case "width" -> data.mazeWidth = Math.clamp(Integer.parseInt(value), 5, 200);
+                            case "height" -> data.mazeHeight = Math.clamp(Integer.parseInt(value), 5, 200);
+                            case "finishMode" -> data.mazeFinishMode = Math.clamp(Integer.parseInt(value), 0, 2);
+                            case "geometry" -> data.mazeGeometry = Math.clamp(Integer.parseInt(value), 0, 2);
+                            case "mode3D" -> data.maze3D = Boolean.parseBoolean(value);
+                            case "floors" -> data.mazeFloors = Math.clamp(Integer.parseInt(value), 2, 20);
+                        }
+                    } catch (NumberFormatException ignored) { }
+                }
+                else if (section.equals("mapmeta")) {
+                    int eq = line.indexOf('=');
+                    if (eq <= 0) continue;
+                    String key = line.substring(0, eq).trim();
+                    String value = line.substring(eq + 1).trim();
+                    if (key.equals("geometry")) {
+                        try { data.mapGeometryMode = Math.max(0, Integer.parseInt(value)); } catch (NumberFormatException ignored) { }
+                    }
+                }
+                else if (section.equals("portals")) {
+                    String[] values = line.split("[,;\\s]+");
+                    if (values.length != 9 && values.length != 11 && values.length != 12) { portalsValid = false; continue; }
+                    try {
+                        int[] link = new int[values.length];
+                        for (int i = 0; i < link.length; i++) link[i] = Integer.parseInt(values[i]);
+                        portalLinks.add(link);
+                    } catch (NumberFormatException ignored) { portalsValid = false; }
+                }
+                else if (readingMap || readingFloor) {
                     String[] values = line.split("[,;\\s]+");
                     if (expectedWidth == -1) expectedWidth = values.length;
-                    if (values.length != expectedWidth) { rows.clear(); break; }
+                    if (values.length != expectedWidth) { rows.clear(); if (readingMap) legacyMapValid = false; break; }
                     int[] row = new int[values.length];
                     try {
                         for (int x = 0; x < values.length; x++) {
                             int value = Integer.parseInt(values[x]);
-                            if (value < 0 || value > 2) throw new NumberFormatException();
+                            if (value < 0 || value > 5) throw new NumberFormatException();
                             row[x] = value;
                         }
                         rows.add(row);
-                    } catch (NumberFormatException ignored) { rows.clear(); break; }
+                    } catch (NumberFormatException ignored) { rows.clear(); if (readingMap) legacyMapValid = false; break; }
                 }
             }
-            if (!rows.isEmpty()) data.map = rows.toArray(new int[0][]);
+            if (readingMap && !rows.isEmpty() && legacyMapValid) data.map = rows.toArray(new int[0][]);
+            if (readingFloor && !rows.isEmpty()) floorRows.put(readingFloorIndex, rows.toArray(new int[0][]));
+
+            if (!floorRows.isEmpty()) {
+                data.mapFloors = new int[floorRows.size()][][];
+                int i = 0;
+                for (int[][] floor : floorRows.values()) data.mapFloors[i++] = floor;
+                if (portalsValid) data.mapPortalLinks = portalLinks;
+            }
+            else if (data.map != null) {
+                // Legacy single-floor save: treat it as a one-floor map for the new multi-floor pipeline.
+                data.mapFloors = new int[][][]{data.map};
+            }
         } catch (IOException ignored) { }
         return data;
     }
@@ -106,14 +160,35 @@ public final class SaveData {
         data.fullscreen = fullscreen;
         save(data);
     }
+    /** Remembers the maze options picked in the main menu (size, finish mode, geometry, 3D mode, floor count). */
+    public static void saveMazeSettings(int width, int height, int finishMode, int geometry, boolean mode3D, int floors) throws IOException {
+        Data data = load();
+        data.mazeWidth = Math.clamp(width, 5, 200);
+        data.mazeHeight = Math.clamp(height, 5, 200);
+        data.mazeFinishMode = Math.clamp(finishMode, 0, 2);
+        data.mazeGeometry = Math.clamp(geometry, 0, 2);
+        data.maze3D = mode3D;
+        data.mazeFloors = Math.clamp(floors, 2, 20);
+        save(data);
+    }
     public static void saveMap(int[][] map, String language, Style theme, double renderScale) throws IOException {
+        saveMap(new int[][][]{map}, new ArrayList<>(), 0, language, theme, renderScale);
+    }
+    /** Saves a (possibly multi-floor) custom map together with its portal links and preferred playtest geometry mode. */
+    public static void saveMap(int[][][] floors, List<int[]> portalLinks, int geometryMode, String language, Style theme, double renderScale) throws IOException {
         Data data = load();
         data.language = language;
         data.theme = theme;
         data.renderScale = renderScale;
-        data.map = map;
+        data.mapFloors = floors;
+        data.map = (floors != null && floors.length > 0) ? floors[0] : null;
+        data.mapPortalLinks = portalLinks != null ? portalLinks : new ArrayList<>();
+        data.mapGeometryMode = geometryMode;
         save(data);
     }
+    //endregion
+
+    //region Helpers
     private static void save(Data data) throws IOException {
         Files.createDirectories(AppPaths.DATA_DIR);
         Path temp = AppPaths.SAVE_FILE.resolveSibling(AppPaths.SAVE_FILE.getFileName() + ".tmp");
@@ -129,14 +204,54 @@ public final class SaveData {
             writer.write("windowWidth=" + data.windowWidth); writer.newLine();
             writer.write("windowHeight=" + data.windowHeight); writer.newLine();
             writer.write("fullscreen=" + data.fullscreen); writer.newLine(); writer.newLine();
-            writer.write("[map]"); writer.newLine();
-            if (data.map != null) {
-                for (int y = 0; y < data.map.length; y++) {
-                    for (int x = 0; x < data.map[y].length; x++) {
-                        if (x > 0) writer.write(',');
-                        writer.write(Integer.toString(data.map[y][x]));
+
+            writer.write("[maze]"); writer.newLine();
+            writer.write("width=" + data.mazeWidth); writer.newLine();
+            writer.write("height=" + data.mazeHeight); writer.newLine();
+            writer.write("finishMode=" + data.mazeFinishMode); writer.newLine();
+            writer.write("geometry=" + data.mazeGeometry); writer.newLine();
+            writer.write("mode3D=" + data.maze3D); writer.newLine();
+            writer.write("floors=" + data.mazeFloors); writer.newLine(); writer.newLine();
+
+            writer.write("[mapmeta]"); writer.newLine();
+            writer.write("geometry=" + data.mapGeometryMode); writer.newLine(); writer.newLine();
+
+            if (data.mapFloors != null && data.mapFloors.length > 0) {
+                for (int f = 0; f < data.mapFloors.length; f++) {
+                    writer.write("[floor" + f + "]"); writer.newLine();
+                    int[][] floor = data.mapFloors[f];
+                    if (floor != null) {
+                        for (int[] row : floor) {
+                            for (int x = 0; x < row.length; x++) {
+                                if (x > 0) writer.write(',');
+                                writer.write(Integer.toString(row[x]));
+                            }
+                            writer.newLine();
+                        }
                     }
                     writer.newLine();
+                }
+            }
+            else {
+                writer.write("[floor0]"); writer.newLine();
+                if (data.map != null) {
+                    for (int[] row : data.map) {
+                        for (int x = 0; x < row.length; x++) {
+                            if (x > 0) writer.write(',');
+                            writer.write(Integer.toString(row[x]));
+                        }
+                        writer.newLine();
+                    }
+                }
+                writer.newLine();
+            }
+
+            writer.write("[portals]"); writer.newLine();
+            if (data.mapPortalLinks != null) {
+                for (int[] link : data.mapPortalLinks) {
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < link.length; i++) { if (i > 0) sb.append(','); sb.append(link[i]); }
+                    writer.write(sb.toString()); writer.newLine();
                 }
             }
         }
@@ -150,4 +265,28 @@ public final class SaveData {
         return "0.1";
     }
     private static String safe(String value) { return value == null || value.isBlank() ? DEFAULT_LANGUAGE : value.trim(); }
+    //endregion
+
+    //region Nested Types
+    public static final class Data {
+        public String language = DEFAULT_LANGUAGE;
+        public Style theme = DEFAULT_THEME;
+        public double renderScale = DEFAULT_RENDER_SCALE;
+        public boolean vsync = DEFAULT_VSYNC;
+        public boolean rayTracing = DEFAULT_RAY_TRACING;
+        public int rayTracingQuality = DEFAULT_RAY_TRACING_QUALITY;
+        public int windowWidth = DEFAULT_WINDOW_WIDTH;
+        public int windowHeight = DEFAULT_WINDOW_HEIGHT;
+        public boolean fullscreen = DEFAULT_FULLSCREEN;
+        public int[][] map;
+        public int[][][] mapFloors;
+        public List<int[]> mapPortalLinks = new ArrayList<>();
+        public int mapGeometryMode = 0;
+        public int mazeWidth = DEFAULT_MAZE_SIZE, mazeHeight = DEFAULT_MAZE_SIZE;
+        public int mazeFinishMode = 0;
+        public int mazeGeometry = 0;
+        public boolean maze3D = false;
+        public int mazeFloors = DEFAULT_MAZE_FLOORS;
+    }
+    //endregion
 }

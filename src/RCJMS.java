@@ -5,6 +5,7 @@ import java.awt.*;
 import java.io.IOException;
 
 public class RCJMS extends JFrame {
+    //region Variables
     public static RCJMS instance;
     public MainMenuView mainMenuView = new MainMenuView();
     public GameView gameView;
@@ -19,7 +20,9 @@ public class RCJMS extends JFrame {
     public static int GAME_WIDTH = SCREEN_WIDTH;
     public static int GAME_HEIGHT = SCREEN_HEIGHT;
     public static final Color MY_FAV_GRAY = new Color(28, 28, 32);
+    //endregion
 
+    //region Constructors
     public RCJMS() throws IOException {
         instance = this;
         setDefaultCloseOperation(EXIT_ON_CLOSE);
@@ -34,10 +37,13 @@ public class RCJMS extends JFrame {
         else setSize(savedData.windowWidth, savedData.windowHeight);
 
         setLocationRelativeTo(null);
-        ChangeView(mainMenuView, "main_menu");
+        changeView(mainMenuView, "main_menu");
         setVisible(true);
     }
-    public void ChangeView(JPanel nextView, String nextTitle) {
+    //endregion
+
+    //region Public API
+    public void changeView(JPanel nextView, String nextTitle) {
         if (currentView != null) remove(currentView);
         add(nextView);
         currentView = nextView;
@@ -46,4 +52,5 @@ public class RCJMS extends JFrame {
         repaint();
     }
     public static void main(String[] args) { SwingUtilities.invokeLater(() -> { try {new RCJMS();} catch (IOException e){throw new RuntimeException(e);}}); }
+    //endregion
 }

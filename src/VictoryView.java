@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Random;
 
 public class VictoryView extends JPanel {
+    //region Variables
     private final Style currentStyle = loadTheme();
 
     private final ArrayList<Firework> fireworks = new ArrayList<>();
@@ -21,7 +22,9 @@ public class VictoryView extends JPanel {
 
     private double scale = 1.0;
     private final Timer fireworksTimer;
+    //endregion
 
+    //region Constructors
     public VictoryView(long elapsedSeconds) {
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setLayout(null);
@@ -39,7 +42,7 @@ public class VictoryView extends JPanel {
         add(timeLabel);
 
         restartButton.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 32));
-        restartButton.addActionListener(e -> {RCJMS.instance.ChangeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu");});
+        restartButton.addActionListener(e -> {RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu");});
         add(restartButton);
 
         exitButton.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
@@ -57,7 +60,9 @@ public class VictoryView extends JPanel {
         updateLayout();
         addComponentListener(new java.awt.event.ComponentAdapter() {@Override public void componentResized(java.awt.event.ComponentEvent e) {updateLayout();}});
     }
+    //endregion
 
+    //region Public API
     @Override public void addNotify() {
         super.addNotify();
         if (fireworksTimer != null && !fireworksTimer.isRunning()) fireworksTimer.start();
@@ -66,6 +71,23 @@ public class VictoryView extends JPanel {
         if (fireworksTimer != null && fireworksTimer.isRunning()) fireworksTimer.stop();
         super.removeNotify();
     }
+    @Override protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        Graphics2D g2d = (Graphics2D) g.create();
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
+        g2d.translate(viewportX, viewportY);
+        g2d.scale(scale, scale);
+        g2d.clipRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
+
+        for (Firework f : fireworks) {
+            g2d.setColor(f.color);
+            g2d.fillRect((int) f.x, (int) f.y, f.size, f.size);
+        }
+        g2d.dispose();
+    }
+    //endregion
+
+    //region Helpers
     private void updateFireworks() {
         for (Firework f : fireworks) {
             f.x += f.vx;
@@ -86,20 +108,6 @@ public class VictoryView extends JPanel {
                 f.color = new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256));
             }
         }
-    }
-    @Override protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        Graphics2D g2d = (Graphics2D) g.create();
-        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-        g2d.translate(viewportX, viewportY);
-        g2d.scale(scale, scale);
-        g2d.clipRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
-
-        for (Firework f : fireworks) {
-            g2d.setColor(f.color);
-            g2d.fillRect((int) f.x, (int) f.y, f.size, f.size);
-        }
-        g2d.dispose();
     }
     private void updateLayout() {
         int width = getWidth(), height = getHeight();
@@ -122,12 +130,16 @@ public class VictoryView extends JPanel {
         repaint();
     }
     private Style loadTheme() { return SaveData.load().theme; }
-}
-class Firework {
-    double x, y, vx, vy;
-    int size, life;
-    Color color;
-    public Firework(double x, double y, double vx, double vy, int size, Color color, int life) {
-        this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.size = size; this.color = color; this.life = life;
+    //endregion
+
+    //region Nested Types
+    static class Firework {
+        double x, y, vx, vy;
+        int size, life;
+        Color color;
+        public Firework(double x, double y, double vx, double vy, int size, Color color, int life) {
+            this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.size = size; this.color = color; this.life = life;
+        }
     }
+    //endregion
 }

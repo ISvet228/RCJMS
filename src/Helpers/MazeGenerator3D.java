@@ -3,6 +3,7 @@ package Helpers;
 import java.util.*;
 
 public class MazeGenerator3D {
+    //region Variables
     public static final int OPEN = 0, WALL = 1, FINISH = 2, STAIRS_DOWN = 3, STAIRS_UP = 4;
 
     private final int width, height, floorCount;
@@ -14,11 +15,9 @@ public class MazeGenerator3D {
     private PortalData[] floorPortals;
     private int[] entryX, entryY;
     private int finishFloor, finishX, finishY;
-    public PortalData getPortals(int floor) { return floorPortals[floor]; }
+    //endregion
 
     //region Constructors
-    public MazeGenerator3D(int width, int height, int floorCount, MazeGenerator.GeometryMode geometryMode) {
-        this(width, height, floorCount, null, geometryMode);}
     public MazeGenerator3D(int width, int height, int floorCount, Long seed, MazeGenerator.GeometryMode geometryMode) {
         this.width = width;
         this.height = height;
@@ -27,6 +26,10 @@ public class MazeGenerator3D {
         this.random = seed != null ? new Random(seed) : new Random();
         this.geometryMode = geometryMode == null ? MazeGenerator.GeometryMode.EUCLIDEAN : geometryMode;
     }
+    //endregion
+
+    //region Public API
+    public PortalData getPortals(int floor) { return floorPortals[floor]; }
     public int[][][] generate(MazeGenerator.FinishMode mode) {
         floors = new int[floorCount][][];
         floorPortals = new PortalData[floorCount];
@@ -43,7 +46,7 @@ public class MazeGenerator3D {
 
         boolean enforceSeparation = mode != MazeGenerator.FinishMode.RANDOM_EDGE;
         for (int f = 0; f < floorCount - 1; f++) {
-            int[] stairPos = pickStairPosition(floors[f], entryX[f], entryY[f], enforceSeparation);
+            int[] stairPos = pickStairPosition(floors[f], floors[f + 1], entryX[f], entryY[f], enforceSeparation);
             floors[f][stairPos[1]][stairPos[0]] = STAIRS_DOWN;
 
             ensureOpenAndConnected(floors[f + 1], 1, 1, stairPos[0], stairPos[1]);
@@ -54,12 +57,63 @@ public class MazeGenerator3D {
         }
 
         placeFinish(mode);
+        if (geometryMode == MazeGenerator.GeometryMode.LOOPED) addFloorPortals();
         return floors;
     }
     //endregion
 
+    //region Portals between floors
+    private void addFloorPortals() {
+        List<List<int[]>> slots = new ArrayList<>();
+        for (int f = 0; f < floorCount; f++) {
+            List<int[]> usable = new ArrayList<>();
+            for (int[] slot : MazeGenerator.findPortalSlots(floors[f])) if (exitIsOpen(f, slot)) usable.add(slot);
+            Collections.shuffle(usable, random);
+            slots.add(usable);
+        }
+
+        List<int[]> added = new ArrayList<>(); //{floorA, ax, ay, floorB, bx, by} aaaaaaaaaaaaaaaaaaaaa
+        int pairsPerFloor = Math.max(1, (width * height) / 330);
+        for (int f = 0; f < floorCount; f++) {
+            for (int n = 0; n < pairsPerFloor; n++) {
+                int g = f + 1 < floorCount && random.nextInt(4) != 0 ? f + 1 : random.nextInt(floorCount);
+                if (g == f) continue;
+                int[] a = takeSlot(f, slots.get(f)), b = takeSlot(g, slots.get(g));
+                if (a == null || b == null) continue;
+
+                floors[f][a[1]][a[0]] = MazeGenerator.PORTAL;
+                floors[g][b[1]][b[0]] = MazeGenerator.PORTAL;
+                PortalData.linkFloors(floorPortals[f], f, a[0], a[1], a[2], a[3], false, floorPortals[g], g, b[0], b[1], b[2], b[3], false);
+                added.add(new int[]{f, a[0], a[1], g, b[0], b[1]});
+            }
+        }
+
+        if (!added.isEmpty() && !(MazeSolver.findReachableFinish(floors, floorPortals, 0, entryX[0], entryY[0]) != null
+                && MazeSolver.portalExitsAreOpen(floors, floorPortals))) {
+            for (int[] link : added) {
+                floors[link[0]][link[2]][link[1]] = MazeGenerator.WALL;
+                floors[link[3]][link[5]][link[4]] = MazeGenerator.WALL;
+                floorPortals[link[0]].remove(link[1], link[2]);
+                floorPortals[link[3]].remove(link[4], link[5]);
+            }
+        }
+    }
+    private boolean exitIsOpen(int floor, int[] slot) {
+        int bx = slot[0] + slot[2], by = slot[1] + slot[3];
+        return bx > 0 && by > 0 && bx < width - 1 && by < height - 1 && floors[floor][by][bx] == OPEN;
+    }
+    private int[] takeSlot(int floor, List<int[]> slots) {
+        while (!slots.isEmpty()) {
+            int[] slot = slots.removeLast();
+            int deadEndX = slot[0] - slot[2], deadEndY = slot[1] - slot[3];
+            if (floors[floor][slot[1]][slot[0]] == WALL && floors[floor][deadEndY][deadEndX] == OPEN) return slot;
+        }
+        return null;
+    }
+    //endregion
+
     //region Helpers
-    private int[] pickStairPosition(int[][] floorMaze, int fromX, int fromY, boolean enforceMinDistance) {
+    private int[] pickStairPosition(int[][] floorMaze, int[][] nextFloorMaze, int fromX, int fromY, boolean enforceMinDistance) {
         int[][] dist = bfsDistances(floorMaze, fromX, fromY);
         int minDistance = enforceMinDistance ? Math.max(4, Math.min(width, height) / 2) : 1;
 
@@ -70,6 +124,7 @@ public class MazeGenerator3D {
             for (int x = 0; x < floorMaze[0].length; x++) {
                 int d = dist[y][x];
                 if (d <= 0) continue;
+                if (floorMaze[y][x] != OPEN || nextFloorMaze[y][x] == MazeGenerator.PORTAL) continue;
                 maxDistFound = Math.max(maxDistFound, d);
                 if (d >= minDistance) candidates.add(new int[]{x, y});
             }
@@ -78,7 +133,7 @@ public class MazeGenerator3D {
         if (candidates.isEmpty()) {
             for (int y = 0; y < floorMaze.length; y++)
                 for (int x = 0; x < floorMaze[0].length; x++)
-                    if (dist[y][x] == maxDistFound && maxDistFound > 0) candidates.add(new int[]{x, y});
+                    if (dist[y][x] == maxDistFound && maxDistFound > 0 && floorMaze[y][x] == OPEN && nextFloorMaze[y][x] != MazeGenerator.PORTAL) candidates.add(new int[]{x, y});
         }
 
         if (candidates.isEmpty()) return new int[]{fromX, fromY};
@@ -161,7 +216,6 @@ public class MazeGenerator3D {
         while (y != toY) { if (maze[y][x] != MazeGenerator.PORTAL) maze[y][x] = OPEN; y += Integer.compare(toY, y); }
         if (maze[toY][toX] != MazeGenerator.PORTAL) maze[toY][toX] = OPEN;
     }
-    //endregion
 
     private void placeFinish(MazeGenerator.FinishMode mode) {
         int mazeHeight = floors[0].length, mazeWidth = floors[0][0].length;
@@ -223,7 +277,7 @@ public class MazeGenerator3D {
 
         for (int y = 1; y < mazeHeight - 1; y++) {
             for (int x = 1; x < mazeWidth - 1; x++) {
-                if (floorMaze[y][x] == WALL) continue;
+                if (floorMaze[y][x] != OPEN) continue;
 
                 int distToTarget = Math.abs(x - targetX) + Math.abs(y - targetY);
                 if (distToTarget < fallbackScore) { fallbackScore = distToTarget; fallback = new int[]{x, y}; }
@@ -235,4 +289,5 @@ public class MazeGenerator3D {
         if (fallback != null) return fallback;
         return new int[]{Math.clamp(targetX, 1, mazeWidth - 2), Math.clamp(targetY, 1, mazeHeight - 2)};
     }
+    //endregion
 }
