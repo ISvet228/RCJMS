@@ -6,6 +6,7 @@ import java.util.Map;
 public final class PortalData {
     //region Variables
     private final Map<Long, Portal> portals = new HashMap<>();
+    private static final double EDGE_MARGIN = 5e-4;
     //endregion
 
     //region Public API
@@ -51,7 +52,7 @@ public final class PortalData {
         double nax = p.dirX, nay = p.dirY, mbx = p.linkedDirX, mby = p.linkedDirY;
 
         double u = (hitX - (p.x + Math.max(nax, 0) + Math.max(nay, 0))) * (-nay) + (hitY - (p.y + Math.max(nay, 0) + Math.max(-nax, 0))) * nax;
-        u = Math.clamp(u, 0.0, 0.999999);
+        u = Math.clamp(u, EDGE_MARGIN, 1.0 - EDGE_MARGIN);
         double cosT = nax * mbx + nay * mby, sinT = nax * mby - nay * mbx;
         double ndx = dirX * cosT - dirY * sinT, ndy = dirX * sinT + dirY * cosT;
         double ex = (p.linkedX + Math.max(mbx, 0) + Math.max(mby, 0)) + u * (-mby), ey = (p.linkedY + Math.max(mby, 0) + Math.max(-mbx, 0)) + u * mbx;

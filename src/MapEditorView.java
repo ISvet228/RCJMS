@@ -1023,35 +1023,103 @@ public class MapEditorView extends JPanel {
     }
 
     private class MapCanvas extends JPanel {
-        private boolean pipetteDrag = false;
-        private int gridX, gridY, gridSize;
+        private static final double MIN_ZOOM = 1.0, MAX_ZOOM = 32.0, ZOOM_STEP_BASE = 1.15;
+        private static final int PAN_STEP_PIXELS = 40;
+        private static final Color PATH_COLOR = new Color(45, 45, 50), WALL_COLOR = new Color(225, 225, 230), FINISH_COLOR = new Color(80, 200, 100),
+                STAIRS_UP_COLOR = new Color(70, 140, 255), STAIRS_DOWN_COLOR = new Color(255, 150, 60), PORTAL_COLOR = new Color(190, 90, 230);
+
+        private boolean pipetteDrag = false, panDrag = false;
+        private double gridX, gridY, gridSize = 1, baseGridSize = 1;
+        private double zoom = MIN_ZOOM, panGridX = 0, panGridY = 0;
+        private int panLastX, panLastY, lastMapWidth = -1, lastMapHeight = -1;
 
         MapCanvas() {
             setOpaque(true);
             setBackground(new Color(18, 18, 21));
             setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY, 2));
             setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+            setFocusable(true);
 
             MouseAdapter mouseHandler = new MouseAdapter() {
                 @Override public void mousePressed(MouseEvent e) {
+                    requestFocusInWindow();
+                    if (SwingUtilities.isMiddleMouseButton(e)) { panDrag = true; panLastX = e.getX(); panLastY = e.getY(); return; }
                     pipetteDrag = SwingUtilities.isRightMouseButton(e) && e.isAltDown();
                     if (pipetteDrag) {
-                        if (gridSize > 0) pickBlockFromCell((e.getX() - gridX) / gridSize, (e.getY() - gridY) / gridSize);
+                        if (gridSize > 0) pickBlockFromCell(cellAt(e.getX(), gridX), cellAt(e.getY(), gridY));
                         return;
                     }
                     if (currentTool == Tool.BRUSH || currentTool == Tool.ERASER) saveHistoryState();
                     handlePointer(e.getX(), e.getY());}
-                @Override public void mouseReleased(MouseEvent e) {pipetteDrag = false;}
-                @Override public void mouseDragged(MouseEvent e) {if (!pipetteDrag && (currentTool == Tool.BRUSH || currentTool == Tool.ERASER)) handlePointer(e.getX(), e.getY());}
+                @Override public void mouseReleased(MouseEvent e) {pipetteDrag = false; panDrag = false;}
+                @Override public void mouseDragged(MouseEvent e) {
+                    if (panDrag) {
+                        panGridX = gridX + (e.getX() - panLastX);
+                        panGridY = gridY + (e.getY() - panLastY);
+                        panLastX = e.getX(); panLastY = e.getY();
+                        repaint();
+                        return;
+                    }
+                    if (!pipetteDrag && (currentTool == Tool.BRUSH || currentTool == Tool.ERASER)) handlePointer(e.getX(), e.getY());
+                }
+                @Override public void mouseEntered(MouseEvent e) { requestFocusInWindow(); }
             };
             addMouseListener(mouseHandler);
             addMouseMotionListener(mouseHandler);
+            addMouseWheelListener(this::handleMouseWheel);
+            setupPanKeyBindings();
+        }
+
+        private int cellAt(int pixel, double origin) { return (int) Math.floor((pixel - origin) / Math.max(0.0001, gridSize)); }
+        private int cellStart(double origin, int cell) { return (int) Math.round(origin + cell * gridSize); }
+        private void handleMouseWheel(MouseWheelEvent e) {
+            if (!e.isControlDown()) return;
+            requestFocusInWindow();
+            double newZoom = Math.clamp(zoom * Math.pow(ZOOM_STEP_BASE, -e.getPreciseWheelRotation()), MIN_ZOOM, MAX_ZOOM);
+            if (newZoom == zoom) return;
+
+            double safeGridSize = Math.max(0.0001, gridSize);
+            double newGridSize = baseGridSize * newZoom;
+            panGridX = e.getX() - ((e.getX() - gridX) / safeGridSize) * newGridSize;
+            panGridY = e.getY() - ((e.getY() - gridY) / safeGridSize) * newGridSize;
+            zoom = newZoom;
+            repaint();
+        }
+        private void setupPanKeyBindings() {
+            InputMap im = getInputMap(WHEN_FOCUSED);
+            ActionMap am = getActionMap();
+            im.put(KeyStroke.getKeyStroke(KeyEvent.VK_W, 0), "panUp");
+            im.put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), "panUp");
+            im.put(KeyStroke.getKeyStroke(KeyEvent.VK_S, 0), "panDown");
+            im.put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "panDown");
+            im.put(KeyStroke.getKeyStroke(KeyEvent.VK_A, 0), "panLeft");
+            im.put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "panLeft");
+            im.put(KeyStroke.getKeyStroke(KeyEvent.VK_D, 0), "panRight");
+            im.put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "panRight");
+            am.put("panUp", panAction(0, PAN_STEP_PIXELS));
+            am.put("panDown", panAction(0, -PAN_STEP_PIXELS));
+            am.put("panLeft", panAction(PAN_STEP_PIXELS, 0));
+            am.put("panRight", panAction(-PAN_STEP_PIXELS, 0));
+        }
+        private Action panAction(int dx, int dy) {
+            return new AbstractAction() {
+                @Override public void actionPerformed(ActionEvent e) {
+                    if (zoom <= MIN_ZOOM) return;
+                    panGridX = gridX + dx;
+                    panGridY = gridY + dy;
+                    repaint();
+                }
+            };
+        }
+        private double clampAxis(double desired, double contentSize, int viewportSize) {
+            if (contentSize <= viewportSize) return (viewportSize - contentSize) / 2.0;
+            return Math.clamp(desired, viewportSize - contentSize, 0);
         }
 
         private void handlePointer(int px, int py) {
             if (gridSize <= 0) return;
-            int x = (px - gridX) / gridSize;
-            int y = (py - gridY) / gridSize;
+            int x = cellAt(px, gridX);
+            int y = cellAt(py, gridY);
             if (isInsideMap(x, y)) return;
 
             switch (currentTool) {
@@ -1069,16 +1137,21 @@ public class MapEditorView extends JPanel {
             int height = getHeight();
             if (width <= 0 || height <= 0) return;
 
+            if (mapWidth != lastMapWidth || mapHeight != lastMapHeight) {
+                lastMapWidth = mapWidth; lastMapHeight = mapHeight;
+                zoom = MIN_ZOOM; panGridX = panGridY = 0;
+            }
+
             int availableWidth = Math.max(1, width - 40);
             int availableHeight = Math.max(1, height - 40);
 
-            gridSize = Math.max(1, Math.min(availableWidth / mapWidth, availableHeight / mapHeight));
+            baseGridSize = Math.max(0.0001, Math.min((double) availableWidth / mapWidth, (double) availableHeight / mapHeight));
+            gridSize = baseGridSize * zoom;
 
-            int mapPixelWidth = gridSize * mapWidth;
-            int mapPixelHeight = gridSize * mapHeight;
-
-            gridX = (width - mapPixelWidth) / 2;
-            gridY = (height - mapPixelHeight) / 2;
+            gridX = clampAxis(panGridX, gridSize * mapWidth, width);
+            gridY = clampAxis(panGridY, gridSize * mapHeight, height);
+            panGridX = gridX;
+            panGridY = gridY;
 
             drawMap(g);
             drawGrid(g);
@@ -1087,42 +1160,44 @@ public class MapEditorView extends JPanel {
             drawPortalArrows(g);
             drawMapSize(g);
         }
+        private int firstVisible(double origin) { return Math.max(0, (int) Math.floor((0 - origin) / gridSize)); }
+        private int lastVisible(double origin, int viewport, int count) { return Math.min(count - 1, (int) Math.floor((viewport - origin) / gridSize)); }
         private void drawMap(Graphics g) {
-            for (int y = 0; y < mapHeight; y++) {
-                for (int x = 0; x < mapWidth; x++) {
+            int x0 = firstVisible(gridX), x1 = lastVisible(gridX, getWidth(), mapWidth);
+            int y0 = firstVisible(gridY), y1 = lastVisible(gridY, getHeight(), mapHeight);
+            for (int y = y0; y <= y1; y++) {
+                int top = cellStart(gridY, y), bottom = cellStart(gridY, y + 1);
+                for (int x = x0; x <= x1; x++) {
                     Color color = switch (map[y][x]) {
-                        case PATH -> new Color(45, 45, 50);
-                        case WALL -> new Color(225, 225, 230);
-                        case FINISH -> new Color(80, 200, 100);
-                        case STAIRS_UP -> new Color(70, 140, 255);
-                        case STAIRS_DOWN -> new Color(255, 150, 60);
-                        case PORTAL -> new Color(190, 90, 230);
+                        case PATH -> PATH_COLOR;
+                        case WALL -> WALL_COLOR;
+                        case FINISH -> FINISH_COLOR;
+                        case STAIRS_UP -> STAIRS_UP_COLOR;
+                        case STAIRS_DOWN -> STAIRS_DOWN_COLOR;
+                        case PORTAL -> PORTAL_COLOR;
                         default -> Color.MAGENTA;
                     };
                     g.setColor(color);
-                    g.fillRect(gridX + x * gridSize, gridY + y * gridSize, gridSize, gridSize);
+                    int left = cellStart(gridX, x);
+                    g.fillRect(left, top, Math.max(1, cellStart(gridX, x + 1) - left), Math.max(1, bottom - top));
                 }
             }
         }
         private void drawGrid(Graphics g) {
             if (gridSize < 3) return;
             g.setColor(new Color(15, 15, 18));
-
-            for (int x = 0; x <= mapWidth; x++) {
-                int px = gridX + x * gridSize;
-                g.drawLine(px, gridY, px, gridY + mapHeight * gridSize);
-            }
-            for (int y = 0; y <= mapHeight; y++) {
-                int py = gridY + y * gridSize;
-                g.drawLine(gridX, py, gridX + mapWidth * gridSize, py);
-            }
+            int x0 = firstVisible(gridX), x1 = lastVisible(gridX, getWidth(), mapWidth) + 1;
+            int y0 = firstVisible(gridY), y1 = lastVisible(gridY, getHeight(), mapHeight) + 1;
+            int top = cellStart(gridY, y0), bottom = cellStart(gridY, y1), left = cellStart(gridX, x0), right = cellStart(gridX, x1);
+            for (int x = x0; x <= x1; x++) { int px = cellStart(gridX, x); g.drawLine(px, top, px, bottom); }
+            for (int y = y0; y <= y1; y++) { int py = cellStart(gridY, y); g.drawLine(left, py, right, py); }
         }
         private void drawStart(Graphics g) {
             if (currentFloorIndex != 0) return;
             g.setColor(new Color(50, 120, 255));
-            int padding = Math.max(1, gridSize / 5);
-            int size = Math.max(1, gridSize - padding * 2);
-            g.fillRect(gridX + START_X * gridSize + padding, gridY + START_Y * gridSize + padding, size, size);
+            int padding = Math.max(1, (int) (gridSize / 5));
+            int size = Math.max(1, (int) gridSize - padding * 2);
+            g.fillRect(cellStart(gridX, START_X) + padding, cellStart(gridY, START_Y) + padding, size, size);
         }
         private void drawPendingPortal(Graphics g) {
             if (pendingPortal == null || pendingPortal[0] != currentFloorIndex) return;
@@ -1130,7 +1205,7 @@ public class MapEditorView extends JPanel {
             int px = pendingPortal[1], py = pendingPortal[2];
             int border = gridSize >= 3 ? 2 : 1;
             for (int i = 0; i < border; i++)
-                g.drawRect(gridX + px * gridSize + i, gridY + py * gridSize + i, Math.max(1, gridSize - i * 2 - 1), Math.max(1, gridSize - i * 2 - 1));
+                g.drawRect(cellStart(gridX, px) + i, cellStart(gridY, py) + i, Math.max(1, (int) gridSize - i * 2 - 1), Math.max(1, (int) gridSize - i * 2 - 1));
         }
         private void drawPortalArrows(Graphics g) {
             if (gridSize < 5) return;
@@ -1156,12 +1231,12 @@ public class MapEditorView extends JPanel {
         }
         private void drawFloorTag(Graphics2D g2, int x, int y, int otherFloor) {
             if (gridSize < 12) return;
-            g2.setFont(g2.getFont().deriveFont(Font.BOLD, Math.max(9f, gridSize * 0.38f)));
+            g2.setFont(g2.getFont().deriveFont(Font.BOLD, (float) Math.max(9f, gridSize * 0.38f)));
             String text = String.valueOf(otherFloor + 1);
             g2.setColor(new Color(15, 15, 18));
-            g2.drawString(text, gridX + x * gridSize + 2 + 1, gridY + y * gridSize + g2.getFontMetrics().getAscent() + 1);
+            g2.drawString(text, (float) (gridX + x * gridSize + 2 + 1), (float) (gridY + y * gridSize + g2.getFontMetrics().getAscent() + 1));
             g2.setColor(new Color(255, 235, 120));
-            g2.drawString(text, gridX + x * gridSize + 2, gridY + y * gridSize + g2.getFontMetrics().getAscent());
+            g2.drawString(text, (float) (gridX + x * gridSize + 2), (float) (gridY + y * gridSize + g2.getFontMetrics().getAscent()));
         }
         private void drawOneSidedFace(Graphics2D g2, int x, int y, int dx, int dy) {
             double cx = gridX + x * gridSize + gridSize / 2.0, cy = gridY + y * gridSize + gridSize / 2.0;
@@ -1169,7 +1244,7 @@ public class MapEditorView extends JPanel {
             double ex = cx - dx * half, ey = cy - dy * half;
             double px = -dy * half, py = dx * half;
             g2.setColor(new Color(80, 220, 230));
-            g2.setStroke(new BasicStroke(Math.max(2f, gridSize / 8f)));
+            g2.setStroke(new BasicStroke((float) Math.max(2f, gridSize / 8f)));
             g2.draw(new java.awt.geom.Line2D.Double(ex - px, ey - py, ex + px, ey + py));
             g2.setStroke(new BasicStroke(1f));
         }
@@ -1191,10 +1266,11 @@ public class MapEditorView extends JPanel {
             g.setFont(g.getFont().deriveFont(Font.BOLD, 14f));
 
             String text = mapWidth + " x " + mapHeight;
+            if (zoom > MIN_ZOOM + 0.001) text += String.format(" (%.0f%%)", zoom * 100);
             FontMetrics fm = g.getFontMetrics();
 
             int x = (getWidth() - fm.stringWidth(text)) / 2;
-            int y = Math.max(18, gridY - 8);
+            int y = Math.max(18, (int) gridY - 8);
 
             g.drawString(text, x, y);
         }

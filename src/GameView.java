@@ -40,6 +40,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
     //region Render Buffers
     public static int MINI_MAP_WIDTH = 180, MINI_MAP_HEIGHT = 180;
+    private static final double MINI_MAP_MIN_CELL_PIXELS = 4.0;
+    private static volatile int miniMapCellPixels = 6;
     private final BufferedImage bufferedImage;
     private final BufferedImage renderImage;
     private final int[] pixels, renderPixels; //PUXELS
@@ -88,6 +90,9 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
     //region Mouse / Input Compatibility
     private boolean isRecentering = false; //Mouse Recursion Helper
+    private FocusListener focusWatcher;
+    private Window watchedWindow;
+    private WindowListener windowWatcher;
     private boolean hasLastMousePos = false; //Wayland fallback delta-based mouse-look
     private int lastMouseScreenX, lastMouseScreenY; //Wayland fallback cursor position
     private static final boolean MOUSE_WARP_SUPPORTED = detectMouseWarpSupport();
@@ -264,29 +269,39 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             long lastFrameTime = System.nanoTime(), nextVSyncTime = lastFrameTime;
             final long vsyncInterval = getDisplayRefreshIntervalNanos();
 
+            boolean errorReported = false;
             while (isGameRunning) {
-                long currentFrameTime = System.nanoTime();
-                double deltaTime = (currentFrameTime - lastFrameTime) / 1_000_000_000.0;
-                lastFrameTime = currentFrameTime;
-                deltaTime = Math.min(deltaTime, 0.1);
-                if (!isPaused) update(deltaTime);
+                try {
+                    long currentFrameTime = System.nanoTime();
+                    double deltaTime = (currentFrameTime - lastFrameTime) / 1_000_000_000.0;
+                    lastFrameTime = currentFrameTime;
+                    deltaTime = Math.min(deltaTime, 0.1);
+                    if (!isPaused) update(deltaTime);
 
-                render();
-                if (isVSyncEnabled()) {
-                    paintFrameSynchronously();
-                    Toolkit.getDefaultToolkit().sync();
-                    nextVSyncTime += vsyncInterval;
-                    waitUntil(nextVSyncTime);
-                    long now = System.nanoTime();
-                    if (now > nextVSyncTime + vsyncInterval * 2) nextVSyncTime = now;
+                    render();
+                    if (isVSyncEnabled()) {
+                        paintFrameSynchronously();
+                        Toolkit.getDefaultToolkit().sync();
+                        nextVSyncTime += vsyncInterval;
+                        waitUntil(nextVSyncTime);
+                        long now = System.nanoTime();
+                        if (now > nextVSyncTime + vsyncInterval * 2) nextVSyncTime = now;
+                    }
+                    else {
+                        repaint();
+                        Thread.sleep(1);
+                        nextVSyncTime = System.nanoTime();
+                    }
+                    trackFps();
                 }
-                else {
-                    repaint();
-                    try { Thread.sleep(1); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+                catch (Throwable t) {
+                    if (!errorReported) { errorReported = true; t.printStackTrace(); }
+                    try { Thread.sleep(5); }
                     catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
-                    nextVSyncTime = System.nanoTime();
+                    lastFrameTime = System.nanoTime();
+                    nextVSyncTime = lastFrameTime;
                 }
-                trackFps();
             }
         }
         finally { renderWorkers.shutdown(); }
@@ -981,6 +996,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         int margin = Math.max(1, (int) Math.round(10 * s));
         int mapWidth = map[0].length, mapHeight = map.length;
         double scale = Math.min((double) miniMapWidth / mapWidth, (double) miniMapHeight / mapHeight);
+        if (scale < MINI_MAP_MIN_CELL_PIXELS * s) { drawLocalMiniMap(miniMapWidth, miniMapHeight, margin, s); return; }
 
         int offsetX = margin + (miniMapWidth - (int) (mapWidth * scale)) / 2;
         int offsetY = margin + (miniMapHeight - (int) (mapHeight * scale)) / 2;
@@ -1009,6 +1025,46 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 int py = offsetY + (int)(playerY * scale) + yy;
                 if (px >= 0 && py >= 0 && px < RCJMS.GAME_WIDTH && py < RCJMS.GAME_HEIGHT) pixels[px + py * RCJMS.GAME_WIDTH] = 0xFF0000;
             }
+        }
+    }
+    private void drawLocalMiniMap(int width, int height, int margin, double s) {
+        int cell = Math.max(2, (int) Math.round(miniMapCellPixels * s));
+        int mapWidth = map[0].length, mapHeight = map.length;
+        double visibleX = Math.min((double) mapWidth, (double) width / cell), visibleY = Math.min((double) mapHeight, (double) height / cell);
+        double viewLeft = Math.clamp(playerX - visibleX / 2.0, 0.0, mapWidth - visibleX);
+        double viewTop = Math.clamp(playerY - visibleY / 2.0, 0.0, mapHeight - visibleY);
+
+        int boxW = (int) Math.min(width, Math.ceil(visibleX * cell)), boxH = (int) Math.min(height, Math.ceil(visibleY * cell));
+        int boxX = margin, boxY = margin;
+        fillMiniRect(boxX - 1, boxY - 1, boxX + boxW + 1, boxY + boxH + 1, 0x8888FF, 0, 0, RCJMS.GAME_WIDTH, RCJMS.GAME_HEIGHT);
+        fillMiniRect(boxX, boxY, boxX + boxW, boxY + boxH, 0x000000, 0, 0, RCJMS.GAME_WIDTH, RCJMS.GAME_HEIGHT);
+
+        int firstX = (int) Math.floor(viewLeft), lastX = Math.min(mapWidth - 1, (int) Math.ceil(viewLeft + visibleX));
+        int firstY = (int) Math.floor(viewTop), lastY = Math.min(mapHeight - 1, (int) Math.ceil(viewTop + visibleY));
+        for (int y = firstY; y <= lastY; y++) {
+            for (int x = firstX; x <= lastX; x++) {
+                int type = map[y][x];
+                if (type == 0) continue;
+                int color = type == 2 ? 0x00FF00 : type == 3 ? 0x3399FF : type == 4 ? 0xFFAA33 : type == MazeGenerator.PORTAL ? 0xCC33FF : 0xFFFFFF;
+                int x0 = boxX + (int) Math.round((x - viewLeft) * cell), x1 = boxX + (int) Math.round((x + 1 - viewLeft) * cell);
+                int y0 = boxY + (int) Math.round((y - viewTop) * cell), y1 = boxY + (int) Math.round((y + 1 - viewTop) * cell);
+                x1 = Math.max(x0 + 1, x1); y1 = Math.max(y0 + 1, y1);
+                fillMiniRect(x0, y0, x1, y1, color, boxX, boxY, boxX + boxW, boxY + boxH);
+            }
+        }
+
+        int px = boxX + (int) Math.round((playerX - viewLeft) * cell), py = boxY + (int) Math.round((playerY - viewTop) * cell);
+        int tick = Math.max(cell, (int) Math.round(cell * 1.8));
+        drawMiniMapLine(px, py, px + (int) Math.round(Math.cos(cameraAngle) * tick), py + (int) Math.round(Math.sin(cameraAngle) * tick), 0xFFAA00);
+        int half = Math.max(1, cell / 3);
+        fillMiniRect(px - half, py - half, px + half + 1, py + half + 1, 0xFF0000, boxX, boxY, boxX + boxW, boxY + boxH);
+    }
+    private void fillMiniRect(int x0, int y0, int x1, int y1, int color, int clipX0, int clipY0, int clipX1, int clipY1) {
+        x0 = Math.max(x0, Math.max(clipX0, 0)); y0 = Math.max(y0, Math.max(clipY0, 0));
+        x1 = Math.min(x1, Math.min(clipX1, RCJMS.GAME_WIDTH)); y1 = Math.min(y1, Math.min(clipY1, RCJMS.GAME_HEIGHT));
+        for (int yy = y0; yy < y1; yy++) {
+            int row = yy * RCJMS.GAME_WIDTH;
+            for (int xx = x0; xx < x1; xx++) pixels[row + xx] = color;
         }
     }
     private void drawCoolMiniMap() {
@@ -1294,15 +1350,10 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (key == KeyEvent.VK_B) isDebugMode = !isDebugMode;
         if (key == KeyEvent.VK_SHIFT) shift = true;
         if (key == KeyEvent.VK_F1) noClip = !noClip;
+        if (key == KeyEvent.VK_EQUALS || key == KeyEvent.VK_PLUS || key == KeyEvent.VK_ADD) miniMapCellPixels = Math.min(20, miniMapCellPixels + 1);
+        if (key == KeyEvent.VK_MINUS || key == KeyEvent.VK_SUBTRACT) miniMapCellPixels = Math.max(3, miniMapCellPixels - 1);
         if (key == KeyEvent.VK_ESCAPE) {
-            isPaused = !isPaused;
-            if (isPaused) {
-                pauseStartTime = System.currentTimeMillis();
-                showCursor();
-            } else {
-                pausedTime += System.currentTimeMillis() - pauseStartTime;
-                hideCursor();
-            }
+            setPaused(!isPaused);
         }
         if (isPaused && e.isControlDown() && key == KeyEvent.VK_C) {
             isGameRunning = false;
@@ -1368,8 +1419,12 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     private void mouseMovedWithWarp(MouseEvent e) {
         if (isRecentering) { isRecentering = false; return; }
-        int centerX = getLocationOnScreen().x + getWidth() / 2;
-        int centerY = getLocationOnScreen().y + getHeight() / 2;
+        if (!isShowing()) return;
+        Point onScreen;
+        try { onScreen = getLocationOnScreen(); }
+        catch (IllegalComponentStateException ex) { return; }
+        int centerX = onScreen.x + getWidth() / 2;
+        int centerY = onScreen.y + getHeight() / 2;
 
         cameraAngle += (e.getXOnScreen() - centerX) * mouseSensitivity;
         cameraPitch -= (e.getYOnScreen() - centerY) * mouseSensitivity;
@@ -1443,9 +1498,59 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     private void hideCursor() { setCursor(invisibleCursor); hasLastMousePos = false; }
     private void showCursor() { setCursor(Cursor.getDefaultCursor()); hasLastMousePos = false; }
+    private void setPaused(boolean paused) {
+        if (paused == isPaused) return;
+        isPaused = paused;
+        if (paused) {
+            pauseStartTime = System.currentTimeMillis();
+            showCursor();
+        } else {
+            pausedTime += System.currentTimeMillis() - pauseStartTime;
+            hideCursor();
+        }
+    }
+    private void releaseInput() {
+        w = a = s = d = shift = false;
+        isRecentering = false;
+        hasLastMousePos = false;
+    }
+    private void onFocusLost() {
+        releaseInput();
+        if (isGameRunning) setPaused(true);
+        repaint();
+    }
+    private void onFocusGained() {
+        releaseInput();
+        requestFocusInWindow();
+        repaint();
+    }
     @Override public void addNotify() {
         super.addNotify();
+        if (focusWatcher == null) {
+            focusWatcher = new FocusAdapter() {
+                @Override public void focusLost(FocusEvent e) { if (!e.isTemporary()) onFocusLost(); }
+                @Override public void focusGained(FocusEvent e) { onFocusGained(); }
+            };
+            addFocusListener(focusWatcher);
+        }
+        Window window = SwingUtilities.getWindowAncestor(this);
+        if (window != null && watchedWindow != window) {
+            if (watchedWindow != null) watchedWindow.removeWindowListener(windowWatcher);
+            watchedWindow = window;
+            windowWatcher = new WindowAdapter() {
+                @Override public void windowDeactivated(WindowEvent e) { onFocusLost(); }
+                @Override public void windowIconified(WindowEvent e) { onFocusLost(); }
+                @Override public void windowActivated(WindowEvent e) { onFocusGained(); }
+                @Override public void windowDeiconified(WindowEvent e) { onFocusGained(); }
+            };
+            window.addWindowListener(windowWatcher);
+        }
         SwingUtilities.invokeLater(this::requestFocusInWindow);
+    }
+    @Override public void removeNotify() {
+        if (watchedWindow != null && windowWatcher != null) watchedWindow.removeWindowListener(windowWatcher);
+        watchedWindow = null; windowWatcher = null;
+        super.removeNotify();
     }
     private void parallelRange(int start, int end, IntConsumer task) {
         int range = end - start;

@@ -208,7 +208,43 @@ public class MazeGenerator3D {
         return false;
     }
     private void ensureOpenAndConnected(int[][] maze, int fromX, int fromY, int toX, int toY) {
-        if (maze[toY][toX] == WALL || !hasPath(maze, fromX, fromY, toX, toY)) carveDirect(maze, fromX, fromY, toX, toY);
+        if (maze[toY][toX] != WALL && hasPath(maze, fromX, fromY, toX, toY)) return;
+        carveShortConnection(maze, fromX, fromY, toX, toY);
+    }
+    private void carveShortConnection(int[][] maze, int fromX, int fromY, int toX, int toY) {
+        int mazeHeight = maze.length, mazeWidth = maze[0].length;
+        boolean[][] reachable = new boolean[mazeHeight][mazeWidth];
+        for (int[] cell : bfsOpenCells(maze, fromX, fromY)) reachable[cell[1]][cell[0]] = true;
+        if (maze[toY][toX] != WALL && reachable[toY][toX]) return;
+
+        int[][] dirs = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+        int[][] parent = new int[mazeHeight][mazeWidth];
+        for (int[] row : parent) Arrays.fill(row, -2);
+        Deque<int[]> queue = new ArrayDeque<>();
+        queue.add(new int[]{toX, toY});
+        parent[toY][toX] = -1;
+        int foundX = -1, foundY = -1;
+
+        while (!queue.isEmpty()) {
+            int[] current = queue.poll();
+            if (reachable[current[1]][current[0]] && (current[0] != toX || current[1] != toY)) { foundX = current[0]; foundY = current[1]; break; }
+            for (int[] dir : dirs) {
+                int nx = current[0] + dir[0], ny = current[1] + dir[1];
+                if (nx < 1 || ny < 1 || nx >= mazeWidth - 1 || ny >= mazeHeight - 1 || parent[ny][nx] != -2) continue;
+                if (maze[ny][nx] == MazeGenerator.PORTAL) continue;
+                parent[ny][nx] = current[1] * mazeWidth + current[0];
+                queue.add(new int[]{nx, ny});
+            }
+        }
+
+        if (foundX < 0) { carveDirect(maze, fromX, fromY, toX, toY); return; }
+        int cx = foundX, cy = foundY;
+        while (cx >= 0 && cy >= 0) {
+            if (maze[cy][cx] == WALL) maze[cy][cx] = OPEN;
+            int p = parent[cy][cx];
+            if (p < 0) break;
+            cx = p % mazeWidth; cy = p / mazeWidth;
+        }
     }
     private void carveDirect(int[][] maze, int fromX, int fromY, int toX, int toY) {
         int x = fromX, y = fromY;
