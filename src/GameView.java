@@ -887,7 +887,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             int color = sampleTexture(floorTexture, worldX, worldY, floorBaseColor);
             if (MAZE_3D) color = tintStairs(color, worldX, worldY, maps[i]);
             double brightness = Math.clamp(1.0 - (hyperbolic ? HyperbolicMath.hyperbolicDistance(t, HYPERBOLIC_CURVATURE) : t) / lightDistance, 0.05, 1.0);
-            renderPixels[y * renderWidth + x] = applyBrightness(color, brightness);
+            if (x >= 0 && x < renderWidth && y >= 0 && y < renderHeight) renderPixels[y * renderWidth + x] = applyBrightness(color, brightness);
         }
 
         int ceilingFrom = Math.max(0, (int) Math.ceil(horizon - reach));
@@ -903,7 +903,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             double worldX = seg[i * 5 + 1] + seg[i * 5 + 3] * along, worldY = seg[i * 5 + 2] + seg[i * 5 + 4] * along;
             int color = sampleTexture(ceilingTexture, worldX, worldY, ceilingBaseColor);
             double brightness = Math.clamp(1.0 - (hyperbolic ? HyperbolicMath.hyperbolicDistance(t, HYPERBOLIC_CURVATURE) : t) / lightDistance, 0.05, 1.0);
-            renderPixels[y * renderWidth + x] = applyBrightness(color, brightness);
+            if (x >= 0 && x < renderWidth && y >= 0 && y < renderHeight) renderPixels[y * renderWidth + x] = applyBrightness(color, brightness);
         }
     }
     private void renderHorizontalSurfaces(double dirX, double dirY, double planeX, double planeY, double horizon, double focal) {
