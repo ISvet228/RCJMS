@@ -72,7 +72,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private boolean noClip = false;
     //endregion
     //region Multi-Thread Render
-    private final int renderThreadCount = Math.clamp(Runtime.getRuntime().availableProcessors(), 1, 8);
+    private final int renderThreadCount = Runtime.getRuntime().availableProcessors(); //fck limits
     private final RenderWorkers renderWorkers = new RenderWorkers(renderThreadCount);
     //endregion
     //region Graphics Settings
