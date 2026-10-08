@@ -1,4 +1,33 @@
-//Main Menu mm. st. if.
+// ============================================================
+// LOCALIZATION — ENGLISH
+// Sections: Universals | Main Menu | Settings | Info | Game View
+// Victory | Credits | Editors: Shared (ed.) |
+// Texture Editor (te. + cp.) | Map Editor (me.)
+// ============================================================
+
+// ---------- UNIVERSALS ----------
+"cancel" = "Cancel";
+"close" = "Close";
+"exit" = "EXIT";
+"reset" = "Reset";
+"saved" = "Saved";
+"save_error" = "Save error";
+"load_error" = "Could not load";
+"floor" = "Floor: ";
+"main_menu" = "Main Menu";
+"tool" = "Tool";
+"select" = "Select";
+"selected" = "Selected: ";
+"selected_none" = "Selected: none";
+"brush" = "Brush";
+"brush_size" = "Brush: ";
+"eraser" = "Eraser";
+"eraser_size" = "Eraser: ";
+"width" = "Width:";
+"height" = "Height:";
+"run" = "SHIFT - Run";
+
+// ---------- MAIN MENU (mm.) ----------
 "mm.play" = "PLAY";
 "mm.texture_editor" = "TEXTURE EDITOR";
 "mm.map_editor" = "MAP EDITOR";
@@ -13,133 +42,48 @@
 "mm.maze_size_error" = "Maze size must be a number.";
 "mm.3d_mode" = "3D (FLOORS)";
 "mm.floors_count" = "FLOORS";
-"mm.wrong_geometry" = "WRONG GEOMETRY";
 "mm.geometry" = "GEOMETRY";
 "mm.euclidean_geometry" = "EUCLIDEAN";
 "mm.looped_geometry" = "LOOPED";
+"mm.wrong_geometry" = "WRONG GEOMETRY";
 
+// ---------- SETTINGS (st.) ----------
 "st.settings" = "Settings";
-"st.fullscreen" = "Fullscreen";
 "st.language" = "Language";
 "st.themes" = "Themes";
 "st.flat" = "Flat";
 "st.neumorphic" = "Neumorphic";
 "st.glass" = "Glass";
+"st.fullscreen" = "Fullscreen";
+"st.graphics" = "Graphics";
 "st.render_scale" = "Render scale";
 "st.resolution" = "Resolution";
 "st.ray_tracing" = "Ray Tracing";
-"st.ray_tracing_settings" = "Ray Tracing";
 "st.ray_tracing_quality" = "Ray Tracing Quality";
-"st.graphics" = "Graphics";
 
+// ---------- INFO (if.) ----------
 "if.info" = "Info";
 "if.controls" = "Controls:";
 "if.move" = "WASD - Move";
 
-//Game View gv.
+// ---------- GAME VIEW (gv.) ----------
 "gv.paused" = "PAUSED";
 "gv.continue" = "ESC - Continue";
 "gv.restart" = "R - Restart";
+"gv.exit_hint" = "Ctrl + C - Exit";
 "gv.no_clip" = "NoClip = ";
 "gv.geometry" = "Geometry = ";
 "gv.euclidean" = "Euclidean";
 "gv.wrong_geometry" = "Wrong Geometry!";
-"gv.floor" = "Floor: ";
 "gv.seed" = "Seed: ";
-"gv.exit_hint" = "Ctrl + C - Exit"
 
-//Victory View vv.
+// ---------- VICTORY VIEW (vv.) ----------
 "vv.victory" = "Victory!";
 "vv.title" = "CONGRATULATIONS";
 "vv.victory_time" = "You completed maze in %d hour(s) %d minute(s) %d second(s)";
 "vv.restart" = "RESTART";
 
-//Texture Editor te. cp.
-"te.texture_editor" = "Texture Editor";
-"te.texture" = "Texture";
-"te.walls" = "Walls";
-"te.floor" = "Floor";
-"te.ceiling" = "Ceiling";
-"te.finish" = "Finish";
-"te.editing" = "Editing: ";
-"te.w" = "W: ";
-"te.h" = "H: ";
-"te.fill" = "Fill";
-"te.color" = "Color";
-"te.color_square" = "Click the square to choose a color";
-"te.apply_to_cell" = "Apply to cell";
-"te.fill_texture" = "Fill texture";
-"te.reset" = "Reset";
-"te.pick_a_tool" = "Pick a tool, pick a color, then click or drag on the grid.";
-"te.import_image" = "Import Image";
-"te.save" = "Save";
-"te.saved_to" = "Textures saved to:";
-"te.could_not_save" = "Could not save textures:";
-"te.could_not_import" = "Could not import PNG:";
-"te.import_error" = "Import error";
-
-"cp.choose_color" = "Choose Color";
-"cp.red" = "Red";
-"cp.green" = "Green";
-"cp.blue" = "Blue";
-"cp.color_code" = "Color code (RRGGBB):";
-"cp.cancel" = "Cancel";
-"cp.apply" = "Apply";
-
-//Map Editor me.
-"me.map_editor" = "Map Editor";
-"me.clear_map" = "Clear Map";
-"me.play_map" = "Play Map";
-"me.blocks_info" = "Start: (1, 1)    |    0 = Path    1 = Wall    2 = Finish    3 = Stairs Up    4 = Stairs Down    5 = Portal";
-"me.select_a_tool" = "Select a tool and block, then click or drag on the map.";
-"me.path" = "0 - Path";
-"me.wall" = "1 - Wall";
-"me.finish" = "2 - Finish";
-"me.size" = "Size: ";
-"me.block" = "Block";
-"me.selected_path" = "Selected: Path (0)";
-"me.selected_wall" = "Selected: Wall (1)";
-"me.selected_finish" = "Selected: Finish (2)";
-"me.selected_?" = "Selected: ?";
-"me.no_path" = "There is no path from the starting position (1, 1) to any Finish (2).";
-"me.map_cannot_be_saved" = "Map cannot be saved";
-"me.no_reachable_finish" = "No reachable finish."
-"me.map_saved_successfully" = "Map saved successfully.";
-"me.file" = "File:";
-"me.finishes" = "Finishes: ";
-"me.reachable_finish" = "Reachable finish: (";
-"me.could_not_save_map" = "Could not save map:";
-"me.floor" = "Floor: ";
-"me.floors" = "Floors: ";
-"me.add_floor" = "+ Floor";
-"me.remove_floor" = "- Floor";
-"me.stairs_up" = "3 - Up";
-"me.stairs_down" = "4 - Down";
-"me.selected_stairs_up" = "Selected: Stairs Up (3)";
-"me.selected_stairs_down" = "Selected: Stairs Down (4)";
-"me.selected_portal" = "Selected: Portal (5)";
-"me.portal_tool" = "Portal";
-"me.portal_same_floor" = "Both ends of a portal must be on the same floor.";
-"me.portal_pick_second" = "First portal end placed. Now click a cell for the other end - on this floor or, after switching floors with the arrows, on any other one (click the same cell again to cancel).";
-"me.portals" = "Portals: ";
-"me.portal_hint" = "Portal tool: click any cell (except the start) for each end. The two ends can be on different floors. R - rotate direction. You pass through a portal in the direction of its arrow.";
-"me.portal_direction" = "Portal direction: ";
-"me.portal_already" = "There is already a portal in this cell.";
-"me.portal_not_on_start" = "A portal cannot be placed on the start.";
-"me.portal_exit_blocked" = "A portal leads into a wall (the cell right after its other end is a wall or outside the map). Move the portal or open that cell.";
-"me.portal_one_sided_tool" = "One-sided portal";
-"me.portal_one_sided_hint" = "One-sided portal: entrance and exit are on the same side. You enter along the arrow and come out of the same face (marked cyan). It can be linked with any other portal, also on another floor. R - rotate direction.";
-"me.geometry_for_test" = "Test geometry";
-"me.test_anyway" = "Test without validation";
-"me.load_map" = "Load Map";
-"me.load_from_seed" = "Load From Seed";
-"me.generate" = "Generate";
-"me.random_seed" = "Random";
-"me.seed_map_loaded" = "Map generated from the seed. You can edit it like any other map (Undo works).";
-"cancel" = "Cancel";
-"me.could_not_load_map" = "Could not load the saved map:";
-
-//Credits View cv.
+// ---------- CREDITS VIEW (cv.) ----------
 "cv.credits" = "Credits";
 "cv.project_rcjms" = "PROJECT RCJMS";
 "cv.main_devlooper" = "Main Devlooper";
@@ -150,26 +94,184 @@
 "cv.ljubo" = "Ljubo For Collision Fix And Walk Enchantments";
 "cv.fungun" = "fUnGuN StyleUI Help";
 "cv.useful_resources" = "Useful Resources";
-"cv.hyperbolic_geometry" = "Hyperbolic Geometry aka Wrong Geometry"
-"cv.bfs" = "Breadth-first search aka BFS"
+"cv.hyperbolic_geometry" = "Hyperbolic Geometry aka Wrong Geometry";
+"cv.bfs" = "Breadth-first search aka BFS";
 "cv.thanks" = "Thanks For Watching Credits";
 "cv.another_project" = "I Also Have Another Projects:";
 
-//Universals
-"brush" = "Brush";
-"brush_size" = "Brush: ";
-"close" = "Close";
-"eraser" = "Eraser";
-"eraser_size" = "Eraser: ";
-"exit" = "EXIT";
-"height" = "Height:";
-"main_menu" = "Main Menu";
-"reset" = "Reset";
-"run" = "SHIFT - Run";
-"saved" = "Saved";
-"save_error" = "Save error";
-"select" = "Select";
-"selected" = "Selected: ";
-"selected_none" = "Selected: none";
-"tool" = "Tool";
-"width" = "Width:";
+// ---------- EDITORS — SHARED (ed.) ----------
+"ed.back" = "Back";
+"ed.undo" = "Undo";
+"ed.redo" = "Redo";
+"ed.help" = "Help";
+"ed.zoom_in" = "Zoom in";
+"ed.zoom_out" = "Zoom out";
+"ed.zoom_fit" = "Show everything";
+"ed.ok" = "OK";
+"ed.size" = "Size";
+"ed.saved_ok" = "Saved!";
+"ed.unsaved" = "Unsaved changes";
+"ed.unsaved_title" = "Before you leave";
+"ed.unsaved_msg" = "You have changes that are not saved yet. Save them before leaving?";
+"ed.save_and_leave" = "Save and leave";
+"ed.leave_without_saving" = "Leave without saving";
+"ed.keep_editing" = "Keep editing";
+"ed.confirm_title" = "Are you sure?";
+
+// ---------- TEXTURE EDITOR (te.) ----------
+"te.texture_editor" = "Texture Editor";
+"te.texture" = "Texture";
+"te.walls" = "Walls";
+"te.floor" = "Floor";
+"te.ceiling" = "Ceiling";
+"te.finish" = "Finish";
+"te.editing" = "Editing: ";
+"te.fill" = "Fill";
+"te.color" = "Color";
+"te.pick" = "Pick";
+"te.pick_a_tool" = "Pick a tool, pick a color, then click or drag on the grid.";
+"te.color_square" = "Click the square to choose a color";
+"te.apply_to_cell" = "Apply to cell";
+"te.fill_texture" = "Fill texture";
+"te.palette" = "Palette";
+"te.recent" = "Recent colors";
+"te.size_title" = "Texture size";
+"te.w" = "W: ";
+"te.h" = "H: ";
+"te.w_short" = "W";
+"te.h_short" = "H";
+"te.max_size" = "Max: %d × %d";
+"te.preset_tip" = "Make the texture this size";
+"te.size_changed" = "Texture size is now %d × %d.";
+"te.import_image" = "Import Image";
+"te.import_short" = "Import image";
+"te.import_hint" = "Load a picture from your computer into this texture";
+"te.imported" = "Picture imported (%d × %d).";
+"te.bad_image" = "This file is not a picture I can read.";
+"te.import_error" = "Import error";
+"te.could_not_import" = "Could not import PNG:";
+"te.save" = "Save";
+"te.save_hint" = "Save all four textures";
+"te.saved_to" = "Textures saved to:";
+"te.could_not_save" = "Could not save textures:";
+"te.reset_this" = "Reset this texture";
+"te.reset_confirm" = "Reset the \"%s\" texture to its plain starting color? You can undo this.";
+"te.reset_yes" = "Reset it";
+"te.preview" = "Tiled preview";
+"te.hint_flat" = "This texture is a single flat color. Pick a bigger size on the left (for example 16) to start drawing details.";
+"te.hint_brush" = "Brush: click or drag on the picture to paint with the chosen color. Right mouse button erases.";
+"te.hint_eraser" = "Eraser: click or drag to rub pixels out (they become white).";
+"te.hint_fill" = "Fill: click a pixel to paint the whole area of the same color around it.";
+"te.hint_pick" = "Pick: click a pixel to take its color. Tip: Alt + click does the same with any tool.";
+"te.help_text" = "Drawing\n• Left mouse button paints, right mouse button erases.\n• Alt + click picks the color under the cursor.\n• Mouse wheel zooms, hold Space (or the middle button) and drag to move the picture.\n\nKeys\n• 1-4 switch texture, V brush, N eraser, B fill, I pick.\n• [ and ] change the brush size.\n• Ctrl+Z / Ctrl+Y undo and redo, Ctrl+S saves, Esc goes back.\n\nTextures are only used in the game after you press Save.";
+
+// ---------- COLOR PICKER (cp.) ----------
+"cp.choose_color" = "Choose Color";
+"cp.red" = "Red";
+"cp.green" = "Green";
+"cp.blue" = "Blue";
+"cp.color_code" = "Color code (RRGGBB):";
+"cp.apply" = "Apply";
+
+// ---------- MAP EDITOR (me.)  ----------
+"me.map_editor" = "Map Editor";
+"me.block" = "Block";
+"me.size" = "Size: ";
+"me.map_size" = "Map size";
+"me.select_a_tool" = "Select a tool and block, then click or drag on the map.";
+"me.blocks_info" = "Start: (1, 1)    |    0 = Path    1 = Wall    2 = Finish    3 = Stairs Up    4 = Stairs Down    5 = Portal";
+"me.actions" = "Map actions";
+"me.clear_map" = "Clear Map";
+"me.clear_short" = "Clear floor";
+"me.clear_tip" = "Remove everything on the current floor";
+"me.play_map" = "Play Map";
+"me.play_tip" = "Save the map and play it";
+"me.new_short" = "New map";
+"me.new_tip" = "Start again with an empty map";
+"me.save_tip" = "Save this map (you can load it later)";
+"me.load_map" = "Load Map";
+"me.load_short" = "Load saved";
+"me.load_tip" = "Load the map you saved last time";
+"me.load_from_seed" = "Load From Seed";
+"me.seed_short" = "From seed";
+"me.seed_tip" = "Generate a random maze from a seed";
+"me.generate" = "Generate";
+"me.random_seed" = "Random";
+"me.preset_tip" = "Make the map this size";
+"me.floors" = "Floors: ";
+"me.floor_strip" = "Floors";
+"me.add_floor" = "+ Floor";
+"me.remove_floor" = "- Floor";
+"me.max_floors" = "The map can have at most %d floors.";
+"me.floor_added" = "Floor %d added.";
+"me.floor_removed" = "Floor removed. Press Ctrl+Z to bring it back.";
+"me.go_floor" = "Go to floor %d";
+"me.remove_floor_confirm" = "Floor %d has blocks on it. Remove it anyway?";
+"me.remove_floor_yes" = "Remove floor";
+"me.clear_confirm" = "Remove everything from floor %d?";
+"me.clear_yes" = "Clear it";
+"me.floor_already_empty" = "This floor is already empty.";
+"me.floor_cleared" = "Floor cleared. Press Ctrl+Z to bring it back.";
+"me.name_start" = "Start";
+"me.name_path" = "Path";
+"me.name_wall" = "Wall";
+"me.name_finish" = "Finish";
+"me.name_up" = "Stairs up";
+"me.name_down" = "Stairs down";
+"me.name_portal" = "Portal";
+"me.name_portal_one" = "One-way portal";
+"me.tip_path" = "Empty floor you can walk on. Painting it erases other blocks.";
+"me.tip_wall" = "Wall: blocks the way.";
+"me.tip_finish" = "Finish: the goal of the maze. Place at least one.";
+"me.tip_up" = "Stairs to the floor above (needs a floor above).";
+"me.tip_down" = "Stairs to the floor below (needs a floor below).";
+"me.tip_portal" = "Portal: link two cells, even on different floors.";
+"me.tip_portal_one" = "One-way portal: link two cells, the entrance works from one side only.";
+"me.tip_brush" = "Brush: paint with the chosen block";
+"me.tip_eraser" = "Eraser: remove blocks";
+"me.tip_box" = "Box: fill a rectangle";
+"me.tip_fill" = "Fill: paint a whole connected area";
+"me.portal_hint" = "Portal tool: click any cell (except the start) for each end. The two ends can be on different floors. R - rotate direction. You pass through a portal in the direction of its arrow.";
+"me.portal_same_floor" = "Both ends of a portal must be on the same floor.";
+"me.portal_pick_second" = "First portal end placed. Now click a cell for the other end - on this floor or, after switching floors with the arrows, on any other one (click the same cell again to cancel).";
+"me.portals" = "Portals: ";
+"me.portal_direction" = "Portal direction: ";
+"me.portal_direction_short" = "Portal arrow";
+"me.portal_direction_tip" = "Turn the portal arrow (the direction you walk out)";
+"me.portal_one_sided_hint" = "One-sided portal: entrance and exit are on the same side. You enter along the arrow and come out of the same face (marked cyan). It can be linked with any other portal, also on another floor. R - rotate direction.";
+"me.portal_already" = "There is already a portal in this cell.";
+"me.portal_not_on_start" = "A portal cannot be placed on the start.";
+"me.portal_exit_blocked" = "A portal leads into a wall (the cell right after its other end is a wall or outside the map). Move the portal or open that cell.";
+"me.portal_linked" = "Portals linked!";
+"me.test" = "Try it";
+"me.geometry_for_test" = "Test geometry";
+"me.test_anyway" = "Test without validation";
+"me.check_ok" = "Great! The finish can be reached.";
+"me.check_no_finish" = "There is no finish yet. Place a Finish block.";
+"me.check_unreachable" = "The finish can't be reached from the start (the blue square). Open a path to it.";
+"me.no_path" = "There is no path from the starting position (1, 1) to any Finish (2).";
+"me.no_reachable_finish" = "No reachable finish.";
+"me.finishes" = "Finishes: ";
+"me.reachable_finish" = "Reachable finish: (";
+"me.map_cannot_be_played" = "This map can't be played yet";
+"me.play_anyway_hint" = "Fix this, or switch on \"Test anyway\" to play it as it is.";
+"me.map_cannot_be_saved" = "Map cannot be saved";
+"me.map_saved_successfully" = "Map saved successfully.";
+"me.file" = "File:";
+"me.could_not_save_map" = "Could not save map:";
+"me.could_not_load_map" = "Could not load the saved map:";
+"me.map_loaded" = "Saved map loaded.";
+"me.seed_map_loaded" = "Map generated from the seed. You can edit it like any other map (Undo works).";
+"me.new_confirm" = "Throw away the current map and start a new one?";
+"me.new_yes" = "Start new";
+"me.load_confirm" = "Loading will replace the map you are editing. Continue?";
+"me.load_yes" = "Load it";
+"me.unsaved_msg" = "This map has changes that are not saved yet. Save it before leaving?";
+"me.hint_brush" = "Brush: click or drag to draw the chosen block. Right mouse button erases.";
+"me.hint_eraser" = "Eraser: click or drag to remove blocks.";
+"me.hint_box" = "Box: drag from one corner to the opposite corner to fill a rectangle. Right mouse button erases.";
+"me.hint_fill" = "Fill: click an area to fill all touching blocks of the same kind.";
+"me.hint_portal" = "Portal: click one cell, then another cell (it can be on another floor) to link them. R turns the arrow.";
+"me.hint_portal_one" = "One-way portal: click two cells to link them. You can only enter it from the side opposite to the arrow. R turns the arrow.";
+"me.hint_pending" = "First end placed. Now click where the second end should be (you can change the floor first). Esc cancels.";
+"me.help_text" = "Drawing\n• Left mouse button draws, right mouse button erases.\n• Alt + click picks the block under the cursor.\n• Mouse wheel zooms, hold Space (or the middle button) and drag to move the map.\n\nKeys\n• 1-5 choose a block, N and M portals, V brush, B eraser, X box, F fill.\n• R turns the portal arrow. PageUp / PageDown change the floor.\n• Ctrl+Z / Ctrl+Y undo and redo, Ctrl+S saves, Esc goes back.\n\nGoal\nThe blue square is the start and cannot be changed. Place a green Finish and make sure there is a way to it - the \"Try it\" box tells you if there is.";

@@ -1199,7 +1199,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private void drawFloorIndicator(int line) {
         Graphics2D g2d = bufferedImage.createGraphics();
         g2d.scale(uiScale(), uiScale());
-        String text = NSLocalizedString.get("gv.floor") + (currentFloor + 1) + "/" + map3D.length;
+        String text = NSLocalizedString.get("floor") + (currentFloor + 1) + "/" + map3D.length;
 
         g2d.setFont(BADGE_FONT);
         g2d.setColor(Color.BLACK);
@@ -1228,7 +1228,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         g2d.drawString(NSLocalizedString.get("gv.no_clip") + noClip, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 110);
         g2d.drawString(NSLocalizedString.get("gv.geometry") + NSLocalizedString.get(
                 GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG ? "gv.wrong_geometry" : "gv.euclidean"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 140);
-        if (MAZE_3D) g2d.drawString(NSLocalizedString.get("gv.floor") + (currentFloor + 1) + "/" + map3D.length,
+        if (MAZE_3D) g2d.drawString(NSLocalizedString.get("floor") + (currentFloor + 1) + "/" + map3D.length,
                 RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 170);
 
         int exitHintY = RCJMS.SCREEN_HEIGHT / 2 + 170 + (MAZE_3D ? 30 : 0);
@@ -1294,7 +1294,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             rollProgress = 1;
         }
 
-        String prefix = NSLocalizedString.get("gv.floor");
+        String prefix = NSLocalizedString.get("floor");
         String suffix = "/" + map3D.length;
         String oldNumber = String.valueOf(transitionFromFloor + 1);
         String newNumber = String.valueOf(transitionToFloor + 1);

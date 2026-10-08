@@ -257,23 +257,12 @@ public class MainMenuView extends JPanel {
     }
     private void setFullscreen(boolean fullscreen) {
         this.fullscreen = fullscreen;
-        JFrame frame = RCJMS.instance;
-        frame.dispose();
-
-        if (fullscreen) {
-            frame.setUndecorated(true);
-            frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
-        }
-        else {
-            frame.setUndecorated(false);
-            frame.setExtendedState(JFrame.NORMAL);
-            frame.setSize(windowWidth, windowHeight);
-            frame.setLocationRelativeTo(null);
-        }
-
-        frame.setVisible(true);
-        frame.revalidate();
-        frame.repaint();
+        RCJMS.instance.setFullscreen(fullscreen, false);
+    }
+    public void syncFullscreen(boolean value) {
+        fullscreen = value;
+        if (fullscreenToggle != null) fullscreenToggle.setSelected(value);
+        if (resolutionBox != null) resolutionBox.setEnabled(!value);
     }
     private void applyWindowSize(int width, int height) {
         if (fullscreen) return;

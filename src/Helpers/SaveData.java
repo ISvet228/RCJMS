@@ -9,7 +9,7 @@ import java.util.*;
 
 public final class SaveData {
     //region Variables
-    public static final String VERSION = "1.95";
+    public static final String VERSION = "1.999";
     public static final String DEFAULT_LANGUAGE = Locale.getDefault().getLanguage();
     public static final Style DEFAULT_THEME = Style.FLAT;
     public static final double DEFAULT_RENDER_SCALE = 1.0;
@@ -160,7 +160,6 @@ public final class SaveData {
         data.fullscreen = fullscreen;
         save(data);
     }
-    /** Remembers the maze options picked in the main menu (size, finish mode, geometry, 3D mode, floor count). */
     public static void saveMazeSettings(int width, int height, int finishMode, int geometry, boolean mode3D, int floors) throws IOException {
         Data data = load();
         data.mazeWidth = Math.clamp(width, 5, 200);
@@ -171,10 +170,6 @@ public final class SaveData {
         data.mazeFloors = Math.clamp(floors, 2, 20);
         save(data);
     }
-    public static void saveMap(int[][] map, String language, Style theme, double renderScale) throws IOException {
-        saveMap(new int[][][]{map}, new ArrayList<>(), 0, language, theme, renderScale);
-    }
-    /** Saves a (possibly multi-floor) custom map together with its portal links and preferred playtest geometry mode. */
     public static void saveMap(int[][][] floors, List<int[]> portalLinks, int geometryMode, String language, Style theme, double renderScale) throws IOException {
         Data data = load();
         data.language = language;
