@@ -1200,17 +1200,19 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         double viewLeft = playerX - cells / 2.0, viewTop = playerY - cells / 2.0;
 
         fillMiniRect(boxX - 2, boxY - 2, boxX + box + 2, boxY + box + 2, 0x5C5C8A, 0, 0, RCJMS.GAME_WIDTH, RCJMS.GAME_HEIGHT);
-        for (int vy = 0; vy < cells; vy++) {
-            for (int vx = 0; vx < cells; vx++) {
-                int cx = (int) Math.floor(viewLeft) + vx, cy = (int) Math.floor(viewTop) + vy;
+        int firstX = (int) Math.floor(viewLeft), firstY = (int) Math.floor(viewTop);
+        for (int vy = 0; vy <= cells; vy++) {
+            for (int vx = 0; vx <= cells; vx++) {
+                int cx = firstX + vx, cy = firstY + vy;
                 int color;
                 if (cx < 0 || cy < 0 || cx >= w || cy >= h) color = 0x050509;
                 else {
                     int fog = ((cx + cy) & 1) == 0 ? 0x16162A : 0x12121F;
                     color = grid[cy][cx] <= 0 ? fog : mixRgb(fog, fogCellColor(map[cy][cx]), grid[cy][cx]);
                 }
-                int x0 = boxX + vx * cell, y0 = boxY + vy * cell;
-                fillMiniRect(x0, y0, x0 + cell, y0 + cell, color, boxX, boxY, boxX + box, boxY + box);
+                int x0 = boxX + (int) Math.round((cx - viewLeft) * cell), x1 = boxX + (int) Math.round((cx + 1 - viewLeft) * cell);
+                int y0 = boxY + (int) Math.round((cy - viewTop) * cell), y1 = boxY + (int) Math.round((cy + 1 - viewTop) * cell);
+                fillMiniRect(x0, y0, x1, y1, color, boxX, boxY, boxX + box, boxY + box);
             }
         }
 
