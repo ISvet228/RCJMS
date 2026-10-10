@@ -38,11 +38,11 @@ public final class EditorKit {
     }
     public static Color alpha(Color c, int a) { return new Color(c.getRed(), c.getGreen(), c.getBlue(), Math.clamp(a, 0, 255)); }
     public static Graphics2D smooth(Graphics g) {
-        Graphics2D g2 = (Graphics2D) g.create();
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
-        return g2;
+        Graphics2D g2d = (Graphics2D) g.create();
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g2d.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+        return g2d;
     }
     public static Font font(float size, boolean bold) { return new Font(Font.SANS_SERIF, bold ? Font.BOLD : Font.PLAIN, 12).deriveFont(size); }
     public static String ellipsize(String text, FontMetrics fm, int maxWidth) {
@@ -90,79 +90,79 @@ public final class EditorKit {
         BRUSH, ERASER, FILL, PICKER, BOX, PORTAL, PORTAL_ONE, UNDO, REDO, ZOOM_IN, ZOOM_OUT, FIT, BACK, SAVE, PLAY, PLUS, MINUS, TRASH, FOLDER,
         DICE, HELP, FLAG, UP, DOWN, IMPORT, CHECK, WARN, NEW, ARROW, WALL, PATH;
 
-        public void paint(Graphics2D g0, double x, double y, double size, Color color) {
-            Graphics2D g = (Graphics2D) g0.create();
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
-            g.translate(x, y);
-            g.scale(size, size);
-            g.setColor(color);
-            g.setStroke(new BasicStroke(0.09f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        public void paint(Graphics2D g2d, double x, double y, double size, Color color) {
+            Graphics2D g2dCopy = (Graphics2D) g2d.create();
+            g2dCopy.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2dCopy.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+            g2dCopy.translate(x, y);
+            g2dCopy.scale(size, size);
+            g2dCopy.setColor(color);
+            g2dCopy.setStroke(new BasicStroke(0.09f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             switch (this) {
                 case BRUSH -> {
-                    g.setStroke(new BasicStroke(0.14f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                    g.draw(new Line2D.Double(0.82, 0.14, 0.50, 0.46));
+                    g2dCopy.setStroke(new BasicStroke(0.14f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2dCopy.draw(new Line2D.Double(0.82, 0.14, 0.50, 0.46));
                     Path2D tip = new Path2D.Double();
                     tip.moveTo(0.46, 0.42); tip.curveTo(0.30, 0.40, 0.14, 0.52, 0.14, 0.74);
                     tip.curveTo(0.14, 0.84, 0.18, 0.88, 0.28, 0.88); tip.curveTo(0.52, 0.88, 0.62, 0.70, 0.58, 0.54);
                     tip.closePath();
-                    g.fill(tip);
+                    g2dCopy.fill(tip);
                 }
                 case ERASER -> {
-                    AffineTransform old = g.getTransform();
-                    g.rotate(-Math.PI / 4, 0.5, 0.5);
-                    g.draw(new RoundRectangle2D.Double(0.2, 0.34, 0.6, 0.32, 0.08, 0.08));
-                    g.fill(new Rectangle2D.Double(0.2, 0.34, 0.26, 0.32));
-                    g.setTransform(old);
-                    g.draw(new Line2D.Double(0.14, 0.9, 0.86, 0.9));
+                    AffineTransform old = g2dCopy.getTransform();
+                    g2dCopy.rotate(-Math.PI / 4, 0.5, 0.5);
+                    g2dCopy.draw(new RoundRectangle2D.Double(0.2, 0.34, 0.6, 0.32, 0.08, 0.08));
+                    g2dCopy.fill(new Rectangle2D.Double(0.2, 0.34, 0.26, 0.32));
+                    g2dCopy.setTransform(old);
+                    g2dCopy.draw(new Line2D.Double(0.14, 0.9, 0.86, 0.9));
                 }
                 case FILL -> {
                     Path2D bucket = new Path2D.Double();
                     bucket.moveTo(0.12, 0.46); bucket.lineTo(0.42, 0.16); bucket.lineTo(0.74, 0.48); bucket.lineTo(0.44, 0.78); bucket.closePath();
-                    g.draw(bucket);
+                    g2dCopy.draw(bucket);
                     Path2D half = new Path2D.Double();
                     half.moveTo(0.12, 0.46); half.lineTo(0.74, 0.48); half.lineTo(0.44, 0.78); half.closePath();
-                    g.fill(half);
-                    g.fill(new Ellipse2D.Double(0.78, 0.64, 0.13, 0.18));
+                    g2dCopy.fill(half);
+                    g2dCopy.fill(new Ellipse2D.Double(0.78, 0.64, 0.13, 0.18));
                 }
                 case PICKER -> {
-                    g.setStroke(new BasicStroke(0.13f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                    g.draw(new Line2D.Double(0.30, 0.70, 0.64, 0.36));
-                    g.fill(new Ellipse2D.Double(0.58, 0.10, 0.32, 0.32));
+                    g2dCopy.setStroke(new BasicStroke(0.13f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2dCopy.draw(new Line2D.Double(0.30, 0.70, 0.64, 0.36));
+                    g2dCopy.fill(new Ellipse2D.Double(0.58, 0.10, 0.32, 0.32));
                     Path2D tip = new Path2D.Double();
                     tip.moveTo(0.20, 0.68); tip.lineTo(0.32, 0.80); tip.lineTo(0.12, 0.90); tip.closePath();
-                    g.fill(tip);
+                    g2dCopy.fill(tip);
                 }
                 case BOX -> {
-                    g.setStroke(new BasicStroke(0.08f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f, new float[]{0.12f, 0.09f}, 0f));
-                    g.draw(new Rectangle2D.Double(0.18, 0.24, 0.64, 0.52));
-                    for (double[] c : new double[][]{{0.18, 0.24}, {0.82, 0.24}, {0.18, 0.76}, {0.82, 0.76}}) g.fill(new Rectangle2D.Double(c[0] - 0.07, c[1] - 0.07, 0.14, 0.14));
+                    g2dCopy.setStroke(new BasicStroke(0.08f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f, new float[]{0.12f, 0.09f}, 0f));
+                    g2dCopy.draw(new Rectangle2D.Double(0.18, 0.24, 0.64, 0.52));
+                    for (double[] c : new double[][]{{0.18, 0.24}, {0.82, 0.24}, {0.18, 0.76}, {0.82, 0.76}}) g2dCopy.fill(new Rectangle2D.Double(c[0] - 0.07, c[1] - 0.07, 0.14, 0.14));
                 }
                 case PORTAL -> {
-                    g.draw(new Ellipse2D.Double(0.26, 0.10, 0.48, 0.80));
-                    g.fill(new Ellipse2D.Double(0.39, 0.30, 0.22, 0.40));
+                    g2dCopy.draw(new Ellipse2D.Double(0.26, 0.10, 0.48, 0.80));
+                    g2dCopy.fill(new Ellipse2D.Double(0.39, 0.30, 0.22, 0.40));
                 }
                 case PORTAL_ONE -> {
-                    g.draw(new Ellipse2D.Double(0.10, 0.12, 0.36, 0.76));
-                    g.draw(new Line2D.Double(0.56, 0.5, 0.86, 0.5));
+                    g2dCopy.draw(new Ellipse2D.Double(0.10, 0.12, 0.36, 0.76));
+                    g2dCopy.draw(new Line2D.Double(0.56, 0.5, 0.86, 0.5));
                     Path2D head = new Path2D.Double();
                     head.moveTo(0.76, 0.36); head.lineTo(0.92, 0.5); head.lineTo(0.76, 0.64); head.closePath();
-                    g.fill(head);
+                    g2dCopy.fill(head);
                 }
                 case UNDO, REDO -> {
-                    if (this == REDO) { g.translate(1, 0); g.scale(-1, 1); }
-                    g.draw(new Arc2D.Double(0.2, 0.25, 0.6, 0.6, 15, 165, Arc2D.OPEN));
+                    if (this == REDO) { g2dCopy.translate(1, 0); g2dCopy.scale(-1, 1); }
+                    g2dCopy.draw(new Arc2D.Double(0.2, 0.25, 0.6, 0.6, 15, 165, Arc2D.OPEN));
                     Path2D head = new Path2D.Double();
                     head.moveTo(0.06, 0.50); head.lineTo(0.34, 0.50); head.lineTo(0.20, 0.74); head.closePath();
-                    g.fill(head);
+                    g2dCopy.fill(head);
                 }
                 case ZOOM_IN, ZOOM_OUT -> {
-                    g.draw(new Ellipse2D.Double(0.10, 0.10, 0.55, 0.55));
-                    g.setStroke(new BasicStroke(0.12f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                    g.draw(new Line2D.Double(0.58, 0.58, 0.88, 0.88));
-                    g.setStroke(new BasicStroke(0.08f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                    g.draw(new Line2D.Double(0.26, 0.375, 0.49, 0.375));
-                    if (this == ZOOM_IN) g.draw(new Line2D.Double(0.375, 0.26, 0.375, 0.49));
+                    g2dCopy.draw(new Ellipse2D.Double(0.10, 0.10, 0.55, 0.55));
+                    g2dCopy.setStroke(new BasicStroke(0.12f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2dCopy.draw(new Line2D.Double(0.58, 0.58, 0.88, 0.88));
+                    g2dCopy.setStroke(new BasicStroke(0.08f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2dCopy.draw(new Line2D.Double(0.26, 0.375, 0.49, 0.375));
+                    if (this == ZOOM_IN) g2dCopy.draw(new Line2D.Double(0.375, 0.26, 0.375, 0.49));
                 }
                 case FIT -> {
                     double[][][] corners = {{{0.15, 0.38}, {0.15, 0.15}, {0.38, 0.15}}, {{0.62, 0.15}, {0.85, 0.15}, {0.85, 0.38}},
@@ -170,110 +170,110 @@ public final class EditorKit {
                     for (double[][] c : corners) {
                         Path2D p = new Path2D.Double();
                         p.moveTo(c[0][0], c[0][1]); p.lineTo(c[1][0], c[1][1]); p.lineTo(c[2][0], c[2][1]);
-                        g.draw(p);
+                        g2dCopy.draw(p);
                     }
                 }
                 case BACK -> {
-                    g.setStroke(new BasicStroke(0.12f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                    g.draw(new Line2D.Double(0.84, 0.5, 0.2, 0.5));
+                    g2dCopy.setStroke(new BasicStroke(0.12f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2dCopy.draw(new Line2D.Double(0.84, 0.5, 0.2, 0.5));
                     Path2D head = new Path2D.Double();
                     head.moveTo(0.46, 0.24); head.lineTo(0.2, 0.5); head.lineTo(0.46, 0.76);
-                    g.draw(head);
+                    g2dCopy.draw(head);
                 }
                 case SAVE -> {
-                    g.draw(new RoundRectangle2D.Double(0.14, 0.14, 0.72, 0.72, 0.1, 0.1));
-                    g.draw(new Rectangle2D.Double(0.30, 0.14, 0.36, 0.24));
-                    g.fill(new RoundRectangle2D.Double(0.28, 0.54, 0.44, 0.32, 0.04, 0.04));
+                    g2dCopy.draw(new RoundRectangle2D.Double(0.14, 0.14, 0.72, 0.72, 0.1, 0.1));
+                    g2dCopy.draw(new Rectangle2D.Double(0.30, 0.14, 0.36, 0.24));
+                    g2dCopy.fill(new RoundRectangle2D.Double(0.28, 0.54, 0.44, 0.32, 0.04, 0.04));
                 }
                 case PLAY -> {
                     Path2D tri = new Path2D.Double();
                     tri.moveTo(0.28, 0.14); tri.lineTo(0.86, 0.5); tri.lineTo(0.28, 0.86); tri.closePath();
-                    g.fill(tri);
+                    g2dCopy.fill(tri);
                 }
                 case PLUS, MINUS -> {
-                    g.setStroke(new BasicStroke(0.13f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-                    g.draw(new Line2D.Double(0.22, 0.5, 0.78, 0.5));
-                    if (this == PLUS) g.draw(new Line2D.Double(0.5, 0.22, 0.5, 0.78));
+                    g2dCopy.setStroke(new BasicStroke(0.13f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2dCopy.draw(new Line2D.Double(0.22, 0.5, 0.78, 0.5));
+                    if (this == PLUS) g2dCopy.draw(new Line2D.Double(0.5, 0.22, 0.5, 0.78));
                 }
                 case TRASH -> {
-                    g.draw(new Line2D.Double(0.16, 0.28, 0.84, 0.28));
+                    g2dCopy.draw(new Line2D.Double(0.16, 0.28, 0.84, 0.28));
                     Path2D handle = new Path2D.Double();
                     handle.moveTo(0.38, 0.28); handle.lineTo(0.38, 0.14); handle.lineTo(0.62, 0.14); handle.lineTo(0.62, 0.28);
-                    g.draw(handle);
+                    g2dCopy.draw(handle);
                     Path2D body = new Path2D.Double();
                     body.moveTo(0.26, 0.28); body.lineTo(0.30, 0.88); body.lineTo(0.70, 0.88); body.lineTo(0.74, 0.28);
-                    g.draw(body);
-                    g.draw(new Line2D.Double(0.43, 0.44, 0.43, 0.72));
-                    g.draw(new Line2D.Double(0.57, 0.44, 0.57, 0.72));
+                    g2dCopy.draw(body);
+                    g2dCopy.draw(new Line2D.Double(0.43, 0.44, 0.43, 0.72));
+                    g2dCopy.draw(new Line2D.Double(0.57, 0.44, 0.57, 0.72));
                 }
                 case FOLDER -> {
                     Path2D folder = new Path2D.Double();
                     folder.moveTo(0.10, 0.22); folder.lineTo(0.38, 0.22); folder.lineTo(0.46, 0.33); folder.lineTo(0.90, 0.33);
                     folder.lineTo(0.90, 0.80); folder.lineTo(0.10, 0.80); folder.closePath();
-                    g.draw(folder);
+                    g2dCopy.draw(folder);
                 }
                 case DICE -> {
-                    g.draw(new RoundRectangle2D.Double(0.14, 0.14, 0.72, 0.72, 0.16, 0.16));
-                    for (double[] d : new double[][]{{0.32, 0.32}, {0.68, 0.32}, {0.5, 0.5}, {0.32, 0.68}, {0.68, 0.68}}) g.fill(new Ellipse2D.Double(d[0] - 0.06, d[1] - 0.06, 0.12, 0.12));
+                    g2dCopy.draw(new RoundRectangle2D.Double(0.14, 0.14, 0.72, 0.72, 0.16, 0.16));
+                    for (double[] d : new double[][]{{0.32, 0.32}, {0.68, 0.32}, {0.5, 0.5}, {0.32, 0.68}, {0.68, 0.68}}) g2dCopy.fill(new Ellipse2D.Double(d[0] - 0.06, d[1] - 0.06, 0.12, 0.12));
                 }
                 case HELP -> {
-                    g.draw(new Ellipse2D.Double(0.10, 0.10, 0.80, 0.80));
+                    g2dCopy.draw(new Ellipse2D.Double(0.10, 0.10, 0.80, 0.80));
                     Font f = new Font(Font.SANS_SERIF, Font.BOLD, 12).deriveFont(0.58f);
-                    g.setFont(f);
-                    Rectangle2D b = f.getStringBounds("?", g.getFontRenderContext());
-                    g.drawString("?", (float) (0.5 - b.getCenterX()), (float) (0.5 - b.getCenterY()));
+                    g2dCopy.setFont(f);
+                    Rectangle2D b = f.getStringBounds("?", g2dCopy.getFontRenderContext());
+                    g2dCopy.drawString("?", (float) (0.5 - b.getCenterX()), (float) (0.5 - b.getCenterY()));
                 }
                 case FLAG -> {
-                    g.draw(new Line2D.Double(0.26, 0.12, 0.26, 0.9));
-                    g.draw(new Rectangle2D.Double(0.26, 0.14, 0.56, 0.38));
-                    g.fill(new Rectangle2D.Double(0.26, 0.14, 0.28, 0.19));
-                    g.fill(new Rectangle2D.Double(0.54, 0.33, 0.28, 0.19));
+                    g2dCopy.draw(new Line2D.Double(0.26, 0.12, 0.26, 0.9));
+                    g2dCopy.draw(new Rectangle2D.Double(0.26, 0.14, 0.56, 0.38));
+                    g2dCopy.fill(new Rectangle2D.Double(0.26, 0.14, 0.28, 0.19));
+                    g2dCopy.fill(new Rectangle2D.Double(0.54, 0.33, 0.28, 0.19));
                 }
                 case UP, DOWN -> {
                     Path2D tri = new Path2D.Double();
                     if (this == UP) { tri.moveTo(0.5, 0.16); tri.lineTo(0.86, 0.80); tri.lineTo(0.14, 0.80); }
                     else { tri.moveTo(0.5, 0.84); tri.lineTo(0.86, 0.20); tri.lineTo(0.14, 0.20); }
                     tri.closePath();
-                    g.fill(tri);
+                    g2dCopy.fill(tri);
                 }
                 case IMPORT -> {
-                    g.draw(new RoundRectangle2D.Double(0.12, 0.18, 0.76, 0.64, 0.08, 0.08));
-                    g.fill(new Ellipse2D.Double(0.60, 0.28, 0.14, 0.14));
+                    g2dCopy.draw(new RoundRectangle2D.Double(0.12, 0.18, 0.76, 0.64, 0.08, 0.08));
+                    g2dCopy.fill(new Ellipse2D.Double(0.60, 0.28, 0.14, 0.14));
                     Path2D mountains = new Path2D.Double();
                     mountains.moveTo(0.18, 0.76); mountains.lineTo(0.40, 0.46); mountains.lineTo(0.56, 0.64); mountains.lineTo(0.66, 0.54); mountains.lineTo(0.82, 0.76); mountains.closePath();
-                    g.fill(mountains);
+                    g2dCopy.fill(mountains);
                 }
                 case CHECK -> {
-                    g.setStroke(new BasicStroke(0.14f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2dCopy.setStroke(new BasicStroke(0.14f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                     Path2D tick = new Path2D.Double();
                     tick.moveTo(0.18, 0.54); tick.lineTo(0.40, 0.74); tick.lineTo(0.84, 0.26);
-                    g.draw(tick);
+                    g2dCopy.draw(tick);
                 }
                 case WARN -> {
                     Path2D tri = new Path2D.Double();
                     tri.moveTo(0.5, 0.12); tri.lineTo(0.92, 0.86); tri.lineTo(0.08, 0.86); tri.closePath();
-                    g.draw(tri);
-                    g.draw(new Line2D.Double(0.5, 0.38, 0.5, 0.60));
-                    g.fill(new Ellipse2D.Double(0.455, 0.67, 0.09, 0.09));
+                    g2dCopy.draw(tri);
+                    g2dCopy.draw(new Line2D.Double(0.5, 0.38, 0.5, 0.60));
+                    g2dCopy.fill(new Ellipse2D.Double(0.455, 0.67, 0.09, 0.09));
                 }
                 case NEW -> {
                     Path2D page = new Path2D.Double();
                     page.moveTo(0.22, 0.10); page.lineTo(0.58, 0.10); page.lineTo(0.78, 0.30); page.lineTo(0.78, 0.90); page.lineTo(0.22, 0.90); page.closePath();
-                    g.draw(page);
+                    g2dCopy.draw(page);
                     Path2D fold = new Path2D.Double();
                     fold.moveTo(0.58, 0.10); fold.lineTo(0.58, 0.30); fold.lineTo(0.78, 0.30);
-                    g.draw(fold);
+                    g2dCopy.draw(fold);
                 }
                 case ARROW -> {
                     Path2D arrow = new Path2D.Double();
                     arrow.moveTo(0.88, 0.5); arrow.lineTo(0.40, 0.14); arrow.lineTo(0.40, 0.36); arrow.lineTo(0.12, 0.36);
                     arrow.lineTo(0.12, 0.64); arrow.lineTo(0.40, 0.64); arrow.lineTo(0.40, 0.86); arrow.closePath();
-                    g.fill(arrow);
+                    g2dCopy.fill(arrow);
                 }
-                case WALL -> g.fill(new Rectangle2D.Double(0.14, 0.14, 0.72, 0.72));
-                case PATH -> g.draw(new Rectangle2D.Double(0.18, 0.18, 0.64, 0.64));
+                case WALL -> g2dCopy.fill(new Rectangle2D.Double(0.14, 0.14, 0.72, 0.72));
+                case PATH -> g2dCopy.draw(new Rectangle2D.Double(0.18, 0.18, 0.64, 0.64));
             }
-            g.dispose();
+            g2dCopy.dispose();
         }
     }
 
@@ -298,16 +298,15 @@ public final class EditorKit {
             FontMetrics fm = getFontMetrics(font(size, bold));
             return new Dimension(fm.stringWidth(text) + 2, fm.getHeight() + 4);
         }
-        @Override protected void paintComponent(Graphics g0) {
-            Graphics2D g = smooth(g0);
-            Font f = font(size, bold);
-            g.setFont(f);
-            FontMetrics fm = g.getFontMetrics();
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2d = smooth(g);
+            g2d.setFont(font(size, bold));
+            FontMetrics fm = g2d.getFontMetrics();
             String shown = ellipsize(text, fm, getWidth());
             int x = switch (align) { case 1 -> (getWidth() - fm.stringWidth(shown)) / 2; case 2 -> getWidth() - fm.stringWidth(shown); default -> 0; };
-            g.setColor(isEnabled() ? color : alpha(color, 110));
-            g.drawString(shown, x, (getHeight() - fm.getHeight()) / 2 + fm.getAscent());
-            g.dispose();
+            g2d.setColor(isEnabled() ? color : alpha(color, 110));
+            g2d.drawString(shown, x, (getHeight() - fm.getHeight()) / 2 + fm.getAscent());
+            g2d.dispose();
         }
     }
     public static class Note extends JComponent {
@@ -327,16 +326,16 @@ public final class EditorKit {
             FontMetrics fm = getFontMetrics(font(size, false));
             return new Dimension(width, Math.max(fm.getHeight() + 4, wrap(text, fm, textWidth()).size() * (fm.getHeight() + 1) + 4));
         }
-        @Override protected void paintComponent(Graphics g0) {
-            Graphics2D g = smooth(g0);
-            g.setFont(font(size, false));
-            FontMetrics fm = g.getFontMetrics();
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2d = smooth(g);
+            g2d.setFont(font(size, false));
+            FontMetrics fm = g2d.getFontMetrics();
             int x = 0;
-            if (icon != null) { icon.paint(g, 0, 1, size * 1.25, color); x = Math.round(size * 1.6f); }
-            g.setColor(color);
+            if (icon != null) { icon.paint(g2d, 0, 1, size * 1.25, color); x = Math.round(size * 1.6f); }
+            g2d.setColor(color);
             int y = 2 + fm.getAscent();
-            for (String line : wrap(text, fm, textWidth())) { g.drawString(line, x, y); y += fm.getHeight() + 1; }
-            g.dispose();
+            for (String line : wrap(text, fm, textWidth())) { g2d.drawString(line, x, y); y += fm.getHeight() + 1; }
+            g2d.dispose();
         }
     }
     //endregion
@@ -396,11 +395,11 @@ public final class EditorKit {
         }
         @Override public void setEnabled(boolean enabled) { super.setEnabled(enabled); setCursor(Cursor.getPredefinedCursor(enabled ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR)); repaint(); }
 
-        @Override protected void paintComponent(Graphics g0) {
-            Graphics2D g = smooth(g0);
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2d = smooth(g);
             int w = getWidth(), h = getHeight();
             boolean on = isEnabled();
-            if (!on) g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.38f));
+            if (!on) g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.38f));
             int arc = Math.round(Math.min(12, Math.min(w, h) * 0.3f));
             int off = pressed ? 1 : 0;
 
@@ -409,71 +408,70 @@ public final class EditorKit {
             Color textColor = theme.text;
             if (accent != null) { fill = hover && on ? mix(accent, Color.WHITE, 0.14f) : accent; border = mix(accent, Color.WHITE, 0.3f); textColor = Color.WHITE; }
             if (selected) { fill = mix(hover ? theme.hover : theme.normal, HILITE, 0.5f); border = HILITE; textColor = Color.WHITE; }
-            g.setColor(fill);
-            g.fillRoundRect(0, off, w - 1, h - 1, arc, arc);
-            g.setColor(border);
-            g.setStroke(new BasicStroke(selected ? 2f : 1f));
-            g.drawRoundRect(selected ? 1 : 0, off + (selected ? 1 : 0), w - 1 - (selected ? 2 : 0), h - 1 - (selected ? 2 : 0), arc, arc);
+            g2d.setColor(fill);
+            g2d.fillRoundRect(0, off, w - 1, h - 1, arc, arc);
+            g2d.setColor(border);
+            g2d.setStroke(new BasicStroke(selected ? 2f : 1f));
+            g2d.drawRoundRect(selected ? 1 : 0, off + (selected ? 1 : 0), w - 1 - (selected ? 2 : 0), h - 1 - (selected ? 2 : 0), arc, arc);
 
-            g.translate(0, off);
+            g2d.translate(0, off);
             switch (layout) {
-                case ICON -> drawGraphic(g, (w - h * 0.56) / 2, h * 0.22, h * 0.56, textColor);
-                case TEXT -> drawLabel(g, 6, 0, w - 12, h, textColor, 1);
+                case ICON -> drawGraphic(g2d, (w - h * 0.56) / 2, h * 0.22, h * 0.56, textColor);
+                case TEXT -> drawLabel(g2d, 6, 0, w - 12, h, textColor, 1);
                 case ROW -> {
                     double s = Math.min(h * 0.58, 24);
                     int pad = Math.max(6, (int) ((h - s) / 2));
                     int x = pad;
-                    if (swatch != null || icon != null) { drawGraphic(g, x, (h - s) / 2, s, textColor); x += (int) s + 8; }
+                    if (swatch != null || icon != null) { drawGraphic(g2d, x, (h - s) / 2, s, textColor); x += (int) s + 8; }
                     int badgeW = 0;
-                    if (badge != null && !badge.isEmpty()) badgeW = drawBadge(g, w - pad, h);
-                    drawLabel(g, x, 0, w - x - pad - (badgeW > 0 ? badgeW + 4 : 0), h, textColor, swatch != null || icon != null ? 0 : 1);
+                    if (badge != null && !badge.isEmpty()) badgeW = drawBadge(g2d, w - pad, h);
+                    drawLabel(g2d, x, 0, w - x - pad - (badgeW > 0 ? badgeW + 4 : 0), h, textColor, swatch != null || icon != null ? 0 : 1);
                 }
                 case TILE -> {
                     double s = Math.min(h * 0.46, 26);
-                    drawGraphic(g, (w - s) / 2, h * 0.10, s, textColor);
-                    drawLabel(g, 3, (int) (h * 0.10 + s), w - 6, h - (int) (h * 0.10 + s) - 2, textColor, 1);
-                    if (badge != null && !badge.isEmpty()) drawBadge(g, w - 4, (int) (h * 0.42));
+                    drawGraphic(g2d, (w - s) / 2, h * 0.10, s, textColor);
+                    drawLabel(g2d, 3, (int) (h * 0.10 + s), w - 6, h - (int) (h * 0.10 + s) - 2, textColor, 1);
+                    if (badge != null && !badge.isEmpty()) drawBadge(g2d, w - 4, (int) (h * 0.42));
                 }
             }
-            g.dispose();
+            g2d.dispose();
         }
-        private void drawGraphic(Graphics2D g, double x, double y, double s, Color textColor) {
+        private void drawGraphic(Graphics2D g2d, double x, double y, double s, Color textColor) {
             if (swatch != null) {
-                g.setColor(swatch);
-                g.fill(new RoundRectangle2D.Double(x, y, s, s, 5, 5));
-                g.setColor(new Color(0, 0, 0, 120));
-                g.draw(new RoundRectangle2D.Double(x + 0.5, y + 0.5, s - 1, s - 1, 5, 5));
-                if (glyph != null) glyph.paint(g, x + s * 0.17, y + s * 0.17, s * 0.66, glyphColor);
+                g2d.setColor(swatch);
+                g2d.fill(new RoundRectangle2D.Double(x, y, s, s, 5, 5));
+                g2d.setColor(new Color(0, 0, 0, 120));
+                g2d.draw(new RoundRectangle2D.Double(x + 0.5, y + 0.5, s - 1, s - 1, 5, 5));
+                if (glyph != null) glyph.paint(g2d, x + s * 0.17, y + s * 0.17, s * 0.66, glyphColor);
             }
             else if (icon != null) {
-                Graphics2D r = (Graphics2D) g.create();
-                if (rotation != 0) r.rotate(rotation, x + s / 2, y + s / 2);
-                icon.paint(r, x, y, s, textColor);
-                r.dispose();
+                Graphics2D g2dCopy = (Graphics2D) g2d.create();
+                if (rotation != 0) g2dCopy.rotate(rotation, x + s / 2, y + s / 2);
+                icon.paint(g2dCopy, x, y, s, textColor);
+                g2dCopy.dispose();
             }
         }
-        private void drawLabel(Graphics2D g, int x, int y, int w, int h, Color color, int align) {
+        private void drawLabel(Graphics2D g2d, int x, int y, int w, int h, Color color, int align) {
             if (text.isEmpty() || w <= 4) return;
             float size = layout == Layout.TILE ? Math.min(12f, h * 0.62f) : Math.clamp(getHeight() * 0.42f, 10f, 13f);
             Font f = font(size, true);
-            FontMetrics fm = g.getFontMetrics(f);
-            while (fm.stringWidth(text) > w && size > 9f) { size -= 0.5f; f = font(size, true); fm = g.getFontMetrics(f); }
+            FontMetrics fm = g2d.getFontMetrics(f);
+            while (fm.stringWidth(text) > w && size > 9f) { size -= 0.5f; f = font(size, true); fm = g2d.getFontMetrics(f); }
             String shown = ellipsize(text, fm, w);
-            g.setFont(f);
-            g.setColor(color);
-            int tx = align == 1 ? x + (w - fm.stringWidth(shown)) / 2 : x;
-            g.drawString(shown, tx, y + (h - fm.getHeight()) / 2 + fm.getAscent());
+            g2d.setFont(f);
+            g2d.setColor(color);
+            g2d.drawString(shown, align == 1 ? x + (w - fm.stringWidth(shown)) / 2 : x, y + (h - fm.getHeight()) / 2 + fm.getAscent());
         }
-        private int drawBadge(Graphics2D g, int rightEdge, int h) {
+        private int drawBadge(Graphics2D g2d, int rightEdge, int h) {
             Font f = font(10f, true);
-            FontMetrics fm = g.getFontMetrics(f);
+            FontMetrics fm = g2d.getFontMetrics(f);
             int bw = Math.max(16, fm.stringWidth(badge) + 8), bh = 16;
             int bx = rightEdge - bw, by = layout == Layout.TILE ? 4 : (h - bh) / 2;
-            g.setColor(new Color(0, 0, 0, 90));
-            g.fillRoundRect(bx, by, bw, bh, 8, 8);
-            g.setFont(f);
-            g.setColor(new Color(255, 255, 255, 190));
-            g.drawString(badge, bx + (bw - fm.stringWidth(badge)) / 2, by + (bh - fm.getHeight()) / 2 + fm.getAscent());
+            g2d.setColor(new Color(0, 0, 0, 90));
+            g2d.fillRoundRect(bx, by, bw, bh, 8, 8);
+            g2d.setFont(f);
+            g2d.setColor(new Color(255, 255, 255, 190));
+            g2d.drawString(badge, bx + (bw - fm.stringWidth(badge)) / 2, by + (bh - fm.getHeight()) / 2 + fm.getAscent());
             return bw;
         }
     }
@@ -521,16 +519,16 @@ public final class EditorKit {
             this.title = L(titleKey).toUpperCase(java.util.Locale.ROOT);
             setBorder(new EmptyBorder(23, 8, 7, 8));
         }
-        @Override protected void paintComponent(Graphics g0) {
-            Graphics2D g = smooth(g0);
-            g.setColor(CARD);
-            g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
-            g.setColor(CARD_LINE);
-            g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
-            g.setFont(font(10.5f, true));
-            g.setColor(MUTED);
-            g.drawString(ellipsize(title, g.getFontMetrics(), getWidth() - 20), 10, 16);
-            g.dispose();
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2d = smooth(g);
+            g2d.setColor(CARD);
+            g2d.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+            g2d.setColor(CARD_LINE);
+            g2d.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
+            g2d.setFont(font(10.5f, true));
+            g2d.setColor(MUTED);
+            g2d.drawString(ellipsize(title, g2d.getFontMetrics(), getWidth() - 20), 10, 16);
+            g2d.dispose();
         }
     }
 
@@ -561,25 +559,25 @@ public final class EditorKit {
         public HintBar() { setOpaque(false); setPreferredSize(new Dimension(300, 38)); timer.setRepeats(false); }
         public void setHint(String raw) { hint = raw == null ? "" : raw; repaint(); }
         public void flash(Tone tone, String raw) { flash = raw == null ? "" : raw; flashTone = tone; timer.restart(); repaint(); }
-        @Override protected void paintComponent(Graphics g0) {
-            Graphics2D g = smooth(g0);
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2d = smooth(g);
             boolean flashing = !flash.isEmpty();
             Color color = flashing ? switch (flashTone) { case OK -> OK; case WARN -> WARN; case BAD -> BAD; default -> TEXT; } : MUTED;
-            g.setFont(font(12f, flashing));
-            FontMetrics fm = g.getFontMetrics();
+            g2d.setFont(font(12f, flashing));
+            FontMetrics fm = g2d.getFontMetrics();
             int x = 0;
-            if (flashing && flashTone != Tone.INFO) { (flashTone == Tone.OK ? Glyph.CHECK : Glyph.WARN).paint(g, 0, (getHeight() - 16) / 2.0, 16, color); x = 22; }
+            if (flashing && flashTone != Tone.INFO) { (flashTone == Tone.OK ? Glyph.CHECK : Glyph.WARN).paint(g2d, 0, (getHeight() - 16) / 2.0, 16, color); x = 22; }
             List<String> lines = wrap(flashing ? flash : hint, fm, getWidth() - x);
             int shown = Math.min(2, lines.size());
             int y = (getHeight() - shown * fm.getHeight()) / 2 + fm.getAscent();
-            g.setColor(color);
+            g2d.setColor(color);
             for (int i = 0; i < shown; i++) {
                 String line = lines.get(i);
                 if (i == 1 && lines.size() > 2) line = ellipsize(line + " …", fm, getWidth() - x);
-                g.drawString(line, x, y);
+                g2d.drawString(line, x, y);
                 y += fm.getHeight();
             }
-            g.dispose();
+            g2d.dispose();
         }
     }
     //endregion
@@ -675,8 +673,8 @@ public final class EditorKit {
             installKeys();
         }
 
-        protected abstract void paintContent(Graphics2D g, int x0, int y0, int x1, int y1);
-        protected void paintOverlay(Graphics2D g, int x0, int y0, int x1, int y1) {}
+        protected abstract void paintContent(Graphics2D g2d, int x0, int y0, int x1, int y1);
+        protected void paintOverlay(Graphics2D g2d, int x0, int y0, int x1, int y1) {}
         protected abstract void pointerPressed(int x, int y, MouseEvent e);
         protected void pointerDragged(int x, int y, MouseEvent e) {}
         protected void pointerReleased(int x, int y, MouseEvent e) {}
@@ -754,17 +752,17 @@ public final class EditorKit {
             am.put("zoomOut", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { zoomOut(); }});
             am.put("zoomFit", new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { resetView(); }});
         }
-        @Override protected void paintComponent(Graphics g0) {
-            super.paintComponent(g0);
+        @Override protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
             computeView();
-            Graphics2D g = (Graphics2D) g0.create();
+            Graphics2D g2d = (Graphics2D) g.create();
             int x0 = Math.max(0, (int) Math.floor(-originX / cell)), x1 = Math.min(cols - 1, (int) Math.floor((getWidth() - originX) / cell));
             int y0 = Math.max(0, (int) Math.floor(-originY / cell)), y1 = Math.min(rows - 1, (int) Math.floor((getHeight() - originY) / cell));
             if (x1 >= x0 && y1 >= y0) {
-                paintContent(g, x0, y0, x1, y1);
-                paintOverlay(g, x0, y0, x1, y1);
+                paintContent(g2d, x0, y0, x1, y1);
+                paintOverlay(g2d, x0, y0, x1, y1);
             }
-            g.dispose();
+            g2d.dispose();
         }
     }
 

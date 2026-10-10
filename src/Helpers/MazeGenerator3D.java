@@ -199,8 +199,8 @@ public class MazeGenerator3D {
     }
     private List<int[]> collectAvoidPoints(int finishFloor) {
         List<int[]> avoid = new ArrayList<>();
-        avoid.add(new int[]{entryX[finishFloor], entryY[finishFloor]}); //where you arrive on this floor (start or stairs up)
-        if (finishFloor + 1 < floorCount) avoid.add(new int[]{entryX[finishFloor + 1], entryY[finishFloor + 1]}); //this floor's stairs down
+        avoid.add(new int[]{entryX[finishFloor], entryY[finishFloor]});
+        if (finishFloor + 1 < floorCount) avoid.add(new int[]{entryX[finishFloor + 1], entryY[finishFloor + 1]});
         return avoid;
     }
     private boolean hasPath(int[][] maze, int fromX, int fromY, int toX, int toY) {

@@ -95,6 +95,7 @@ public final class SaveData {
                             case "geometry" -> data.mazeGeometry = Math.clamp(Integer.parseInt(value), 0, 2);
                             case "mode3D" -> data.maze3D = Boolean.parseBoolean(value);
                             case "floors" -> data.mazeFloors = Math.clamp(Integer.parseInt(value), 2, 20);
+                            case "fog" -> data.mazeFog = Boolean.parseBoolean(value);
                         }
                     } catch (NumberFormatException ignored) { }
                 }
@@ -141,7 +142,6 @@ public final class SaveData {
                 if (portalsValid) data.mapPortalLinks = portalLinks;
             }
             else if (data.map != null) {
-                // Legacy single-floor save: treat it as a one-floor map for the new multi-floor pipeline.
                 data.mapFloors = new int[][][]{data.map};
             }
         } catch (IOException ignored) { }
@@ -160,7 +160,7 @@ public final class SaveData {
         data.fullscreen = fullscreen;
         save(data);
     }
-    public static void saveMazeSettings(int width, int height, int finishMode, int geometry, boolean mode3D, int floors) throws IOException {
+    public static void saveMazeSettings(int width, int height, int finishMode, int geometry, boolean mode3D, int floors, boolean fog) throws IOException {
         Data data = load();
         data.mazeWidth = Math.clamp(width, 5, 200);
         data.mazeHeight = Math.clamp(height, 5, 200);
@@ -168,6 +168,7 @@ public final class SaveData {
         data.mazeGeometry = Math.clamp(geometry, 0, 2);
         data.maze3D = mode3D;
         data.mazeFloors = Math.clamp(floors, 2, 20);
+        data.mazeFog = fog;
         save(data);
     }
     public static void saveMap(int[][][] floors, List<int[]> portalLinks, int geometryMode, String language, Style theme, double renderScale) throws IOException {
@@ -206,7 +207,8 @@ public final class SaveData {
             writer.write("finishMode=" + data.mazeFinishMode); writer.newLine();
             writer.write("geometry=" + data.mazeGeometry); writer.newLine();
             writer.write("mode3D=" + data.maze3D); writer.newLine();
-            writer.write("floors=" + data.mazeFloors); writer.newLine(); writer.newLine();
+            writer.write("floors=" + data.mazeFloors); writer.newLine();
+            writer.write("fog=" + data.mazeFog); writer.newLine(); writer.newLine();
 
             writer.write("[mapmeta]"); writer.newLine();
             writer.write("geometry=" + data.mapGeometryMode); writer.newLine(); writer.newLine();
@@ -282,6 +284,7 @@ public final class SaveData {
         public int mazeGeometry = 0;
         public boolean maze3D = false;
         public int mazeFloors = DEFAULT_MAZE_FLOORS;
+        public boolean mazeFog = false;
     }
     //endregion
 }

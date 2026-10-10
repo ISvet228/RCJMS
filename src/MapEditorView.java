@@ -71,6 +71,7 @@ public class MapEditorView extends JPanel {
     private final ToolButton[] presetButtons = new ToolButton[SIZE_PRESETS.length];
     private final StyledToggle wrongGeometryToggle = new StyledToggle(currentStyle, "mm.wrong_geometry");
     private final StyledToggle skipValidationToggle = new StyledToggle(currentStyle, "me.test_anyway");
+    private final StyledToggle fogToggle = new StyledToggle(currentStyle, "me.fog_minimap");
     //endregion
 
     //region Constructors
@@ -461,6 +462,8 @@ public class MapEditorView extends JPanel {
         skipValidationToggle.setPreferredSize(new Dimension(100, 24));
         test.put(wrongGeometryToggle, 6);
         test.put(skipValidationToggle, 1);
+        fogToggle.setPreferredSize(new Dimension(100, 24));
+        test.put(fogToggle, 1);
         column.put(test, 4);
         return column;
     }
@@ -524,7 +527,6 @@ public class MapEditorView extends JPanel {
             canvas.repaint();
         }
     }
-    /** One place decides which tool button and which block row look pressed. */
     private void syncSelection() {
         Tool[] order = {Tool.BRUSH, Tool.ERASER, Tool.BOX, Tool.FILL};
         for (int i = 0; i < toolButtons.length; i++) toolButtons[i].setSelected(currentTool == order[i]);
@@ -572,7 +574,6 @@ public class MapEditorView extends JPanel {
 
     //region Editing
     private void beginStroke() { strokeBase = snapshot(); strokePushed = false; }
-    /** The first real change of a stroke puts the picture from before on the undo stack, so empty clicks never make undo steps. */
     private void touch() {
         if (!strokePushed && strokeBase != null) { pushUndo(strokeBase); strokePushed = true; }
         markDirty();
@@ -617,7 +618,7 @@ public class MapEditorView extends JPanel {
             int x = p[0], y = p[1];
             if (isOutside(x, y) || seen[y][x] || map[y][x] != target) continue;
             seen[y][x] = true;
-            changed |= setCell(x, y, value); //the start cell stays as it is but the fill still flows through it
+            changed |= setCell(x, y, value);
             stack.push(new int[]{x + 1, y}); stack.push(new int[]{x - 1, y}); stack.push(new int[]{x, y + 1}); stack.push(new int[]{x, y - 1});
         }
         return changed;
@@ -669,7 +670,6 @@ public class MapEditorView extends JPanel {
         return exits;
     }
     private int[] findReachableExit() { return MazeSolver.findReachableFinish(floorMaps.toArray(new int[0][][]), buildPortalDataPerFloor(), 0, START_X, START_Y); }
-    /** Returns a readable problem description, or null when the map is playable. */
     private String validateMap() {
         if (findExits().isEmpty()) return L("me.check_no_finish");
         int[] blocked = MazeSolver.findBlockedPortalExit(floorMaps.toArray(new int[0][][]), buildPortalDataPerFloor());
@@ -677,7 +677,6 @@ public class MapEditorView extends JPanel {
         return findReachableExit() == null ? L("me.check_unreachable") : null;
     }
     private void scheduleCheck() { checkTimer.restart(); }
-    /** Live feedback next to the Play button, so nobody has to press it just to learn the map is broken. */
     private void runCheck() {
         String problem = validateMap();
         if (problem == null) checkNote.set(Glyph.CHECK, OK, L("me.check_ok"));
@@ -710,9 +709,11 @@ public class MapEditorView extends JPanel {
             dirty = false;
             int[][][] floorsArray = floorMaps.toArray(new int[0][][]);
             PortalData[] portalsPerFloor = buildPortalDataPerFloor();
-            RCJMS.instance.gameView = new GameView(floorsArray, portalsPerFloor, geometryIndex);
-            RCJMS.instance.changeView(RCJMS.instance.gameView, "Raycast Me!");
-            RCJMS.instance.gameView.start();
+            GameView gameView = new GameView(floorsArray, portalsPerFloor, geometryIndex);
+            gameView.setFogOfWarMinimap(fogToggle.isSelected());
+            RCJMS.instance.gameView = gameView;
+            RCJMS.instance.changeView(gameView, "Raycast Me!");
+            gameView.start();
         } catch (IOException e) {
             inform(this, currentStyle, "save_error", L("me.could_not_save_map") + "\n" + e.getMessage());
         }
@@ -751,7 +752,7 @@ public class MapEditorView extends JPanel {
             for (int[] link : data.mapPortalLinks) {
                 if (link.length != 9 && link.length != 11 && link.length != 12) continue;
                 int[] normalized = Arrays.copyOf(link, 12);
-                if (link.length < 12) normalized[11] = link[0]; // older saves: both ends on the same floor
+                if (link.length < 12) normalized[11] = link[0];
                 if (normalized[0] < 0 || normalized[0] >= floorMaps.size() || normalized[11] < 0 || normalized[11] >= floorMaps.size()) continue;
                 if (isOutside(normalized[1], normalized[2]) || isOutside(normalized[5], normalized[6])) continue;
                 portalLinks.add(normalized);
@@ -930,7 +931,6 @@ public class MapEditorView extends JPanel {
         }
     }
 
-    /** Row of floor buttons above the map: pick a floor, add one, or remove the current one. */
     private final class FloorStrip extends JComponent {
         private static final int ADD = -2, REMOVE = -3, NONE = -4;
         private int count = 1, current = 0, hover = NONE;
@@ -964,40 +964,40 @@ public class MapEditorView extends JPanel {
             int h = hit(e.getX(), e.getY());
             return h == ADD ? L("me.add_floor") : h == REMOVE ? L("me.remove_floor") : h >= 0 ? fmt("me.go_floor", h + 1) : null;
         }
-        @Override protected void paintComponent(Graphics g0) {
-            Graphics2D g = smooth(g0);
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2d = smooth(g);
             Theme theme = Theme.of(currentStyle);
-            g.setFont(font(12f, true));
-            g.setColor(MUTED);
-            g.drawString(ellipsize(L("me.floor_strip"), g.getFontMetrics(), labelWidth() - 6), 2, (getHeight() - g.getFontMetrics().getHeight()) / 2 + g.getFontMetrics().getAscent());
+            g2d.setFont(font(12f, true));
+            g2d.setColor(MUTED);
+            g2d.drawString(ellipsize(L("me.floor_strip"), g2d.getFontMetrics(), labelWidth() - 6), 2, (getHeight() - g2d.getFontMetrics().getHeight()) / 2 + g2d.getFontMetrics().getAscent());
             for (int i = 0; i < count; i++) {
                 Rectangle r = pillRect(i);
                 boolean on = i == current;
-                g.setColor(on ? mix(theme.normal(), HILITE, 0.55f) : hover == i ? theme.hover() : theme.normal());
-                g.fillRoundRect(r.x, r.y, r.width, r.height, 10, 10);
-                g.setColor(on ? HILITE : theme.accent());
-                g.setStroke(new BasicStroke(on ? 2f : 1f));
-                g.drawRoundRect(r.x, r.y, r.width - 1, r.height - 1, 10, 10);
+                g2d.setColor(on ? mix(theme.normal(), HILITE, 0.55f) : hover == i ? theme.hover() : theme.normal());
+                g2d.fillRoundRect(r.x, r.y, r.width, r.height, 10, 10);
+                g2d.setColor(on ? HILITE : theme.accent());
+                g2d.setStroke(new BasicStroke(on ? 2f : 1f));
+                g2d.drawRoundRect(r.x, r.y, r.width - 1, r.height - 1, 10, 10);
                 String label = String.valueOf(i + 1);
-                g.setFont(font(12f, true));
-                FontMetrics fm = g.getFontMetrics();
-                g.setColor(Color.WHITE);
-                g.drawString(label, r.x + (r.width - fm.stringWidth(label)) / 2, r.y + (r.height - fm.getHeight()) / 2 + fm.getAscent());
+                g2d.setFont(font(12f, true));
+                FontMetrics fm = g2d.getFontMetrics();
+                g2d.setColor(Color.WHITE);
+                g2d.drawString(label, r.x + (r.width - fm.stringWidth(label)) / 2, r.y + (r.height - fm.getHeight()) / 2 + fm.getAscent());
             }
-            drawRoundButton(g, theme, addRect(), Glyph.PLUS, count < MAX_FLOORS, hover == ADD);
-            drawRoundButton(g, theme, removeRect(), Glyph.TRASH, count > 1, hover == REMOVE);
-            g.dispose();
+            drawRoundButton(g2d, theme, addRect(), Glyph.PLUS, count < MAX_FLOORS, hover == ADD);
+            drawRoundButton(g2d, theme, removeRect(), Glyph.TRASH, count > 1, hover == REMOVE);
+            g2d.dispose();
         }
-        private void drawRoundButton(Graphics2D g, Theme theme, Rectangle r, Glyph glyph, boolean enabled, boolean hovered) {
-            Composite old = g.getComposite();
-            if (!enabled) g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
-            g.setColor(hovered && enabled ? theme.hover() : theme.normal());
-            g.fillRoundRect(r.x, r.y, r.width, r.height, 10, 10);
-            g.setColor(theme.accent());
-            g.setStroke(new BasicStroke(1f));
-            g.drawRoundRect(r.x, r.y, r.width - 1, r.height - 1, 10, 10);
-            glyph.paint(g, r.x + 5, r.y + 5, r.width - 10, theme.text());
-            g.setComposite(old);
+        private void drawRoundButton(Graphics2D g2d, Theme theme, Rectangle r, Glyph glyph, boolean enabled, boolean hovered) {
+            Composite old = g2d.getComposite();
+            if (!enabled) g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
+            g2d.setColor(hovered && enabled ? theme.hover() : theme.normal());
+            g2d.fillRoundRect(r.x, r.y, r.width, r.height, 10, 10);
+            g2d.setColor(theme.accent());
+            g2d.setStroke(new BasicStroke(1f));
+            g2d.drawRoundRect(r.x, r.y, r.width - 1, r.height - 1, 10, 10);
+            glyph.paint(g2d, r.x + 5, r.y + 5, r.width - 10, theme.text());
+            g2d.setComposite(old);
         }
     }
 
@@ -1010,57 +1010,56 @@ public class MapEditorView extends JPanel {
         private Color colorOf(int value) {
             return switch (value) { case WALL -> WALL_COLOR; case FINISH -> FINISH_COLOR; case STAIRS_UP -> STAIRS_UP_COLOR; case STAIRS_DOWN -> STAIRS_DOWN_COLOR; case PORTAL -> PORTAL_COLOR; default -> PATH_COLOR; };
         }
-        @Override protected void paintContent(Graphics2D g, int x0, int y0, int x1, int y1) {
+        @Override protected void paintContent(Graphics2D g2d, int x0, int y0, int x1, int y1) {
             for (int y = y0; y <= y1; y++) {
                 int ry = py(y), rh = Math.max(1, py(y + 1) - ry);
                 for (int x = x0; x <= x1; x++) {
                     int rx = px(x), rw = Math.max(1, px(x + 1) - rx);
-                    g.setColor(colorOf(map[y][x]));
-                    g.fillRect(rx, ry, rw, rh);
+                    g2d.setColor(colorOf(map[y][x]));
+                    g2d.fillRect(rx, ry, rw, rh);
                 }
             }
             if (cell >= 14) {
-                Graphics2D a = smooth(g);
+                Graphics2D smoothG2d = smooth(g2d);
                 for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++) {
                     Glyph glyph = switch (map[y][x]) { case FINISH -> Glyph.FLAG; case STAIRS_UP -> Glyph.UP; case STAIRS_DOWN -> Glyph.DOWN; default -> null; };
                     if (glyph == null) continue;
-                    glyph.paint(a, px(x) + cell * 0.18, py(y) + cell * 0.18, cell * 0.64, map[y][x] == FINISH ? new Color(15, 60, 30) : Color.WHITE);
+                    glyph.paint(smoothG2d, px(x) + cell * 0.18, py(y) + cell * 0.18, cell * 0.64, map[y][x] == FINISH ? new Color(15, 60, 30) : Color.WHITE);
                 }
-                a.dispose();
+                smoothG2d.dispose();
             }
             if (cell >= 4) {
-                g.setColor(new Color(15, 15, 18, 150));
-                for (int x = x0; x <= x1 + 1; x++) g.drawLine(px(x), py(y0), px(x), py(y1 + 1));
-                for (int y = y0; y <= y1 + 1; y++) g.drawLine(px(x0), py(y), px(x1 + 1), py(y));
+                g2d.setColor(new Color(15, 15, 18, 150));
+                for (int x = x0; x <= x1 + 1; x++) g2d.drawLine(px(x), py(y0), px(x), py(y1 + 1));
+                for (int y = y0; y <= y1 + 1; y++) g2d.drawLine(px(x0), py(y), px(x1 + 1), py(y));
             }
-            if (currentFloorIndex == 0) drawStart(g);
-            drawPortalArrows(g);
-            g.setColor(new Color(0, 0, 0, 200));
-            g.drawRect(px(0) - 1, py(0) - 1, px(cols) - px(0) + 1, py(rows) - py(0) + 1);
+            if (currentFloorIndex == 0) drawStart(g2d);
+            drawPortalArrows(g2d);
+            g2d.setColor(new Color(0, 0, 0, 200));
+            g2d.drawRect(px(0) - 1, py(0) - 1, px(cols) - px(0) + 1, py(rows) - py(0) + 1);
         }
-        private void drawStart(Graphics2D g) {
+        private void drawStart(Graphics2D g2d) {
             int rx = px(START_X), ry = py(START_Y), size = Math.max(1, px(START_X + 1) - rx);
             int inset = Math.max(1, size / 6);
-            g.setColor(new Color(40, 110, 255));
-            g.fillRect(rx + inset, ry + inset, Math.max(1, size - inset * 2), Math.max(1, size - inset * 2));
+            g2d.setColor(new Color(40, 110, 255));
+            g2d.fillRect(rx + inset, ry + inset, Math.max(1, size - inset * 2), Math.max(1, size - inset * 2));
             if (cell >= 14) {
-                Graphics2D a = smooth(g);
-                a.setFont(font((float) Math.max(9, cell * 0.5), true));
-                FontMetrics fm = a.getFontMetrics();
-                a.setColor(Color.WHITE);
-                a.drawString("S", rx + (size - fm.stringWidth("S")) / 2, ry + (size - fm.getHeight()) / 2 + fm.getAscent());
-                a.dispose();
+                Graphics2D smoothG2d = smooth(g2d);
+                smoothG2d.setFont(font((float) Math.max(9, cell * 0.5), true));
+                FontMetrics fm = smoothG2d.getFontMetrics();
+                smoothG2d.setColor(Color.WHITE);
+                smoothG2d.drawString("S", rx + (size - fm.stringWidth("S")) / 2, ry + (size - fm.getHeight()) / 2 + fm.getAscent());
+                smoothG2d.dispose();
             }
         }
-        @Override protected void paintOverlay(Graphics2D g, int x0, int y0, int x1, int y1) {
-            if (pendingPortal != null && pendingPortal[0] == currentFloorIndex) outline(g, pendingPortal[1], pendingPortal[2], new Color(230, 220, 60), 2);
+        @Override protected void paintOverlay(Graphics2D g2d, int x0, int y0, int x1, int y1) {
+            if (pendingPortal != null && pendingPortal[0] == currentFloorIndex) outline(g2d, pendingPortal[1], pendingPortal[2], new Color(230, 220, 60), 2);
             if (boxing) {
                 int ax = Math.min(boxX0, boxX1), ay = Math.min(boxY0, boxY1), bx = Math.max(boxX0, boxX1), by = Math.max(boxY0, boxY1);
-                Color c = boxErase ? PATH_COLOR : colorOf(selectedBlock);
-                g.setColor(alpha(c, 170));
-                g.fillRect(px(ax), py(ay), px(bx + 1) - px(ax), py(by + 1) - py(ay));
-                g.setColor(Color.WHITE);
-                g.drawRect(px(ax), py(ay), px(bx + 1) - px(ax) - 1, py(by + 1) - py(ay) - 1);
+                g2d.setColor(alpha(boxErase ? PATH_COLOR : colorOf(selectedBlock), 170));
+                g2d.fillRect(px(ax), py(ay), px(bx + 1) - px(ax), py(by + 1) - py(ay));
+                g2d.setColor(Color.WHITE);
+                g2d.drawRect(px(ax), py(ay), px(bx + 1) - px(ax) - 1, py(by + 1) - py(ay) - 1);
                 return;
             }
             if (hoverX < 0) return;
@@ -1070,77 +1069,77 @@ public class MapEditorView extends JPanel {
                     Color fill = alpha(currentTool == Tool.BRUSH ? colorOf(selectedBlock) : new Color(255, 90, 90), 140);
                     for (int y = hoverY - radius; y <= hoverY + radius; y++) for (int x = hoverX - radius; x <= hoverX + radius; x++) {
                         if (!inGrid(x, y) || !inFootprint(x - hoverX, y - hoverY, size)) continue;
-                        g.setColor(fill);
-                        g.fillRect(px(x), py(y), Math.max(1, px(x + 1) - px(x)), Math.max(1, py(y + 1) - py(y)));
+                        g2d.setColor(fill);
+                        g2d.fillRect(px(x), py(y), Math.max(1, px(x + 1) - px(x)), Math.max(1, py(y + 1) - py(y)));
                     }
-                    outline(g, hoverX, hoverY, Color.WHITE, 1);
+                    outline(g2d, hoverX, hoverY, Color.WHITE, 1);
                 }
                 case PORTAL, PORTAL_ONE -> {
-                    outline(g, hoverX, hoverY, PORTAL_COLOR.brighter(), 2);
+                    outline(g2d, hoverX, hoverY, PORTAL_COLOR.brighter(), 2);
                     if (cell >= 5) {
-                        Graphics2D a = smooth(g);
+                        Graphics2D smoothG2d = smooth(g2d);
                         int[] d = PORTAL_DIRS[portalDirIndex];
-                        drawArrow(a, hoverX, hoverY, d[0], d[1], new Color(255, 255, 255, 190));
-                        a.dispose();
+                        drawArrow(smoothG2d, hoverX, hoverY, d[0], d[1], new Color(255, 255, 255, 190));
+                        smoothG2d.dispose();
                     }
                 }
-                default -> outline(g, hoverX, hoverY, Color.WHITE, 1);
+                default -> outline(g2d, hoverX, hoverY, Color.WHITE, 1);
             }
         }
-        private void outline(Graphics2D g, int x, int y, Color color, int thickness) {
-            g.setColor(color);
+        private void outline(Graphics2D g2d, int x, int y, Color color, int thickness) {
+            g2d.setColor(color);
             int w = Math.max(2, px(x + 1) - px(x)), h = Math.max(2, py(y + 1) - py(y));
-            for (int i = 0; i < thickness; i++) g.drawRect(px(x) + i, py(y) + i, w - 1 - i * 2, h - 1 - i * 2);
+            for (int i = 0; i < thickness; i++) g2d.drawRect(px(x) + i, py(y) + i, w - 1 - i * 2, h - 1 - i * 2);
         }
-        private void drawPortalArrows(Graphics2D base) {
+        private void drawPortalArrows(Graphics2D g2d) {
             if (cell < 5) return;
-            Graphics2D g2 = smooth(base);
+            Graphics2D smoothG2d = smooth(g2d);
             for (int[] link : portalLinks) {
                 if (link[0] == currentFloorIndex) {
-                    drawArrow(g2, link[1], link[2], link[3], link[4], Color.WHITE);
-                    if (link[9] != 0) drawOneSidedFace(g2, link[1], link[2], link[3], link[4]);
-                    if (link[11] != link[0]) drawFloorTag(g2, link[1], link[2], link[11]);
+                    drawArrow(smoothG2d, link[1], link[2], link[3], link[4], Color.WHITE);
+                    if (link[9] != 0) drawOneSidedFace(smoothG2d, link[1], link[2], link[3], link[4]);
+                    if (link[11] != link[0]) drawFloorTag(smoothG2d, link[1], link[2], link[11]);
                 }
                 if (link[11] == currentFloorIndex) {
-                    drawArrow(g2, link[5], link[6], link[7], link[8], Color.WHITE);
-                    if (link[10] != 0) drawOneSidedFace(g2, link[5], link[6], link[7], link[8]);
-                    if (link[0] != link[11]) drawFloorTag(g2, link[5], link[6], link[0]);
+                    drawArrow(smoothG2d, link[5], link[6], link[7], link[8], Color.WHITE);
+                    if (link[10] != 0) drawOneSidedFace(smoothG2d, link[5], link[6], link[7], link[8]);
+                    if (link[0] != link[11]) drawFloorTag(smoothG2d, link[5], link[6], link[0]);
                 }
             }
             if (pendingPortal != null && pendingPortal[0] == currentFloorIndex) {
-                drawArrow(g2, pendingPortal[1], pendingPortal[2], pendingPortal[3], pendingPortal[4], new Color(230, 220, 60));
-                if (pendingPortal[5] != 0) drawOneSidedFace(g2, pendingPortal[1], pendingPortal[2], pendingPortal[3], pendingPortal[4]);
+                drawArrow(smoothG2d, pendingPortal[1], pendingPortal[2], pendingPortal[3], pendingPortal[4], new Color(230, 220, 60));
+                if (pendingPortal[5] != 0) drawOneSidedFace(smoothG2d, pendingPortal[1], pendingPortal[2], pendingPortal[3], pendingPortal[4]);
             }
-            g2.dispose();
+            smoothG2d.dispose();
         }
-        private void drawFloorTag(Graphics2D g2, int x, int y, int otherFloor) {
+        private void drawFloorTag(Graphics2D g2d, int x, int y, int otherFloor) {
             if (cell < 12) return;
-            g2.setFont(g2.getFont().deriveFont(Font.BOLD, (float) Math.max(9f, cell * 0.38f)));
+            g2d.setFont(g2d.getFont().deriveFont(Font.BOLD, (float) Math.max(9f, cell * 0.38f)));
             String text = String.valueOf(otherFloor + 1);
-            g2.setColor(new Color(15, 15, 18));
-            g2.drawString(text, (float) (originX + x * cell + 3), (float) (originY + y * cell + g2.getFontMetrics().getAscent() + 1));
-            g2.setColor(new Color(255, 235, 120));
-            g2.drawString(text, (float) (originX + x * cell + 2), (float) (originY + y * cell + g2.getFontMetrics().getAscent()));
+            g2d.setColor(new Color(15, 15, 18));
+            g2d.drawString(text, (float) (originX + x * cell + 3), (float) (originY + y * cell + g2d.getFontMetrics().getAscent() + 1));
+            g2d.setColor(new Color(255, 235, 120));
+            g2d.drawString(text, (float) (originX + x * cell + 2), (float) (originY + y * cell + g2d.getFontMetrics().getAscent()));
         }
-        private void drawOneSidedFace(Graphics2D g2, int x, int y, int dx, int dy) {
+        private void drawOneSidedFace(Graphics2D g2d, int x, int y, int dx, int dy) {
             double cx = originX + x * cell + cell / 2.0, cy = originY + y * cell + cell / 2.0, half = cell / 2.0;
             double ex = cx - dx * half, ey = cy - dy * half, ox = -dy * half, oy = dx * half;
-            g2.setColor(new Color(80, 220, 230));
-            g2.setStroke(new BasicStroke((float) Math.max(2f, cell / 8f)));
-            g2.draw(new java.awt.geom.Line2D.Double(ex - ox, ey - oy, ex + ox, ey + oy));
-            g2.setStroke(new BasicStroke(1f));
+            g2d.setColor(new Color(80, 220, 230));
+            g2d.setStroke(new BasicStroke((float) Math.max(2f, cell / 8f)));
+            g2d.draw(new java.awt.geom.Line2D.Double(ex - ox, ey - oy, ex + ox, ey + oy));
+            g2d.setStroke(new BasicStroke(1f));
         }
-        private void drawArrow(Graphics2D g2, int x, int y, int dx, int dy, Color color) {
+        private void drawArrow(Graphics2D g2d, int x, int y, int dx, int dy, Color color) {
             double cx = originX + x * cell + cell / 2.0, cy = originY + y * cell + cell / 2.0, s = cell * 0.32;
             Path2D.Double arrow = new Path2D.Double();
             arrow.moveTo(cx + dx * s, cy + dy * s);
             arrow.lineTo(cx - dx * s * 0.7 + (-dy) * s * 0.8, cy - dy * s * 0.7 + (double) dx * s * 0.8);
             arrow.lineTo(cx - dx * s * 0.7 - (-dy) * s * 0.8, cy - dy * s * 0.7 - (double) dx * s * 0.8);
             arrow.closePath();
-            g2.setColor(color);
-            g2.fill(arrow);
-            g2.setColor(new Color(15, 15, 18));
-            g2.draw(arrow);
+            g2d.setColor(color);
+            g2d.fill(arrow);
+            g2d.setColor(new Color(15, 15, 18));
+            g2d.draw(arrow);
         }
 
         @Override protected void pointerPressed(int x, int y, MouseEvent e) {
@@ -1167,7 +1166,7 @@ public class MapEditorView extends JPanel {
             if (boxing) { boxX1 = Math.clamp(x, 0, cols - 1); boxY1 = Math.clamp(y, 0, rows - 1); repaint(); return; }
             if (strokeTool == null || !inGrid(x, y)) return;
             boolean[] any = {false};
-            line(lastX, lastY, x, y, (cx, cy) -> any[0] |= stamp(cx, cy, strokeSize, strokeValue)); //no gaps when the mouse moves fast
+            line(lastX, lastY, x, y, (cx, cy) -> any[0] |= stamp(cx, cy, strokeSize, strokeValue));
             lastX = x; lastY = y;
             if (any[0]) touch();
         }

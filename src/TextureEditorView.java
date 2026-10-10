@@ -92,7 +92,6 @@ public class TextureEditorView extends JPanel {
     //endregion
 
     //region Public API
-    /** Puts all four textures back to the game's original flat colors. */
     public void resetTextures() {
         textures[0] = new int[][]{{ORIGINAL_WALL_COLOR}};
         textures[1] = new int[][]{{ORIGINAL_FLOOR_COLOR}};
@@ -304,7 +303,6 @@ public class TextureEditorView extends JPanel {
         else hintBar.setHint(L(switch (currentTool) { case BRUSH -> "te.hint_brush"; case ERASER -> "te.hint_eraser"; case FILL -> "te.hint_fill"; case PICK -> "te.hint_pick"; }));
     }
     private void setMode(TextureMode newMode) { if (newMode != mode) showMode(newMode); }
-    /** Switches the visible texture and refreshes every control that depends on it. */
     private void showMode(TextureMode newMode) {
         mode = newMode;
         int[][] t = textures[mode.ordinal()];
@@ -333,8 +331,7 @@ public class TextureEditorView extends JPanel {
         int x = canvas.getHoverX(), y = canvas.getHoverY();
         int[][] t = textures[mode.ordinal()];
         if (x < 0 || y < 0 || x >= t[0].length || y >= t.length) { hoverText.setRaw(""); return; }
-        int c = t[y][x] == EMPTY_COLOR ? SAVED_EMPTY_COLOR : t[y][x] & 0xFFFFFF;
-        hoverText.setRaw(String.format("x %d  y %d   #%06X", x, y, c));
+        hoverText.setRaw(String.format("x %d  y %d   #%06X", x, y, t[y][x] == EMPTY_COLOR ? SAVED_EMPTY_COLOR : t[y][x] & 0xFFFFFF));
     }
     private static int maxHeightForMode(TextureMode m) { return m == TextureMode.FINISH ? MAX_FINISH_HEIGHT : MAX_TEXTURE_SIZE; }
     //endregion
@@ -359,7 +356,6 @@ public class TextureEditorView extends JPanel {
         strokeSnapshot = new Snapshot(mode.ordinal(), copyTexture(textures[mode.ordinal()]));
         strokePushed = false;
     }
-    /** The first real change of a stroke puts the "before" picture on the undo stack, so empty clicks never create undo steps. */
     private void touch() {
         if (!strokePushed && strokeSnapshot != null) { pushUndo(strokeSnapshot); strokePushed = true; }
         markChanged();
@@ -451,7 +447,7 @@ public class TextureEditorView extends JPanel {
         textures[s.mode] = copyTexture(s.data);
         imageDirty[s.mode] = true;
         dirty = true;
-        mode = TextureMode.values()[s.mode]; //jump to the texture that was changed so the user sees what happened
+        mode = TextureMode.values()[s.mode];
         canvas.setGrid(textures[s.mode][0].length, textures[s.mode].length);
         refreshAll();
     }
@@ -470,13 +466,12 @@ public class TextureEditorView extends JPanel {
         }
         return img;
     }
-    /** Draws an image scaled to fit a box, keeping its proportions. Pixels stay sharp when enlarged. */
-    private static Rectangle drawFitted(Graphics2D g, BufferedImage img, int x, int y, int boxW, int boxH) {
+    private static Rectangle drawFitted(Graphics2D g2d, BufferedImage img, int x, int y, int boxW, int boxH) {
         double scale = Math.min((double) boxW / img.getWidth(), (double) boxH / img.getHeight());
         int w = Math.max(1, (int) Math.round(img.getWidth() * scale)), h = Math.max(1, (int) Math.round(img.getHeight() * scale));
         int dx = x + (boxW - w) / 2, dy = y + (boxH - h) / 2;
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, scale >= 1 ? RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR : RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        g.drawImage(img, dx, dy, w, h, null);
+        g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, scale >= 1 ? RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR : RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g2d.drawImage(img, dx, dy, w, h, null);
         return new Rectangle(dx, dy, w, h);
     }
     private void importImage() {
@@ -721,7 +716,7 @@ public class TextureEditorView extends JPanel {
         for (int i = 0; i < files.length; i++) {
             int maxHeight = i == TextureMode.FINISH.ordinal() ? MAX_FINISH_HEIGHT : MAX_TEXTURE_SIZE;
             int[][] loaded = readTexture(files[i], MAX_TEXTURE_SIZE, maxHeight);
-            if (!isValidTexture(loaded)) continue; //no saved file yet: keep the game's flat default color
+            if (!isValidTexture(loaded)) continue;
             int[] size = sizeOf(loaded, MAX_TEXTURE_SIZE, maxHeight);
             textures[i] = normalizeTexture(loaded, size[0], size[1]);
         }
@@ -747,7 +742,7 @@ public class TextureEditorView extends JPanel {
         int[][] result = createEmptyTexture(newWidth, newHeight);
         if (source == null) return result;
         int flat = flatColor(source);
-        if (flat != EMPTY_COLOR) for (int[] row : result) Arrays.fill(row, flat); //a plain one-color texture keeps its color when it grows
+        if (flat != EMPTY_COLOR) for (int[] row : result) Arrays.fill(row, flat);
         int copyHeight = Math.min(source.length, newHeight);
         for (int y = 0; y < copyHeight; y++) {
             if (source[y] == null) continue;
@@ -755,7 +750,6 @@ public class TextureEditorView extends JPanel {
         }
         return result;
     }
-    /** The color of a texture that is made of one single color, or EMPTY_COLOR when it has details. */
     private static int flatColor(int[][] texture) {
         int first = texture[0][0];
         if (first == EMPTY_COLOR) return EMPTY_COLOR;
@@ -810,7 +804,6 @@ public class TextureEditorView extends JPanel {
         }
     }
 
-    /** One of the four big buttons above the picture: a live thumbnail, the name and the current size of a texture. */
     private final class ModeTab extends JComponent {
         private final TextureMode tabMode;
         private boolean selected, hover;
@@ -826,68 +819,67 @@ public class TextureEditorView extends JPanel {
             });
         }
         void setSelected(boolean value) { if (selected != value) { selected = value; repaint(); } }
-        @Override protected void paintComponent(Graphics g0) {
-            Graphics2D g = smooth(g0);
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2d = smooth(g);
             int w = getWidth(), h = getHeight();
             Theme theme = Theme.of(currentStyle);
-            g.setColor(selected ? mix(theme.normal(), HILITE, 0.5f) : hover ? theme.hover() : theme.normal());
-            g.fillRoundRect(0, 0, w - 1, h - 1, 12, 12);
-            g.setColor(selected ? HILITE : theme.accent());
-            g.setStroke(new BasicStroke(selected ? 2f : 1f));
-            g.drawRoundRect(0, 0, w - 1, h - 1, 12, 12);
+            g2d.setColor(selected ? mix(theme.normal(), HILITE, 0.5f) : hover ? theme.hover() : theme.normal());
+            g2d.fillRoundRect(0, 0, w - 1, h - 1, 12, 12);
+            g2d.setColor(selected ? HILITE : theme.accent());
+            g2d.setStroke(new BasicStroke(selected ? 2f : 1f));
+            g2d.drawRoundRect(0, 0, w - 1, h - 1, 12, 12);
             int box = h - 14;
-            Graphics2D clipped = (Graphics2D) g.create();
-            clipped.setClip(new RoundRectangle2D.Double(7, 7, box, box, 6, 6));
-            drawFitted(clipped, image(tabMode.ordinal()), 7, 7, box, box);
-            clipped.dispose();
-            g.setColor(new Color(0, 0, 0, 120));
-            g.setStroke(new BasicStroke(1f));
-            g.drawRoundRect(7, 7, box, box, 6, 6);
+            Graphics2D g2dCopy = (Graphics2D) g2d.create();
+            g2dCopy.setClip(new RoundRectangle2D.Double(7, 7, box, box, 6, 6));
+            drawFitted(g2dCopy, image(tabMode.ordinal()), 7, 7, box, box);
+            g2dCopy.dispose();
+            g2d.setColor(new Color(0, 0, 0, 120));
+            g2d.setStroke(new BasicStroke(1f));
+            g2d.drawRoundRect(7, 7, box, box, 6, 6);
             int tx = 7 + box + 8, tw = w - tx - 6;
             int[][] t = textures[tabMode.ordinal()];
-            g.setFont(font(13f, true));
-            FontMetrics fm = g.getFontMetrics();
-            g.setColor(Color.WHITE);
-            g.drawString(ellipsize(L(MODE_KEYS[tabMode.ordinal()]), fm, tw), tx, h / 2 - 1);
-            g.setFont(font(11f, false));
-            g.setColor(selected ? new Color(225, 235, 255) : MUTED);
-            g.drawString(t[0].length + " × " + t.length, tx, h / 2 + 14);
-            g.dispose();
+            g2d.setFont(font(13f, true));
+            FontMetrics fm = g2d.getFontMetrics();
+            g2d.setColor(Color.WHITE);
+            g2d.drawString(ellipsize(L(MODE_KEYS[tabMode.ordinal()]), fm, tw), tx, h / 2 - 1);
+            g2d.setFont(font(11f, false));
+            g2d.setColor(selected ? new Color(225, 235, 255) : MUTED);
+            g2d.drawString(t[0].length + " × " + t.length, tx, h / 2 + 14);
+            g2d.dispose();
         }
     }
 
-    /** Shows the current texture repeated 3 x 3 so it is easy to spot ugly seams. */
     private final class TilePreview extends JComponent {
         TilePreview() { setPreferredSize(new Dimension(100, 68)); }
-        @Override protected void paintComponent(Graphics g0) {
-            Graphics2D g = smooth(g0);
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2d = smooth(g);
             BufferedImage img = image(mode.ordinal());
             int box = Math.min(getWidth(), getHeight());
             double scale = Math.min(box / (3.0 * img.getWidth()), box / (3.0 * img.getHeight()));
             int tw = Math.max(1, (int) Math.round(img.getWidth() * scale)), th = Math.max(1, (int) Math.round(img.getHeight() * scale));
             int x0 = (getWidth() - tw * 3) / 2, y0 = (getHeight() - th * 3) / 2;
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, scale >= 1 ? RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR : RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            for (int ty = 0; ty < 3; ty++) for (int tx = 0; tx < 3; tx++) g.drawImage(img, x0 + tx * tw, y0 + ty * th, tw, th, null);
-            g.setColor(new Color(0, 0, 0, 140));
-            g.drawRect(x0, y0, tw * 3, th * 3);
-            g.dispose();
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, scale >= 1 ? RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR : RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            for (int ty = 0; ty < 3; ty++) for (int tx = 0; tx < 3; tx++) g2d.drawImage(img, x0 + tx * tw, y0 + ty * th, tw, th, null);
+            g2d.setColor(new Color(0, 0, 0, 140));
+            g2d.drawRect(x0, y0, tw * 3, th * 3);
+            g2d.dispose();
         }
     }
 
     private final class TextureCanvas extends GridCanvas {
-        @Override protected void paintContent(Graphics2D g, int x0, int y0, int x1, int y1) {
+        @Override protected void paintContent(Graphics2D g2d, int x0, int y0, int x1, int y1) {
             BufferedImage img = image(mode.ordinal());
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-            g.drawImage(img, px(x0), py(y0), px(x1 + 1), py(y1 + 1), x0, y0, x1 + 1, y1 + 1, null);
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            g2d.drawImage(img, px(x0), py(y0), px(x1 + 1), py(y1 + 1), x0, y0, x1 + 1, y1 + 1, null);
             if (cell >= 6) {
-                g.setColor(new Color(0, 0, 0, 80));
-                for (int x = x0; x <= x1 + 1; x++) g.drawLine(px(x), py(y0), px(x), py(y1 + 1));
-                for (int y = y0; y <= y1 + 1; y++) g.drawLine(px(x0), py(y), px(x1 + 1), py(y));
+                g2d.setColor(new Color(0, 0, 0, 80));
+                for (int x = x0; x <= x1 + 1; x++) g2d.drawLine(px(x), py(y0), px(x), py(y1 + 1));
+                for (int y = y0; y <= y1 + 1; y++) g2d.drawLine(px(x0), py(y), px(x1 + 1), py(y));
             }
-            g.setColor(new Color(0, 0, 0, 170));
-            g.drawRect(px(0) - 1, py(0) - 1, px(cols) - px(0) + 1, py(rows) - py(0) + 1);
+            g2d.setColor(new Color(0, 0, 0, 170));
+            g2d.drawRect(px(0) - 1, py(0) - 1, px(cols) - px(0) + 1, py(rows) - py(0) + 1);
         }
-        @Override protected void paintOverlay(Graphics2D g, int x0, int y0, int x1, int y1) {
+        @Override protected void paintOverlay(Graphics2D g2d, int x0, int y0, int x1, int y1) {
             if (hoverX < 0) return;
             int size = currentTool == Tool.BRUSH ? brushSize : currentTool == Tool.ERASER ? eraserSize : 1;
             Color fill = currentTool == Tool.ERASER ? new Color(255, 255, 255, 150) : alpha(new Color(colorPicker.getColor()), 190);
@@ -897,11 +889,11 @@ public class TextureEditorView extends JPanel {
                     double dx = x - hoverX, dy = y - hoverY;
                     if (dx * dx + dy * dy > radiusSq) continue;
                     int rx = px(x), ry = py(y), rw = Math.max(1, px(x + 1) - rx), rh = Math.max(1, py(y + 1) - ry);
-                    if (currentTool == Tool.BRUSH || currentTool == Tool.ERASER) { g.setColor(fill); g.fillRect(rx, ry, rw, rh); }
-                    g.setColor(new Color(255, 255, 255, 230));
-                    g.drawRect(rx, ry, rw - 1, rh - 1);
-                    g.setColor(new Color(0, 0, 0, 160));
-                    if (rw > 4) g.drawRect(rx + 1, ry + 1, rw - 3, rh - 3);
+                    if (currentTool == Tool.BRUSH || currentTool == Tool.ERASER) { g2d.setColor(fill); g2d.fillRect(rx, ry, rw, rh); }
+                    g2d.setColor(new Color(255, 255, 255, 230));
+                    g2d.drawRect(rx, ry, rw - 1, rh - 1);
+                    g2d.setColor(new Color(0, 0, 0, 160));
+                    if (rw > 4) g2d.drawRect(rx + 1, ry + 1, rw - 3, rh - 3);
                 }
         }
         @Override protected void pointerPressed(int x, int y, MouseEvent e) {
@@ -929,7 +921,7 @@ public class TextureEditorView extends JPanel {
             if (strokeTool == null || !inGrid(x, y)) return;
             int size = strokeTool == Tool.BRUSH ? brushSize : eraserSize, color = strokeTool == Tool.BRUSH ? colorPicker.getColor() : EMPTY_COLOR;
             boolean[] any = {false};
-            line(strokeLastX, strokeLastY, x, y, (px, py) -> any[0] |= stamp(px, py, size, color)); //fill the gaps when the mouse moves fast
+            line(strokeLastX, strokeLastY, x, y, (px, py) -> any[0] |= stamp(px, py, size, color));
             strokeLastX = x; strokeLastY = y;
             if (any[0]) touch();
         }

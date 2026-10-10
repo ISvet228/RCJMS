@@ -152,21 +152,21 @@ public class CreditsView extends JPanel {
         if (width <= 0 || height <= 0) return;
         double scale = getScale();
 
-        Graphics2D g2 = (Graphics2D) g.create();
-        g2.setColor(Color.BLACK);
-        g2.fillRect(0, 0, width, height);
-        g2.translate(getOffsetX(scale), getOffsetY(scale));
-        g2.scale(scale, scale);
-        g2.setColor(Color.BLACK);
-        g2.fillRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
-        Shape oldClip = g2.getClip();
+        Graphics2D g2d = (Graphics2D) g.create();
+        g2d.setColor(Color.BLACK);
+        g2d.fillRect(0, 0, width, height);
+        g2d.translate(getOffsetX(scale), getOffsetY(scale));
+        g2d.scale(scale, scale);
+        g2d.setColor(Color.BLACK);
+        g2d.fillRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
+        Shape oldClip = g2d.getClip();
 
-        g2.clipRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
-        drawCredits(g2);
-        g2.setClip(oldClip);
-        g2.dispose();
+        g2d.clipRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
+        drawCredits(g2d);
+        g2d.setClip(oldClip);
+        g2d.dispose();
     }
-    private void drawCredits(Graphics2D g2) {
+    private void drawCredits(Graphics2D g2d) {
         int baseFontSize = 28, lineHeight = 45;
 
         Font baseFont = new Font(Font.SANS_SERIF, Font.PLAIN, baseFontSize);
@@ -200,19 +200,19 @@ public class CreditsView extends JPanel {
             Font font = baseFont;
 
             if (i == 0 && !line.text.isEmpty()) font = titleFont;
-            g2.setFont(font);
-            FontMetrics fm = g2.getFontMetrics();
+            g2d.setFont(font);
+            FontMetrics fm = g2d.getFontMetrics();
 
             int textWidth = fm.stringWidth(line.text);
             int x = (RCJMS.SCREEN_WIDTH - textWidth) / 2;
             int baseline = (int) y;
 
-            g2.setColor(Color.WHITE);
-            g2.drawString(line.text, x, baseline);
+            g2d.setColor(Color.WHITE);
+            g2d.drawString(line.text, x, baseline);
 
             if (line.url != null) {
                 int underlineY = baseline + 2;
-                g2.drawLine(x, underlineY, x + textWidth, underlineY);
+                g2d.drawLine(x, underlineY, x + textWidth, underlineY);
             }
         }
     }

@@ -72,7 +72,7 @@ public final class ColorPicker extends EditorKit.Column {
     public void setColor(int rgb, boolean fire) {
         rgb &= 0xFFFFFF;
         float[] hsb = Color.RGBtoHSB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, null);
-        if (hsb[1] > 0.001f && hsb[2] > 0.001f) hue = hsb[0]; //keep the old hue for grays and black, otherwise the strip would jump
+        if (hsb[1] > 0.001f && hsb[2] > 0.001f) hue = hsb[0];
         saturation = hsb[1];
         brightness = hsb[2];
         refresh(fire);
@@ -129,7 +129,7 @@ public final class ColorPicker extends EditorKit.Column {
             brightness = 1f - Math.clamp(e.getY() / (float) Math.max(1, getHeight() - 1), 0f, 1f);
             refresh(true);
         }
-        @Override protected void paintComponent(Graphics g0) {
+        @Override protected void paintComponent(Graphics g) {
             int w = getWidth(), h = getHeight();
             if (w <= 0 || h <= 0) return;
             if (image == null || image.getWidth() != w || image.getHeight() != h || imageHue != hue) {
@@ -138,19 +138,19 @@ public final class ColorPicker extends EditorKit.Column {
                     image.setRGB(x, y, Color.HSBtoRGB(hue, x / (float) Math.max(1, w - 1), 1f - y / (float) Math.max(1, h - 1)));
                 imageHue = hue;
             }
-            Graphics2D g = smooth(g0);
-            g.setClip(new RoundRectangle2D.Double(0, 0, w, h, 8, 8));
-            g.drawImage(image, 0, 0, null);
-            g.setClip(null);
-            g.setColor(CARD_LINE);
-            g.drawRoundRect(0, 0, w - 1, h - 1, 8, 8);
+            Graphics2D g2d = smooth(g);
+            g2d.setClip(new RoundRectangle2D.Double(0, 0, w, h, 8, 8));
+            g2d.drawImage(image, 0, 0, null);
+            g2d.setClip(null);
+            g2d.setColor(CARD_LINE);
+            g2d.drawRoundRect(0, 0, w - 1, h - 1, 8, 8);
             double hx = saturation * (w - 1), hy = (1 - brightness) * (h - 1);
-            g.setStroke(new BasicStroke(2f));
-            g.setColor(Color.BLACK);
-            g.draw(new Ellipse2D.Double(hx - 6, hy - 6, 12, 12));
-            g.setColor(Color.WHITE);
-            g.draw(new Ellipse2D.Double(hx - 5, hy - 5, 10, 10));
-            g.dispose();
+            g2d.setStroke(new BasicStroke(2f));
+            g2d.setColor(Color.BLACK);
+            g2d.draw(new Ellipse2D.Double(hx - 6, hy - 6, 12, 12));
+            g2d.setColor(Color.WHITE);
+            g2d.draw(new Ellipse2D.Double(hx - 5, hy - 5, 10, 10));
+            g2d.dispose();
         }
     }
 
@@ -167,35 +167,35 @@ public final class ColorPicker extends EditorKit.Column {
         }
         private void pick(MouseEvent e) {
             hue = Math.clamp(e.getX() / (float) Math.max(1, getWidth() - 1), 0f, 0.999f);
-            if (saturation < 0.001f) saturation = 1f; //a gray has no hue; give the strip a visible effect
+            if (saturation < 0.001f) saturation = 1f;
             if (brightness < 0.001f) brightness = 1f;
             refresh(true);
         }
-        @Override protected void paintComponent(Graphics g0) {
+        @Override protected void paintComponent(Graphics g) {
             int w = getWidth(), h = getHeight();
-            Graphics2D g = smooth(g0);
-            g.setClip(new RoundRectangle2D.Double(0, 0, w, h, 8, 8));
-            for (int x = 0; x < w; x++) { g.setColor(new Color(Color.HSBtoRGB(x / (float) Math.max(1, w - 1), 1f, 1f))); g.drawLine(x, 0, x, h); }
-            g.setClip(null);
-            g.setColor(CARD_LINE);
-            g.drawRoundRect(0, 0, w - 1, h - 1, 8, 8);
+            Graphics2D g2d = smooth(g);
+            g2d.setClip(new RoundRectangle2D.Double(0, 0, w, h, 8, 8));
+            for (int x = 0; x < w; x++) { g2d.setColor(new Color(Color.HSBtoRGB(x / (float) Math.max(1, w - 1), 1f, 1f))); g2d.drawLine(x, 0, x, h); }
+            g2d.setClip(null);
+            g2d.setColor(CARD_LINE);
+            g2d.drawRoundRect(0, 0, w - 1, h - 1, 8, 8);
             int hx = Math.round(hue * (w - 1));
-            g.setColor(Color.BLACK);
-            g.fillRoundRect(hx - 3, -1, 7, h + 2, 4, 4);
-            g.setColor(Color.WHITE);
-            g.fillRoundRect(hx - 2, 0, 5, h, 3, 3);
-            g.dispose();
+            g2d.setColor(Color.BLACK);
+            g2d.fillRoundRect(hx - 3, -1, 7, h + 2, 4, 4);
+            g2d.setColor(Color.WHITE);
+            g2d.fillRoundRect(hx - 2, 0, 5, h, 3, 3);
+            g2d.dispose();
         }
     }
     private final class Preview extends JComponent {
         public Preview() { setPreferredSize(new Dimension(40, 28)); }
-        @Override protected void paintComponent(Graphics g0) {
-            Graphics2D g = smooth(g0);
-            g.setColor(new Color(getColor()));
-            g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
-            g.setColor(Color.WHITE);
-            g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
-            g.dispose();
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2d = smooth(g);
+            g2d.setColor(new Color(getColor()));
+            g2d.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+            g2d.setColor(Color.WHITE);
+            g2d.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+            g2d.dispose();
         }
     }
     private final class Swatches extends JComponent {
@@ -226,25 +226,25 @@ public final class ColorPicker extends EditorKit.Column {
             if (!recent) return index < PALETTE.length ? PALETTE[index] : null;
             return index < RECENT.size() ? RECENT.get(index) : null;
         }
-        @Override protected void paintComponent(Graphics g0) {
-            Graphics2D g = smooth(g0);
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2d = smooth(g);
             int current = getColor();
             for (int i = 0; i < columns * rowCount; i++) {
                 int x = (i % columns) * (size + GAP), y = (i / columns) * (size + GAP);
                 Integer color = colorAt(i);
                 if (color == null) {
-                    g.setColor(CARD_LINE);
-                    g.drawRoundRect(x, y, size - 1, size - 1, 6, 6);
+                    g2d.setColor(CARD_LINE);
+                    g2d.drawRoundRect(x, y, size - 1, size - 1, 6, 6);
                     continue;
                 }
-                g.setColor(new Color(color));
-                g.fillRoundRect(x, y, size, size, 6, 6);
+                g2d.setColor(new Color(color));
+                g2d.fillRoundRect(x, y, size, size, 6, 6);
                 boolean chosen = color == current;
-                g.setColor(chosen ? Color.WHITE : new Color(0, 0, 0, 110));
-                g.setStroke(new BasicStroke(chosen ? 2f : 1f));
-                g.drawRoundRect(x + (chosen ? 1 : 0), y + (chosen ? 1 : 0), size - 1 - (chosen ? 2 : 0), size - 1 - (chosen ? 2 : 0), 6, 6);
+                g2d.setColor(chosen ? Color.WHITE : new Color(0, 0, 0, 110));
+                g2d.setStroke(new BasicStroke(chosen ? 2f : 1f));
+                g2d.drawRoundRect(x + (chosen ? 1 : 0), y + (chosen ? 1 : 0), size - 1 - (chosen ? 2 : 0), size - 1 - (chosen ? 2 : 0), 6, 6);
             }
-            g.dispose();
+            g2d.dispose();
         }
     }
     //endregion

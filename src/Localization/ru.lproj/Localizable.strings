@@ -46,6 +46,38 @@
 "mm.euclidean_geometry" = "ЕВКЛИДОВА";
 "mm.looped_geometry" = "ЗАКОЛЬЦОВАННАЯ";
 "mm.wrong_geometry" = "СЛОМАННАЯ ГЕОМЕТРИЯ";
+"mm.tagline" = "Найди финиш в лабиринте от первого лица";
+"mm.settings" = "НАСТРОЙКИ";
+"mm.controls" = "УПРАВЛЕНИЕ";
+"mm.back" = "НАЗАД";
+"mm.start" = "НАЧАТЬ";
+"mm.new_game" = "НОВАЯ ИГРА";
+"mm.play_hint" = "Выбери размер и нажми НАЧАТЬ. Остальное можно не трогать.";
+"mm.size" = "РАЗМЕР";
+"mm.size_small" = "МАЛЫЙ";
+"mm.size_medium" = "СРЕДНИЙ";
+"mm.size_large" = "БОЛЬШОЙ";
+"mm.seed_hint" = "Один seed — один лабиринт. Пусто — случайный.";
+"mm.advanced" = "ДОПОЛНИТЕЛЬНО";
+"mm.finish_position" = "ПОЗИЦИЯ ФИНИША";
+"mm.ctrl_mouse" = "Мышь — осмотреться";
+"mm.ctrl_pause" = "ESC — пауза";
+"mm.ctrl_fullscreen" = "F11 — полный экран";
+"mm.ctrl_aspect" = "F8 — выровнять пропорции окна";
+"mm.section_interface" = "ИНТЕРФЕЙС";
+"mm.section_display" = "ЭКРАН";
+"mm.section_lighting" = "ОСВЕЩЕНИЕ";
+"mm.vsync" = "VSync";
+"mm.vsync_hint" = "Кадры синхронизируются с монитором.";
+"mm.rt_hint" = "Добавляет свет и отражения. Медленнее.";
+"mm.resolution_hint" = "Размер окна. В полном экране не действует.";
+"mm.render_scale_hint" = "Ниже — быстрее, но размытее.";
+"mm.quality_low" = "Низкое";
+"mm.quality_medium" = "Среднее";
+"mm.quality_high" = "Высокое";
+"mm.fog_minimap" = "МИНИКАРТА В ТУМАНЕ";
+"mm.size_summary" = "Лабиринт %d × %d";
+"mm.size_summary_3d" = "Лабиринт %d × %d · этажей: %d";
 
 // ---------- НАСТРОЙКИ (st.) ----------
 "st.settings" = "Настройки";
@@ -71,6 +103,7 @@
 "gv.continue" = "ESC — Продолжить";
 "gv.restart" = "R — Заново";
 "gv.exit_hint" = "Ctrl + C - Выход";
+"gv.map_toggle_hint" = "M - показать / скрыть карту";
 "gv.no_clip" = "NoClip = ";
 "gv.geometry" = "Геометрия = ";
 "gv.euclidean" = "Евклидова";
@@ -246,6 +279,7 @@
 "me.test" = "Проверка";
 "me.geometry_for_test" = "Геометрия теста";
 "me.test_anyway" = "Тест без проверки";
+"me.fog_minimap" = "Миникарта в тумане";
 "me.check_ok" = "Отлично! До финиша можно дойти.";
 "me.check_no_finish" = "Финиша пока нет. Поставьте блок «Финиш».";
 "me.check_unreachable" = "До финиша не добраться от старта (синий квадрат). Откройте к нему путь.";

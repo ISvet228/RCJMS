@@ -46,6 +46,38 @@
 "mm.euclidean_geometry" = "EUCLIDEAN";
 "mm.looped_geometry" = "LOOPED";
 "mm.wrong_geometry" = "WRONG GEOMETRY";
+"mm.tagline" = "Find the finish in a first-person maze";
+"mm.settings" = "SETTINGS";
+"mm.controls" = "CONTROLS";
+"mm.back" = "BACK";
+"mm.start" = "START";
+"mm.new_game" = "NEW GAME";
+"mm.play_hint" = "Pick a size and press START. Everything else is optional.";
+"mm.size" = "SIZE";
+"mm.size_small" = "SMALL";
+"mm.size_medium" = "MEDIUM";
+"mm.size_large" = "LARGE";
+"mm.seed_hint" = "Same seed, same maze. Leave empty for a random maze.";
+"mm.advanced" = "ADVANCED OPTIONS";
+"mm.finish_position" = "FINISH POSITION";
+"mm.ctrl_mouse" = "Mouse - Look around";
+"mm.ctrl_pause" = "ESC - Pause";
+"mm.ctrl_fullscreen" = "F11 - Fullscreen";
+"mm.ctrl_aspect" = "F8 - Fix window proportions";
+"mm.section_interface" = "INTERFACE";
+"mm.section_display" = "DISPLAY";
+"mm.section_lighting" = "LIGHTING";
+"mm.vsync" = "VSync";
+"mm.vsync_hint" = "Syncs frames with the monitor. No tearing.";
+"mm.rt_hint" = "Adds lighting and reflections. Slower.";
+"mm.resolution_hint" = "Window size. Not used in fullscreen.";
+"mm.render_scale_hint" = "Lower is faster but blurrier.";
+"mm.quality_low" = "Low";
+"mm.quality_medium" = "Medium";
+"mm.quality_high" = "High";
+"mm.fog_minimap" = "FOG-OF-WAR MINIMAP";
+"mm.size_summary" = "Maze %d × %d";
+"mm.size_summary_3d" = "Maze %d × %d · %d floors";
 
 // ---------- SETTINGS (st.) ----------
 "st.settings" = "Settings";
@@ -71,6 +103,7 @@
 "gv.continue" = "ESC - Continue";
 "gv.restart" = "R - Restart";
 "gv.exit_hint" = "Ctrl + C - Exit";
+"gv.map_toggle_hint" = "M - show / hide map";
 "gv.no_clip" = "NoClip = ";
 "gv.geometry" = "Geometry = ";
 "gv.euclidean" = "Euclidean";
@@ -246,6 +279,7 @@
 "me.test" = "Try it";
 "me.geometry_for_test" = "Test geometry";
 "me.test_anyway" = "Test without validation";
+"me.fog_minimap" = "Fog-of-war minimap";
 "me.check_ok" = "Great! The finish can be reached.";
 "me.check_no_finish" = "There is no finish yet. Place a Finish block.";
 "me.check_unreachable" = "The finish can't be reached from the start (the blue square). Open a path to it.";
