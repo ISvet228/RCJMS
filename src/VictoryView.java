@@ -12,14 +12,14 @@ import java.util.Random;
 
 public class VictoryView extends JPanel {
     //region Variables
-    private static final double SPIN_SPEED = 0.1;
+    private static final double SPIN_SPEED = 5;
     private static final double SPIN_WOBBLE = 0.0;
     private static final double EYE_HEIGHT = 0.5;
     private static final double PLAYER_X = 2.5, PLAYER_Y = 2.5;
     private static final int ROOM_SIZE = 5;
     private static final int FIREWORK_COUNT = 300;
 
-    public static final boolean RAINBOW_FILTER_DEFAULT = false;
+    public static final boolean RAINBOW_FILTER_DEFAULT = true;
     public static final boolean FIREWORKS_DEFAULT = true;
     private static final float RAINBOW_STRENGTH = 0.22f;
 
@@ -231,9 +231,17 @@ public class VictoryView extends JPanel {
     }
 
     private Firework newFirework() {
+        Color c = randomColor();
+        int avg = (c.getRed() + c.getGreen() + c.getGreen()) / 3;
+        if (avg < 95)
+            c = new Color(
+                    (int)(c.getRed() + (255 - c.getRed()) * 0.8),
+                    (int)(c.getGreen() + (255 - c.getGreen()) * 0.8),
+                    (int)(c.getBlue() + (255 - c.getBlue()) * 0.8)
+            );
         return new Firework(random.nextInt(RCJMS.SCREEN_WIDTH), random.nextInt(RCJMS.SCREEN_HEIGHT),
                 random.nextDouble() * 6 - 3, random.nextDouble() * 6 - 3,
-                2 + random.nextInt(8), randomColor(), 40 + random.nextInt(80));
+                2 + random.nextInt(8), c, 40 + random.nextInt(80));
     }
 
     private void respawn(Firework f) {
@@ -243,7 +251,15 @@ public class VictoryView extends JPanel {
         f.vy = random.nextDouble() * 6 - 3;
         f.size = 2 + random.nextInt(8);
         f.life = 40 + random.nextInt(80);
-        f.color = randomColor();
+        Color c = randomColor();
+        int avg = (c.getRed() + c.getGreen() + c.getGreen()) / 3;
+        if (avg < 95)
+            c = new Color(
+                    (int)(c.getRed() + (255 - c.getRed()) * 0.8),
+                    (int)(c.getGreen() + (255 - c.getGreen()) * 0.8),
+                    (int)(c.getBlue() + (255 - c.getBlue()) * 0.8)
+            );
+        f.color = c;
     }
 
     private Color randomColor() {
