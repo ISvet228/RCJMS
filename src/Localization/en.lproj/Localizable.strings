@@ -8,7 +8,7 @@
 // ---------- UNIVERSALS ----------
 "cancel" = "Cancel";
 "close" = "Close";
-"exit" = "EXIT";
+"exit" = "QUIT";
 "reset" = "Reset";
 "saved" = "Saved";
 "save_error" = "Save error";
@@ -63,7 +63,7 @@
 "mm.ctrl_mouse" = "Mouse - Look around";
 "mm.ctrl_pause" = "ESC - Pause";
 "mm.ctrl_fullscreen" = "F11 - Fullscreen";
-"mm.ctrl_aspect" = "F8 - Fix window proportions";
+"mm.ctrl_aspect" = "F8 - Restore Aspect Ratio";
 "mm.section_interface" = "INTERFACE";
 "mm.section_display" = "DISPLAY";
 "mm.section_lighting" = "LIGHTING";
@@ -100,7 +100,7 @@
 
 // ---------- GAME VIEW (gv.) ----------
 "gv.paused" = "PAUSED";
-"gv.continue" = "ESC - Continue";
+"gv.continue" = "ESC - Resume";
 "gv.restart" = "R - Restart";
 "gv.exit_hint" = "Ctrl + C - Exit";
 "gv.map_toggle_hint" = "M - show / hide map";
@@ -114,7 +114,7 @@
 "vv.victory" = "Victory!";
 "vv.title" = "CONGRATULATIONS";
 "vv.victory_time" = "You completed maze in %d hour(s) %d minute(s) %d second(s)";
-"vv.restart" = "RESTART";
+"vv.restart" = "PLAY AGAIN";
 
 // ---------- CREDITS VIEW (cv.) ----------
 "cv.credits" = "Credits";
@@ -177,7 +177,7 @@
 "te.preset_tip" = "Make the texture this size";
 "te.size_changed" = "Texture size is now %d × %d.";
 "te.import_image" = "Import Image";
-"te.import_short" = "Import image";
+"te.import_short" = "Import Image";
 "te.import_hint" = "Load a picture from your computer into this texture";
 "te.imported" = "Picture imported (%d × %d).";
 "te.bad_image" = "This file is not a picture I can read.";
@@ -196,7 +196,7 @@
 "te.hint_eraser" = "Eraser: click or drag to rub pixels out (they become white).";
 "te.hint_fill" = "Fill: click a pixel to paint the whole area of the same color around it.";
 "te.hint_pick" = "Pick: click a pixel to take its color. Tip: Alt + click does the same with any tool.";
-"te.help_text" = "Drawing\n• Left mouse button paints, right mouse button erases.\n• Alt + click picks the color under the cursor.\n• Mouse wheel zooms, hold Space (or the middle button) and drag to move the picture.\n\nKeys\n• 1-4 switch texture, V brush, N eraser, B fill, I pick.\n• [ and ] change the brush size.\n• Ctrl+Z / Ctrl+Y undo and redo, Ctrl+S saves, Esc goes back.\n\nTextures are only used in the game after you press Save.";
+"te.help_text" = "Drawing\n• Left mouse button paints, right mouse button erases.\n• Alt + click picks the color under the cursor.\n• Mouse wheel zooms, hold Space (or the middle button) and drag to pan the picture.\n\nKeys\n• 1-4 switch texture, V brush, N eraser, B fill, I pick.\n• [ and ] change the brush size.\n• Ctrl+Z / Ctrl+Y undo and redo, Ctrl+S saves, Esc goes back.\n\nTextures are only used in the game after you press Save.";
 
 // ---------- COLOR PICKER (cp.) ----------
 "cp.choose_color" = "Choose Color";
@@ -253,7 +253,7 @@
 "me.name_down" = "Stairs down";
 "me.name_portal" = "Portal";
 "me.name_portal_one" = "One-way portal";
-"me.tip_path" = "Empty floor you can walk on. Painting it erases other blocks.";
+"me.tip_path" = "Path: Empty floor you can walk on. Painting it erases other blocks.";
 "me.tip_wall" = "Wall: blocks the way.";
 "me.tip_finish" = "Finish: the goal of the maze. Place at least one.";
 "me.tip_up" = "Stairs to the floor above (needs a floor above).";
@@ -308,4 +308,4 @@
 "me.hint_portal" = "Portal: click one cell, then another cell (it can be on another floor) to link them. R turns the arrow.";
 "me.hint_portal_one" = "One-way portal: click two cells to link them. You can only enter it from the side opposite to the arrow. R turns the arrow.";
 "me.hint_pending" = "First end placed. Now click where the second end should be (you can change the floor first). Esc cancels.";
-"me.help_text" = "Drawing\n• Left mouse button draws, right mouse button erases.\n• Alt + click picks the block under the cursor.\n• Mouse wheel zooms, hold Space (or the middle button) and drag to move the map.\n\nKeys\n• 1-5 choose a block, N and M portals, V brush, B eraser, X box, F fill.\n• R turns the portal arrow. PageUp / PageDown change the floor.\n• Ctrl+Z / Ctrl+Y undo and redo, Ctrl+S saves, Esc goes back.\n\nGoal\nThe blue square is the start and cannot be changed. Place a green Finish and make sure there is a way to it - the \"Try it\" box tells you if there is.";
+"me.help_text" = "Drawing\n• Left mouse button draws, right mouse button erases.\n• Alt + click picks the block under the cursor.\n• Mouse wheel zooms, hold Space (or the middle button) and drag to pan the map.\n\nKeys\n• 1-5 choose a block, N and M portals, V brush, B eraser, X box, F fill.\n• R turns the portal arrow. PageUp / PageDown change the floor.\n• Ctrl+Z / Ctrl+Y undo and redo, Ctrl+S saves, Esc goes back.\n\nGoal\nThe blue square is the start and cannot be changed. Place a green Finish and make sure there is a way to it - the \"Try it\" box tells you if there is.";
