@@ -10,8 +10,8 @@ import java.util.List;
 
 public final class MainMenuSettingsScreen extends MainMenuPanel {
     //region Variables
-    private static final String[] LANGUAGE_CODES = {"en", "ru"};
-    private static final String[] LANGUAGE_NAMES = {"English", "Русский"};
+    private static final String[] LANGUAGE_CODES = {"en", "ru", "sr"};
+    private static final String[] LANGUAGE_NAMES = {"English", "Русский", "Srpski"};
     private static final Style[] THEMES = {Style.FLAT, Style.NEUMORPHIC, Style.GLASS};
     private static final String[] THEME_KEYS = {"st.flat", "st.neumorphic", "st.glass"};
     private static final String[] RENDER_SCALE_NAMES = {"100%", "75%", "50%", "10%"};
@@ -96,7 +96,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     public void refresh() {
         syncing = true;
         try {
-            languageBox.setSelectedIndex(NSLocalizedString.getLanguage().equalsIgnoreCase("ru") ? 1 : 0);
+            languageBox.setSelectedIndex(languageIndexFor(NSLocalizedString.getLanguage()));
             for (int i = 0; i < THEMES.length; i++)
                 if (THEMES[i] == menu.style()) themeButtons[i].setSelected(true);
             fullscreenToggle.setSelected(menu.isFullscreen());
@@ -197,6 +197,15 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             }
         });
         backButton.addActionListener(e -> menu.showMain());
+    }
+    private static int languageIndexFor(String code) {
+        if (code == null) return 0;
+        String normalized = code.trim().toLowerCase(java.util.Locale.ROOT);
+        for (int i = 0; i < LANGUAGE_CODES.length; i++) {
+            String c = LANGUAGE_CODES[i];
+            if (normalized.equals(c) || normalized.startsWith(c + "-") || normalized.startsWith(c + "_")) return i;
+        }
+        return 0;
     }
     private int resolutionIndexFor(int width) {
         int index = 0;
