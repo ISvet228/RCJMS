@@ -6,6 +6,8 @@ import java.awt.*;
 import java.awt.geom.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 public class VictoryView extends JPanel {
@@ -15,13 +17,14 @@ public class VictoryView extends JPanel {
     private static final double EYE_HEIGHT = 0.5;
     private static final double PLAYER_X = 2.5, PLAYER_Y = 2.5;
     private static final int ROOM_SIZE = 5;
+    private static final int FIREWORK_COUNT = 300;
 
-    public static final boolean RAINBOW_FILTER_DEFAULT = true;
+    public static final boolean RAINBOW_FILTER_DEFAULT = false;
+    public static final boolean FIREWORKS_DEFAULT = true;
     private static final float RAINBOW_STRENGTH = 0.22f;
 
     private static final Color BG_TOP = new Color(3, 5, 22);
     private static final Color BG_BOTTOM = new Color(8, 30, 40);
-    private static final Color TEAL = new Color(90, 255, 214);
 
     private static final int TITLE_X = 150, TITLE_Y = 44, TITLE_W = 660, TITLE_H = 104;
     private static final int CARD_X = 250, CARD_Y = 176, CARD_W = 460, CARD_H = 112;
@@ -34,6 +37,8 @@ public class VictoryView extends JPanel {
 
     private final GameView showcase;
     private final boolean rainbowFilter;
+    private final boolean fireworksEnabled;
+    private final List<Firework> fireworks = new ArrayList<>();
     private BufferedImage frame;
 
     private double yaw = 0.0, spin = SPIN_SPEED;
@@ -50,16 +55,17 @@ public class VictoryView extends JPanel {
     //endregion
 
     //region Constructors
-    public VictoryView(long elapsedSeconds) {
-        this(elapsedSeconds, RAINBOW_FILTER_DEFAULT);
-    }
-
-    public VictoryView(long elapsedSeconds, boolean rainbowFilter) {
+    public VictoryView(long elapsedSeconds) { this(elapsedSeconds, RAINBOW_FILTER_DEFAULT, FIREWORKS_DEFAULT); }
+    public VictoryView(long elapsedSeconds, boolean rainbowFilter) { this(elapsedSeconds, rainbowFilter, FIREWORKS_DEFAULT); }
+    public VictoryView(long elapsedSeconds, boolean rainbowFilter, boolean fireworksEnabled) {
         this.elapsedSeconds = elapsedSeconds;
         this.rainbowFilter = rainbowFilter;
+        this.fireworksEnabled = fireworksEnabled;
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setLayout(null);
         setBackground(BG_BOTTOM);
+
+        for (int i = 0; i < FIREWORK_COUNT; i++) fireworks.add(newFirework());
 
         showcase = createShowcase();
 
@@ -113,28 +119,28 @@ public class VictoryView extends JPanel {
     //region Other
     @Override protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        Graphics2D g2 = (Graphics2D) g.create();
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+        Graphics2D g2d = (Graphics2D) g.create();
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 
         int w = getWidth(), h = getHeight();
-        g2.setPaint(new GradientPaint(0, 0, BG_TOP, 0, h, BG_BOTTOM));
-        g2.fillRect(0, 0, w, h);
+        g2d.setPaint(new GradientPaint(0, 0, BG_TOP, 0, h, BG_BOTTOM));
+        g2d.fillRect(0, 0, w, h);
 
-        g2.translate(viewportX, viewportY);
-        g2.scale(scale, scale);
-        g2.clipRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
+        g2d.translate(viewportX, viewportY);
+        g2d.scale(scale, scale);
+        g2d.clipRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
 
-        if (frame != null) g2.drawImage(frame, 0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT, null);
-        if (rainbowFilter) paintRainbow(g2);
-        paintEyebrow(g2);
-        paintTimeCard(g2);
-        paintVignette(g2);
-        g2.dispose();
+        if (frame != null) g2d.drawImage(frame, 0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT, null);
+        if (rainbowFilter) paintRainbow(g2d);
+        if (fireworksEnabled) paintFireworks(g2d);
+        paintTimeCard(g2d);
+        paintVignette(g2d);
+        g2d.dispose();
     }
 
-    private void paintRainbow(Graphics2D g2) {
+    private void paintRainbow(Graphics2D g2d) {
         double t = timeSec;
         int stops = 7;
         float[] fractions = new float[stops];
@@ -144,53 +150,47 @@ public class VictoryView extends JPanel {
             float hue = (float) ((i / (double) (stops - 1) + t * 0.08) % 1.0);
             colors[i] = Color.getHSBColor(hue, 0.85f, 1f);
         }
-        float shift = (float) ((t * 140) % RCJMS.SCREEN_WIDTH);
         LinearGradientPaint paint = new LinearGradientPaint(
-                new Point2D.Float(shift - 480, 0), new Point2D.Float(shift + 480, RCJMS.SCREEN_HEIGHT),
-                fractions, colors, MultipleGradientPaint.CycleMethod.REPEAT);
+                new Point2D.Float(0, 0), new Point2D.Float(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT),
+                fractions, colors, MultipleGradientPaint.CycleMethod.NO_CYCLE);
 
-        Composite old = g2.getComposite();
-        g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, RAINBOW_STRENGTH));
-        g2.setPaint(paint);
-        g2.fillRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
-        g2.setComposite(old);
+        Composite old = g2d.getComposite();
+        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, RAINBOW_STRENGTH));
+        g2d.setPaint(paint);
+        g2d.fillRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
+        g2d.setComposite(old);
     }
 
-    private void paintEyebrow(Graphics2D g2) {
-        String text = NSLocalizedString.value("vv.victory");
-        Font font = new Font(Font.SANS_SERIF, Font.BOLD, 18);
-        g2.setFont(font);
-        FontMetrics fm = g2.getFontMetrics(font);
-        int x = (RCJMS.SCREEN_WIDTH - fm.stringWidth(text)) / 2;
-        g2.setColor(new Color(90, 255, 214, 60));
-        g2.drawString(text, x, 32);
-        g2.setColor(TEAL);
-        g2.drawString(text, x, 31);
+    private void paintFireworks(Graphics2D g2d) {
+        for (Firework f : fireworks) {
+            g2d.setColor(f.color);
+            g2d.fillRect((int) f.x, (int) f.y, f.size, f.size);
+        }
     }
 
-    private void paintTimeCard(Graphics2D g2) {
+    private void paintTimeCard(Graphics2D g2d) {
         RoundRectangle2D pill = new RoundRectangle2D.Double(CARD_X, CARD_Y, CARD_W, CARD_H, CARD_H, CARD_H);
-        g2.setColor(new Color(10, 30, 40, 170));
-        g2.fill(pill);
-        g2.setPaint(new GradientPaint(0, CARD_Y, new Color(255, 255, 255, 46), 0, CARD_Y + CARD_H / 2f, new Color(255, 255, 255, 0)));
-        g2.fill(pill);
-        g2.setColor(new Color(255, 255, 255, 80));
-        g2.setStroke(new BasicStroke(1.5f));
-        g2.draw(pill);
+        g2d.setColor(new Color(10, 30, 40, 170));
+        g2d.fill(pill);
+        g2d.setPaint(new GradientPaint(0, CARD_Y, new Color(255, 255, 255, 46), 0, CARD_Y + CARD_H / 2f, new Color(255, 255, 255, 0)));
+        g2d.fill(pill);
+        g2d.setColor(new Color(255, 255, 255, 80));
+        g2d.setStroke(new BasicStroke(1.5f));
+        g2d.draw(pill);
 
         long h = elapsedSeconds / 3600;
         long m = (elapsedSeconds % 3600) / 60;
         long s = elapsedSeconds % 60;
-        drawCentered(g2, String.format("%02d:%02d:%02d", h, m, s), new Font(Font.SANS_SERIF, Font.BOLD, 46),
+        drawCentered(g2d, String.format("%02d:%02d:%02d", h, m, s), new Font(Font.SANS_SERIF, Font.BOLD, 46),
                 new Color(220, 255, 250), CARD_Y + 62);
         String caption = String.format(NSLocalizedString.value("vv.victory_time"), h, m, s);
-        drawCentered(g2, caption, new Font(Font.SANS_SERIF, Font.PLAIN, 15), new Color(200, 230, 235), CARD_Y + 94);
+        drawCentered(g2d, caption, new Font(Font.SANS_SERIF, Font.PLAIN, 15), new Color(200, 230, 235), CARD_Y + 94);
     }
 
-    private void paintVignette(Graphics2D g2) {
-        g2.setPaint(new RadialGradientPaint(new Point2D.Double(480, 270), 640f,
+    private void paintVignette(Graphics2D g2d) {
+        g2d.setPaint(new RadialGradientPaint(new Point2D.Double(480, 270), 640f,
                 new float[]{0.6f, 1f}, new Color[]{new Color(0, 0, 0, 0), new Color(0, 0, 0, 150)}));
-        g2.fill(new Rectangle2D.Double(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
+        g2d.fill(new Rectangle2D.Double(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
     }
 
     private void drawCentered(Graphics2D g2, String text, Font font, Color color, int baselineY) {
@@ -214,6 +214,40 @@ public class VictoryView extends JPanel {
             showcase.setShowcaseCamera(PLAYER_X, PLAYER_Y, yaw, 0.0, EYE_HEIGHT);
             frame = showcase.renderShowcaseFrame();
         }
+
+        if (fireworksEnabled) updateFireworks();
+    }
+
+    private void updateFireworks() {
+        for (Firework f : fireworks) {
+            f.x += f.vx;
+            f.y += f.vy;
+            f.life--;
+            f.vy += 0.03;
+            if (f.life <= 0 || f.x < -20 || f.x > RCJMS.SCREEN_WIDTH + 20 || f.y < -20 || f.y > RCJMS.SCREEN_HEIGHT + 20) {
+                respawn(f);
+            }
+        }
+    }
+
+    private Firework newFirework() {
+        return new Firework(random.nextInt(RCJMS.SCREEN_WIDTH), random.nextInt(RCJMS.SCREEN_HEIGHT),
+                random.nextDouble() * 6 - 3, random.nextDouble() * 6 - 3,
+                2 + random.nextInt(8), randomColor(), 40 + random.nextInt(80));
+    }
+
+    private void respawn(Firework f) {
+        f.x = random.nextInt(RCJMS.SCREEN_WIDTH);
+        f.y = random.nextInt(RCJMS.SCREEN_HEIGHT);
+        f.vx = random.nextDouble() * 6 - 3;
+        f.vy = random.nextDouble() * 6 - 3;
+        f.size = 2 + random.nextInt(8);
+        f.life = 40 + random.nextInt(80);
+        f.color = randomColor();
+    }
+
+    private Color randomColor() {
+        return new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256));
     }
 
     private void updateLayout() {
@@ -234,5 +268,13 @@ public class VictoryView extends JPanel {
     private int toSY(double v) { return viewportY + (int) Math.round(v * scale); }
     private int toS(double v) { return (int) Math.round(v * scale); }
     private Style loadTheme() { return SaveData.load().theme; }
+    static class Firework {
+        double x, y, vx, vy;
+        int size, life;
+        Color color;
+        Firework(double x, double y, double vx, double vy, int size, Color color, int life) {
+            this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.size = size; this.color = color; this.life = life;
+        }
+    }
     //endregion
 }
