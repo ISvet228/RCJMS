@@ -96,14 +96,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     public void refresh() {
         syncing = true;
         try {
-            int _index = -1;
-            for (int i = 0; i < LANGUAGE_CODES.length; i++)
-                if (LANGUAGE_CODES[i].equals(NSLocalizedString.getLanguage())) {
-                    _index = i;
-                    break;
-                }
-            if (_index != -1) languageBox.setSelectedIndex(_index);
-            else languageBox.setSelectedIndex(0);
+            languageBox.setSelectedIndex(NSLocalizedString.getLanguage().equalsIgnoreCase("ru") ? 1 : 0);
             for (int i = 0; i < THEMES.length; i++)
                 if (THEMES[i] == menu.style()) themeButtons[i].setSelected(true);
             fullscreenToggle.setSelected(menu.isFullscreen());
