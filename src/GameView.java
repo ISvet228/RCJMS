@@ -40,7 +40,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
     //region Lighting And Camera Constants
     private static final double CAMERA_HEIGHT = 0.5;
-    private static final double FLOOR_OFFSET = -CAMERA_HEIGHT, CEILING_OFFSET = 1.0 - CAMERA_HEIGHT;
+    private double cameraHeight = CAMERA_HEIGHT;
     private static final double NO_EDGE = 1e9;
     private static final double[] AMBIENT_LIGHT = {0.10, 0.115, 0.17};
     private static final double[] FILL_LIGHT = {0.30, 0.28, 0.25};
@@ -281,6 +281,23 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         invisibleCursor = toolkit.createCustomCursor(toolkit.createImage(new byte[0]), new Point(0, 0), "hidden");
         hideCursor();
     }
+    //endregion
+
+    //region Showcase
+    public void setShowcaseCamera(double x, double y, double angle, double pitch, double eyeHeight) {
+        playerX = x;
+        playerY = y;
+        cameraAngle = angle;
+        cameraPitch = pitch;
+        cameraHeight = Math.clamp(eyeHeight, 0.05, 0.95);
+    }
+    public BufferedImage renderShowcaseFrame() {
+        if (rayTracing && GEOMETRY_MODE != MazeGenerator.GeometryMode.WRONG) renderRayTracing();
+        else renderRayCasting();
+        copyRenderBuffer();
+        return bufferedImage;
+    }
+    public void releaseShowcase() { renderWorkers.shutdown(); }
     //endregion
 
     //region Game Loop
@@ -561,6 +578,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             }
         }
         else { java.util.Arrays.fill(rowInvA, 1.0); java.util.Arrays.fill(rowZA, 0.0); }
+        if (!hyperbolic && cameraPitch != 0 && map3D == null && !mapHasPortals(baseMap)) {
+            renderPitchedPerPixel(dirX, dirY, planeLength, rowInvA, rowZA, lightDistance);
+            copyRenderBuffer();
+            return;
+        }
 
         parallelRange(0, screenWidth, x -> {
             wallTop[x] = Integer.MAX_VALUE; wallBottom[x] = -1;
@@ -629,7 +651,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
             double perp = Math.max(totalDistance + localPerp, 0.0001);
             double projected = hyperbolic ? HyperbolicMath.hyperbolicDistance(perp, HYPERBOLIC_CURVATURE) : perp;
-            double wallTopZ = wallHeightForType(hitType) - CAMERA_HEIGHT;
+            double wallTopZ = wallHeightForType(hitType) - cameraHeight;
             boolean exactFace = !hyperbolic && segmentCount == 0;
             double lateral = cameraXCache[x] * planeLength;
             double faceNf = side == 0 ? dirX : dirY, faceNr = side == 0 ? -dirY : dirX;
@@ -644,11 +666,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 double top, bottom;
                 if (exactFace) {
                     top = solveWallEdge(faceC, faceNf, faceNr, lateral, wallTopZ, focal, halfHeight, pitchSin, pitchCos, perp);
-                    bottom = solveWallEdge(faceC, faceNf, faceNr, lateral, FLOOR_OFFSET, focal, halfHeight, pitchSin, pitchCos, perp);
+                    bottom = solveWallEdge(faceC, faceNf, faceNr, lateral, (-cameraHeight), focal, halfHeight, pitchSin, pitchCos, perp);
                 }
                 else {
                     top = projectY(perp, wallTopZ, focal, halfHeight, pitchSin, pitchCos);
-                    bottom = projectY(perp, FLOOR_OFFSET, focal, halfHeight, pitchSin, pitchCos);
+                    bottom = projectY(perp, (-cameraHeight), focal, halfHeight, pitchSin, pitchCos);
                 }
                 drawStart = (int) Math.max(0, Math.ceil(Math.max(top, -1) - 0.5));
                 drawEnd = (int) Math.min(screenHeight - 1, Math.floor(Math.min(bottom, screenHeight + 1) - 0.5));
@@ -661,8 +683,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                     floorEdge[x] = horizon + reach; ceilEdge[x] = horizon - reach;
                 }
                 else {
-                    floorEdge[x] = clampEdge(projectY(firstDepth, FLOOR_OFFSET, focal, halfHeight, pitchSin, pitchCos));
-                    ceilEdge[x] = clampEdge(projectY(firstDepth, CEILING_OFFSET, focal, halfHeight, pitchSin, pitchCos));
+                    floorEdge[x] = clampEdge(projectY(firstDepth, (-cameraHeight), focal, halfHeight, pitchSin, pitchCos));
+                    ceilEdge[x] = clampEdge(projectY(firstDepth, (1.0 - cameraHeight), focal, halfHeight, pitchSin, pitchCos));
                 }
                 paintSurfacesBeyondPortals(x, horizon, focal, halfHeight, pitchSin, pitchCos, hyperbolic, drawStart, drawEnd,
                         floorEdge[x], ceilEdge[x], segments5, segmentMaps, segmentCount, lightDistance);
@@ -692,17 +714,31 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 }
                 else if (exactFace) {
                     double lateralRow = lateral * rowInvA[y];
-                    double depth = faceC / (faceNf + lateralRow * faceNr);
-                    fraction = (wallTopZ - (depth * rowZA[y])) / (wallTopZ + CAMERA_HEIGHT);
+                    double faceDen = faceNf + lateralRow * faceNr;
+                    double depth = Math.abs(faceDen) > 1e-9 ? faceC / faceDen : perp;
                     double along = side == 0 ? playerY + depth * (dirY + lateralRow * dirX) : playerX + depth * (dirX - lateralRow * dirY);
-                    rowWallX = along - Math.floor(along);
-                    if (side == 0 && rayDirX < 0 || side == 1 && rayDirY > 0) rowWallX = 1.0 - rowWallX;
+                    double cellLo = side == 0 ? hitCellY : hitCellX;
+                    if (along >= cellLo && along <= cellLo + 1.0) {
+                        fraction = (wallTopZ - (depth * rowZA[y])) / (wallTopZ + cameraHeight);
+                        rowWallX = along - cellLo;
+                        if (side == 0 && rayDirX < 0 || side == 1 && rayDirY > 0) rowWallX = 1.0 - rowWallX;
+                    } else {
+                        double[] rowHit = castWallForRow(playerX, playerY, dirX - lateralRow * dirY, dirY + lateralRow * dirX, baseMap, mapWidth, mapHeight);
+                        if (rowHit != null) {
+                            double rowTopZ = wallHeightForType((int) rowHit[3]) - cameraHeight;
+                            fraction = (rowTopZ - (rowHit[0] * rowZA[y])) / (rowTopZ + cameraHeight);
+                            rowWallX = rowHit[2];
+                        } else {
+                            fraction = (wallTopZ - (depth * rowZA[y])) / (wallTopZ + cameraHeight);
+                            rowWallX = wallX;
+                        }
+                    }
                 }
                 else {
                     double v = (halfHeight - (y + 0.5)) / focal;
                     double den = pitchCos - v * pitchSin;
                     if (Math.abs(den) < 1e-6) den = 1e-6;
-                    fraction = (wallTopZ - (perp * (pitchSin + v * pitchCos) / den)) / (wallTopZ + CAMERA_HEIGHT);
+                    fraction = (wallTopZ - (perp * (pitchSin + v * pitchCos) / den)) / (wallTopZ + cameraHeight);
                 }
                 if (exactFace) {
                     texX = Math.min((int) (rowWallX * texWidth), texWidth - 1);
@@ -776,7 +812,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         int floorFrom = Math.max(wallBottom + 1, 0);
         int floorTo = (int) Math.min(renderHeight - 1, Math.floor(floorEdge));
         for (int y = floorFrom; y <= floorTo; y++) {
-            double t = rowDepth(y, horizon, focal, halfHeight, sinP, cosP, FLOOR_OFFSET, hyperbolic);
+            double t = rowDepth(y, horizon, focal, halfHeight, sinP, cosP, (-cameraHeight), hyperbolic);
             if (!(t >= firstStart)) continue;
             int i = count - 1;
             while (i > 0 && seg[i * 5] > t) i--;
@@ -792,7 +828,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         int ceilFrom = (int) Math.max(0, Math.ceil(Math.min(ceilEdge, renderHeight)));
         int ceilTo = Math.min(wallTop - 1, renderHeight - 1);
         for (int y = ceilFrom; y <= ceilTo; y++) {
-            double t = rowDepth(y, horizon, focal, halfHeight, sinP, cosP, CEILING_OFFSET, hyperbolic);
+            double t = rowDepth(y, horizon, focal, halfHeight, sinP, cosP, (1.0 - cameraHeight), hyperbolic);
             if (!(t >= firstStart)) continue;
             int i = count - 1;
             while (i > 0 && seg[i * 5] > t) i--;
@@ -804,6 +840,94 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             renderPixels[y * renderWidth + x] = applyBrightness(color, brightness);
         }
     }
+    private static boolean mapHasPortals(int[][] m) {
+        for (int[] row : m) for (int cell : row) if (cell == MazeGenerator.PORTAL) return true;
+        return false;
+    }
+
+    private void renderPitchedPerPixel(double dirX, double dirY, double planeLength, double[] rowInvA, double[] rowZA, double lightDistance) {
+        final int width = renderWidth, height = renderHeight;
+        final int[][] m = map;
+        final int mw = mapWidth(), mh = mapHeight();
+        final double h = cameraHeight;
+        final double baseX = playerX, baseY = playerY;
+        final int wallWidth = wallTexture.width, wallHeight = wallTexture.height;
+        final int finishWidth = finishTexture.width, finishHeight = finishTexture.height;
+        final int[] wallPixels = wallTexture.pixels, finishPixels = finishTexture.pixels;
+
+        parallelRange(0, height, y -> {
+            final double rowZ = rowZA[y];
+            final double rowScale = rowInvA[y];
+            final boolean floorPlane = rowZ < 0;
+            final double tPlane;
+            if (rowZ < -1e-12) tPlane = -h / rowZ;
+            else if (rowZ > 1e-12) tPlane = (1.0 - h) / rowZ;
+            else tPlane = Double.POSITIVE_INFINITY;
+
+            for (int x = 0; x < width; x++) {
+                double lateralRow = cameraXCache[x] * planeLength * rowScale;
+                double rx = dirX - lateralRow * dirY, ry = dirY + lateralRow * dirX;
+                int offset = y * width + x;
+
+                int mapX = (int) Math.floor(baseX), mapY = (int) Math.floor(baseY);
+                double deltaX = rx == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / rx);
+                double deltaY = ry == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / ry);
+                double sideX = (rx < 0 ? baseX - mapX : mapX + 1.0 - baseX) * deltaX;
+                double sideY = (ry < 0 ? baseY - mapY : mapY + 1.0 - baseY) * deltaY;
+                int stepX = rx < 0 ? -1 : 1, stepY = ry < 0 ? -1 : 1;
+
+                boolean wallFound = false;
+                int wType = 0, wSide = 0;
+                double wT = 0;
+                while (true) {
+                    double tNext;
+                    if (sideX < sideY) { tNext = sideX; sideX += deltaX; mapX += stepX; wSide = 0; }
+                    else { tNext = sideY; sideY += deltaY; mapY += stepY; wSide = 1; }
+                    if (tNext >= tPlane) break;
+                    if (mapX < 0 || mapY < 0 || mapX >= mw || mapY >= mh) break;
+                    int type = m[mapY][mapX];
+                    if (type == 1 || type == 2) {
+                        double zW = h + tNext * rowZ;
+                        if (zW >= 0 && zW <= wallHeightForType(type)) {
+                            wallFound = true; wType = type; wT = tNext;
+                            break;
+                        }
+                    }
+                }
+
+                if (wallFound) {
+                    double hitX = baseX + rx * wT, hitY = baseY + ry * wT;
+                    double u = wSide == 0 ? hitY : hitX;
+                    u -= Math.floor(u);
+                    if ((wSide == 0 && rx < 0) || (wSide == 1 && ry > 0)) u = 1.0 - u;
+                    double wallH = wallHeightForType(wType);
+                    double fraction = (wallH - (h + wT * rowZ)) / wallH;
+                    int color;
+                    boolean finish = wType == 2;
+                    int tw = finish ? finishWidth : wallWidth, th = finish ? finishHeight : wallHeight;
+                    if (tw > 0 && th > 0) {
+                        int tx = Math.min((int) (u * tw), tw - 1);
+                        int ty = Math.min((int) (Math.clamp(fraction, 0.0, 0.999999) * th), th - 1);
+                        color = finish ? finishPixels[ty * tw + tx] : wallPixels[ty * tw + tx];
+                    }
+                    else color = finish ? 0x33FF66 : wallBaseColor;
+                    double brightness = Math.clamp(1.0 - wT / lightDistance, 0.03, 1.0);
+                    if (wSide == 1) brightness *= 0.85;
+                    renderPixels[offset] = applyBrightness(color, brightness);
+                }
+                else if (Double.isFinite(tPlane)) {
+                    double wx = baseX + rx * tPlane, wy = baseY + ry * tPlane;
+                    int color = floorPlane ? sampleTexture(floorTexture, wx, wy, floorBaseColor) : sampleTexture(ceilingTexture, wx, wy, ceilingBaseColor);
+                    double brightness = Math.clamp(1.0 - tPlane / lightDistance, 0.05, 1.0);
+                    renderPixels[offset] = applyBrightness(color, brightness);
+                }
+                else {
+                    renderPixels[offset] = ceilingBaseColor;
+                }
+            }
+        });
+    }
+
     private void renderHorizontalSurfaces(double dirX, double dirY, double planeX, double planeY, double horizon, double focal,
                                           double halfHeight, double sinP, double cosP, boolean hyperbolic) {
         final double lightDistance = effectiveFlashlightDistance(hyperbolic);
@@ -814,10 +938,10 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         final double[] rowInvA = rowInvACache;
 
         parallelRange(0, renderHeight, y -> {
-            double depth = rowDepth(y, horizon, focal, halfHeight, sinP, cosP, FLOOR_OFFSET, hyperbolic);
+            double depth = rowDepth(y, horizon, focal, halfHeight, sinP, cosP, (-cameraHeight), hyperbolic);
             boolean floor = depth > 0;
             if (!floor) {
-                depth = rowDepth(y, horizon, focal, halfHeight, sinP, cosP, CEILING_OFFSET, hyperbolic);
+                depth = rowDepth(y, horizon, focal, halfHeight, sinP, cosP, (1.0 - cameraHeight), hyperbolic);
                 if (!(depth > 0)) return;
             }
             double rowScale = rowInvA[y];
@@ -867,7 +991,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 double rz = sp + cp * sy;
                 double inv = 1.0 / Math.sqrt(rx * rx + ry * ry + rz * rz);
                 rx *= inv; ry *= inv; rz *= inv;
-                TraceHit hit = traceRay(playerX, playerY, CAMERA_HEIGHT, rx, ry, rz, map, portals, primary, MAX_PRIMARY_STEPS);
+                TraceHit hit = traceRay(playerX, playerY, cameraHeight, rx, ry, rz, map, portals, primary, MAX_PRIMARY_STEPS);
                 if (!hit.hit) { rtPixels[y * width + x] = ceilingBaseColor; continue; }
                 rtPixels[y * width + x] = shadeSurface(hit, -hit.dirX, -hit.dirY, -hit.dirZ + 0.18, 0, reflections, secondary);
             }
@@ -880,6 +1004,30 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         copyRenderBuffer();
     }
     private static double wallHeightForType(int type) { return type == 2 ? 0.5 : 1.0; }
+    private static double[] castWallForRow(double ox, double oy, double rx, double ry, int[][] map, int mapWidth, int mapHeight) {
+        int mapX = (int) Math.floor(ox), mapY = (int) Math.floor(oy);
+        double deltaX = rx == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / rx);
+        double deltaY = ry == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / ry);
+        double sideX = (rx < 0 ? ox - mapX : mapX + 1.0 - ox) * deltaX;
+        double sideY = (ry < 0 ? oy - mapY : mapY + 1.0 - oy) * deltaY;
+        int stepX = rx < 0 ? -1 : 1, stepY = ry < 0 ? -1 : 1;
+        int side = 0;
+        for (int guard = 0; guard < 4096; guard++) {
+            if (sideX < sideY) { sideX += deltaX; mapX += stepX; side = 0; }
+            else { sideY += deltaY; mapY += stepY; side = 1; }
+            if (mapX < 0 || mapY < 0 || mapX >= mapWidth || mapY >= mapHeight) return null;
+            int type = map[mapY][mapX];
+            if (type == 1 || type == 2) {
+                double t = side == 0 ? sideX - deltaX : sideY - deltaY;
+                double hitX = ox + rx * t, hitY = oy + ry * t;
+                double u = side == 0 ? hitY : hitX;
+                u -= Math.floor(u);
+                if ((side == 0 && rx < 0) || (side == 1 && ry > 0)) u = 1.0 - u;
+                return new double[]{t, side, Math.clamp(u, 0.0, 0.999999), type};
+            }
+        }
+        return null;
+    }
     private TraceHit traceRay(double ox, double oy, double oz, double rx, double ry, double rz, int[][] startMap, PortalData startPortals, TraceHit result, int maxSteps) {
         result.reset();
         final int mapWidth = startMap[0].length, mapHeight = startMap.length;
