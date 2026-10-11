@@ -10,8 +10,8 @@ import java.util.List;
 
 public final class MainMenuSettingsScreen extends MainMenuPanel {
     //region Variables
-    private static final String[] LANGUAGE_CODES = {"en", "ru"};
-    private static final String[] LANGUAGE_NAMES = {"English", "Русский"};
+    private static final String[] LANGUAGE_CODES = {"en", "ru", "sr"};
+    private static final String[] LANGUAGE_NAMES = {"English", "Русский", "Srpski"};
     private static final Style[] THEMES = {Style.FLAT, Style.NEUMORPHIC, Style.GLASS};
     private static final String[] THEME_KEYS = {"st.flat", "st.neumorphic", "st.glass"};
     private static final String[] RENDER_SCALE_NAMES = {"100%", "75%", "50%", "10%"};
