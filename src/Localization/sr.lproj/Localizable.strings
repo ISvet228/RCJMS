@@ -2,7 +2,7 @@
 // LOKALIZACIJA — SRPSKI
 // Sekcije: Univerzalni | Glavni Meni | Podešavanja | Info | Igra
 // Pobeda | Zasluge | Uređivači: zajedničko (ed.) |
-// Uređivač Tekstura (te. + cp.) | Uređivač Mapa (me.)
+// Uređivač Tekstura (te. + cp.) | Uređivač Mape (me.)
 // ============================================================
 
 // ---------- UNIVERZALNI ----------
@@ -12,7 +12,7 @@
 "reset" = "Resetuj";
 "saved" = "Sačuvano";
 "save_error" = "Greška pri čuvanju";
-"load_error" = "Učitavanje neuspelo";
+"load_error" = "Učitavanje neuspešno";
 "floor" = "Sprat: ";
 "main_menu" = "Glavni Meni";
 "tool" = "Alat";
@@ -30,7 +30,7 @@
 // ---------- GLEVNI MENI (mm.) ----------
 "mm.play" = "IGRAJ";
 "mm.texture_editor" = "UREĐIVAČ TEKSTURA";
-"mm.map_editor" = "UREĐIVAČ MAPA";
+"mm.map_editor" = "UREĐIVAČ MAPE";
 "mm.credits" = "ZASLUGE";
 "mm.mode" = "MOD";
 "mm.opposite_corner" = "NASPRAMNI ĆOŠAK";
@@ -124,11 +124,11 @@
 "cv.main_designer" = "Glavni Dizajner";
 "cv.scenario_plot_by" = "Scenario i Priču Napisao";
 "cv.special_thanks" = "Posebno Hvala";
-"cv.ljubo" = "Ljubo: Popravka Detekcije Zidova, Srpski Jezik";
+"cv.ljubo" = "Ljubo: Popravka Detekcije Zidova i Srpski Jezik";
 "cv.fungun" = "fUnGuN: Pomoć sa StyleUI-om";
 "cv.useful_resources" = "Korisni Resursi";
 "cv.hyperbolic_geometry" = "Hiperbolična Geometrija, odnosno Pogrešna Geometrija";
-"cv.bfs" = "Breadth-first search, odnosno BFS";
+"cv.bfs" = "Pretraga po širini, odnosno BFS";
 "cv.thanks" = "Hvala Vam što ste pogledali zasluge";
 "cv.another_project" = "Takođe imam još projekata:";
 
@@ -163,7 +163,7 @@
 "te.color" = "Boja";
 "te.pick" = "Birač";
 "te.pick_a_tool" = "Izaberite alatku i boju, kliknite ili prevucite preko mreže";
-"te.color_square" = "Kliknite kvadratić da izaberete boju";
+"te.color_square" = "Kliknite kvadratić da biste izabrali boju";
 "te.apply_to_cell" = "Primeni na ćeliji";
 "te.fill_texture" = "Popuni teksturu";
 "te.palette" = "Paleta";
@@ -178,7 +178,7 @@
 "te.size_changed" = "Veličina teksture je %d × %d.";
 "te.import_image" = "Uvezi sliku";
 "te.import_short" = "Uvezi sliku";
-"te.import_hint" = "Učitaj sliku iz kompjutera";
+"te.import_hint" = "Učitaj sliku sa kompjutera";
 "te.imported" = "Slika uvezena (%d × %d).";
 "te.bad_image" = "Ova datoteka nije slika koju mogu da pročitam.";
 "te.import_error" = "Greška pri uvozu";
@@ -191,12 +191,12 @@
 "te.reset_confirm" = "Resetovati \"%s\" teksturu nazad na početnu boju? Možete povratiti ovaj korak";
 "te.reset_yes" = "Resetuj";
 "te.preview" = "Pločasti pregled";
-"te.hint_flat" = "Ova tekstura je jednobojna. Povećajte veličinu teksture na levoj strani (na primer na 16) da biste počeli da crtate detalje.";
+"te.hint_flat" = "Ova tekstura je jednobojna. Povećajte veličinu teksture na levoj strani ekrana (na primer na 16) da biste počeli da crtate detalje.";
 "te.hint_brush" = "Četkica: kliknite ili prevucite mišem da biste crtali izabranom bojom. Desnim klikom brišete.";
 "te.hint_eraser" = "Gumica: kliknite ili prevucite mišem da biste brisali (pikseli postaju beli).";
-"te.hint_fill" = "Kofa: kliknite piksel da obojite čitav prostor oko piksela istom bojom.";
-"te.hint_pick" = "Birač: kliknite piksel da izaberete njegovu boju. Savet: Alt + klik radi isto s bilo kojom alatkom.";
-"te.help_text" = "Crtanje\n• Levim klikom crtate, desnim klikom brišete.\n• Alt + klik bira boju ispod miša.\n• Točkićem zumirate, držite Razmak (ili srednji klik) i prevucite da pomerite sliku.\n\nTasteri\n• 1-4 prebacivanje tekstura, V četkica, N gumica, B kofa, I birač.\n• [ i ] menjaju veličinu četkice.\n• Ctrl+Z / Ctrl+Y prave korak napred/nazad, Ctrl+S čuva, Esc napušta uređivač.\n\nTeksture se jedino koriste kada ih sačuvate";
+"te.hint_fill" = "Kofa: kliknite piksel da biste obojili čitav prostor oko piksela izabranom bojom.";
+"te.hint_pick" = "Birač: kliknite piksel da biste izaberali njegovu boju. Savet: Alt + klik radi isto to s bilo kojom alatkom.";
+"te.help_text" = "Crtanje\n• Levim klikom crtate, desnim klikom brišete.\n• Alt + klik bira boju ispod miša.\n• Točkićem zumirate. Držite Razmak (ili srednji klik) i prevucite da pomerite sliku.\n\nTasteri\n• 1-4 prebacivanje tekstura, V četkica, N gumica, B kofa, I birač.\n• [ i ] menjaju veličinu četkice.\n• Ctrl+Z / Ctrl+Y prave korak napred/nazad, Ctrl+S čuva, Esc napušta uređivač.\n\nTeksture se koriste u nivoima jedino kada ih sačuvate";
 
 // ---------- BIRAČ BOJA (cp.) ----------
 "cp.choose_color" = "Izaberite Boju";
@@ -206,14 +206,14 @@
 "cp.color_code" = "Kôd boje (RRGGBB):";
 "cp.apply" = "Primeni";
 
-// ---------- UREĐIVAČ MAPA (me.)  ----------
-"me.map_editor" = "Uređivač Mapa";
+// ---------- UREĐIVAČ MAPE (me.)  ----------
+"me.map_editor" = "Uređivač Mape";
 "me.block" = "Blok";
 "me.size" = "Veličina: ";
 "me.map_size" = "Veličina mape";
 "me.select_a_tool" = "Izaberite alatku i blok, kliknite ili prevucite preko mape.";
 "me.blocks_info" = "Početak: (1, 1)    |    0 = Put    1 = Zid    2 = Cilj    3 = Stepenice na Gore    4 = Stepenice na Dole    5 = Portal";
-"me.actions" = "Radnje s mapom";
+"me.actions" = "Funkcionalnosti";
 "me.clear_map" = "Raščisti Mapu";
 "me.clear_short" = "Raščisti sprat";
 "me.clear_tip" = "Ukloni sve na trenutnom spratu";
@@ -228,7 +228,7 @@
 "me.load_from_seed" = "Učitaj iz Semena";
 "me.seed_short" = "Iz Semena";
 "me.seed_tip" = "Generiši nasumičan lavirint iz semena";
-"me.generate" = "Generišite";
+"me.generate" = "Generiši";
 "me.random_seed" = "Nasumično";
 "me.preset_tip" = "Postavite veličinu mape";
 "me.floors" = "Spratovi: ";
@@ -253,28 +253,28 @@
 "me.name_down" = "Stepenice na Dole";
 "me.name_portal" = "Portal";
 "me.name_portal_one" = "Jednostrani portal";
-"me.tip_path" = "Put: Prazan put po kojem možete da hodate. Crtanje njime brišete druge blokove.";
+"me.tip_path" = "Put: Prazan put po kojem možete da hodate. Crtanjem njime brišete druge blokove.";
 "me.tip_wall" = "Zid: blokira put.";
 "me.tip_finish" = "Cilj: blok koji treba dostići u lavirintu. Postavite barem jedan.";
-"me.tip_up" = "Spetenice ka spratu iznad (potreban vam je sprat iznad trenutnog).";
-"me.tip_down" = "Spetenice ka spratu ispod (potreban vam je sprat ispod trenutnog).";
-"me.tip_portal" = "Portal: povezuje dve ćelije, čak i na drugačijim spratovima.";
-"me.tip_portal_one" = "Jednostrani portal: povezuje dve ćelije, čak i na drugačijim spratovima. Može se ući samo s jedne strane.";
-"me.tip_brush" = "Četkica: za postavljanje izabranog bloka";
-"me.tip_eraser" = "Gumica: za brisanje blokova";
-"me.tip_box" = "Kutija: za popunjavanje pravougaonika";
-"me.tip_fill" = "Kofa: za popunjavanje čitavog okruženja";
-"me.portal_hint" = "Alatka portal: kliknite bilo koju ćeliju (osim početka) za oba dela portala. Dva dela ne moraju biti na istom spratovima. R - rotiranje smera. Proći ćete kroz portal u pravcu njegove strelice.";
-"me.portal_same_floor" = "Oba dela portala moraju biti na istom spratu.";
-"me.portal_pick_second" = "Prvi deo portala postavljem. Sada možete postaviti drugi kraj - na ovom spratu ili, nakon promene sprata strelicama, na bilo kom drugom (kliknite na istu ćeliju da biste otkazali).";
+"me.tip_up" = "Spetenice ka spratu iznad (potreban Vam je sprat iznad trenutnog).";
+"me.tip_down" = "Spetenice ka spratu ispod (potreban Vam je sprat ispod trenutnog).";
+"me.tip_portal" = "Portal: povezuje dve ćelije, čak i na različitim spratovima.";
+"me.tip_portal_one" = "Jednostrani portal: povezuje dve ćelije, čak i na različitim spratovima. Može se ući samo s jedne strane.";
+"me.tip_brush" = "Četkica: kliknite ili prevucite mišem da biste postavljali izabran blok";
+"me.tip_eraser" = "Gumica: kliknite ili prevucite da biste brisali blokove ispod miša";
+"me.tip_box" = "Kutija: prevucite mišem da biste popunili pravougaonik izabranim blokom";
+"me.tip_fill" = "Kofa: kliknite da biste popunili čitavo okruženje oko miša izabranim blokom";
+"me.portal_hint" = "Alatka portal: kliknite bilo koju ćeliju (osim početka) za oba dela portala. Delovi ne moraju biti na istom spratovima. R - rotiranje smera. Proći ćete kroz portal u pravcu njegove strelice.";
+"me.portal_same_floor" = "Delovi portala moraju biti na istom spratu.";
+"me.portal_pick_second" = "Prvi deo portala postavljem. Sada možete postaviti drugi deo - na istom spratu ili na bilo kom drugom (kliknite na istu ćeliju da biste otkazali).";
 "me.portals" = "Portali: ";
 "me.portal_direction" = "Smer portala: ";
 "me.portal_direction_short" = "Strelica portala";
 "me.portal_direction_tip" = "Okrenite strelicu portala (smer u kom izlazite)";
-"me.portal_one_sided_hint" = "Jednostrani portal: ulaz i izlaz su sa iste strane. Ulazite u pravcu strelice i izlazite sa iste strane (označene tirkiznom). Može biti povezan s bilo kojim portalom, takođe na različitim spratovima. R - promena orijentacije.";
+"me.portal_one_sided_hint" = "Jednostrani portal: ulaz i izlaz su sa iste strane. Ulazite u pravcu strelice i izlazite sa iste strane (označene tirkiznom). Može biti povezan s bilo kojim portalom, takođe na različitim spratovima. R - rotiranje smera.";
 "me.portal_already" = "Već postoji portal u ovoj ćeliji.";
 "me.portal_not_on_start" = "Portal ne može biti postavljen na početak.";
-"me.portal_exit_blocked" = "Portal vodi u zid (Ćelija ispred njegovog drugog dela je ili zid ili van mape). Pomerite portal ili oslobodite ćeliju.";
+"me.portal_exit_blocked" = "Portal vodi u zid (ćelija ispred njegovog drugog dela je ili zid ili van mape). Pomerite portal ili oslobodite ćeliju.";
 "me.portal_linked" = "Portali povezani!";
 "me.test" = "Isprobaj";
 "me.geometry_for_test" = "Test geometrija";
@@ -282,13 +282,13 @@
 "me.fog_minimap" = "Magla-rata mini mapa";
 "me.check_ok" = "Super! Može se stići do cilja.";
 "me.check_no_finish" = "Cilj nije postavljen. Postavite ciljni blok.";
-"me.check_unreachable" = "Ne može se doći do cilja od početka (plavi kvadratić). Otvorite put do njega.";
+"me.check_unreachable" = "Ne može se dostignuti cilj od početka (plavi kvadratić). Otvorite put do njega.";
 "me.no_path" = "Ne postoji put od početne pozicije (1, 1) do bilo kog Cilja (2).";
-"me.no_reachable_finish" = "Nema dostupnog cilja.";
+"me.no_reachable_finish" = "Nema dostižnog cilja.";
 "me.finishes" = "Ciljevi: ";
-"me.reachable_finish" = "Dostupan cilj: (";
+"me.reachable_finish" = "Dostižan cilj: (";
 "me.map_cannot_be_played" = "Ne možete igrati ovu mapu još uvek.";
-"me.play_anyway_hint" = "Popravite to, ili prebacite na \"Testiraj svejedno\" da biste isprobali mapu takvu kakva jeste.";
+"me.play_anyway_hint" = "Popravite to, ili uključite opciju \"Testiraj svejedno\" da biste isprobali mapu takvu kakva jeste.";
 "me.map_cannot_be_saved" = "Mapa ne može biti sačuvana";
 "me.map_saved_successfully" = "Mapa uspešno sačuvana.";
 "me.file" = "Fajl: ";
@@ -296,16 +296,16 @@
 "me.could_not_load_map" = "Učitavanje mape neuspešno: ";
 "me.map_loaded" = "Mapa učitana.";
 "me.seed_map_loaded" = "Mapa uspešno generisana iz semena. Možete je urediti kao bilo koju drugu mapu (korak nazad radi).";
-"me.new_confirm" = "Okončajte ovu mapu i započnite novu?";
+"me.new_confirm" = "Odbaciti ovu mapu i započeti novu?";
 "me.new_yes" = "Započni novu";
-"me.load_confirm" = "Učitavanje mape će zameniti trenutnu. Nastaviti?";
+"me.load_confirm" = "Učitavanje mape će odbaciti trenutnu. Nastaviti?";
 "me.load_yes" = "Učitaj";
 "me.unsaved_msg" = "Napravili ste promene koje niste sačuvali. Sačuvati promene?";
 "me.hint_brush" = "Četkica: kliknite ili prevucite mišem da biste crtali izabranim blokom. Desim mišem brišete.";
-"me.hint_eraser" = "Gumica: kliknite ili prevucite mišem da obrišete blokove.";
-"me.hint_box" = "Kutija: prevucite od jednog do drugog ćoška da biste popunili pravougaonik. Desnim klikom brišete.";
-"me.hint_fill" = "Kofa: kliknite da popunite sve okružujuće blokove iste vrste.";
-"me.hint_portal" = "Portal: kliknite jednu pa drugu ćeliju (ne moraju biti na istom spratu) da biste ih povezali. R menja rotaciju.";
-"me.hint_portal_one" = "Jednostrani portal: kliknite dve ćelije da biste ih povezali. Jedino možete ući sa strane nasuprot strelici. R menja rotaciju.";
-"me.hint_pending" = "Prvi deo postavljen. Sada kliknite gde drugi deo treba da bude (možete promeniti sprat). Esc otkazuje.";
-"me.help_text" = "Crtanje\n• Levim mišem crtate, Desnim brišete.\n• Alt + klik bira blok ispod miša.\n• Točkićem zumirate, zadržite Razmak (ili srednji klik) i prevucite da biste pomerili mapu.\n\nTasteri\n• 1-5 biranje bloka, N i M portali, V četkica, B gumica, X kutija, F kofa.\n• R okreće strelicu portala. PageUp / PageDown menjaju sprat.\n• Ctrl+Z / Ctrl+Y korak napred/nazad, Ctrl+S čuva, Esc napušta uređivač.\n\nCilj\nPlavi pravougaonik je početak i ne može se promeniti. Postavite zeleni Cilj i pobrinite se da se može dostići - kutija \"Isprobaj\" Vam govori da li može biti dostignut.";
+"me.hint_eraser" = "Gumica: kliknite ili prevucite da biste brisali blokove ispod miša.";
+"me.hint_box" = "Kutija: prevucite mišem da biste popunili pravougaonik izabranim blokom. Desnim klikom brišete.";
+"me.hint_fill" = "Kofa: kliknite blok da biste popunili sve okružujuće blokove iste vrste izabranim blokom.";
+"me.hint_portal" = "Portal: kliknite jedan pa drugi blok (ne moraju biti na istom spratu) da biste ih povezali. R rotira smer.";
+"me.hint_portal_one" = "Jednostrani portal: kliknite dva bloka da biste ih povezali. Jedino možete ući sa strane nasuprot strelici. R rotira smer.";
+"me.hint_pending" = "Prvi deo postavljen. Sada kliknite blok za postavku drugog dela (možete promeniti sprat). Esc otkazuje.";
+"me.help_text" = "Crtanje\n• Levim mišem crtate, Desnim brišete.\n• Alt + klik bira blok ispod miša.\n• Točkićem zumirate. Zadržite Razmak (ili srednji klik) i prevucite da biste pomerili mapu.\n\nTasteri\n• 1-5 biranje bloka, N i M portali, V četkica, B gumica, X kutija, F kofa.\n• R rotira smer portala. PageUp / PageDown menjaju sprat.\n• Ctrl+Z / Ctrl+Y korak napred/nazad, Ctrl+S čuva, Esc napušta uređivač.\n\nCilj\nPlavi pravougaonik je početak i ne može se promeniti. Postavite zeleni Cilj i pobrinite se da je dostižam - kutija \"Isprobaj\" Vam govori da li je dostižan.";

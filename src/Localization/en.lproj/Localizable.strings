@@ -124,7 +124,7 @@
 "cv.main_designer" = "Main Designer";
 "cv.scenario_plot_by" = "Scenario & Plot By";
 "cv.special_thanks" = "Special Thanks";
-"cv.ljubo" = "Ljubo For Collision Fix And Walk Enchantments";
+"cv.ljubo" = "Ljubo For Collision Fix And Serbian Localization";
 "cv.fungun" = "fUnGuN StyleUI Help";
 "cv.useful_resources" = "Useful Resources";
 "cv.hyperbolic_geometry" = "Hyperbolic Geometry aka Wrong Geometry";
@@ -196,7 +196,7 @@
 "te.hint_eraser" = "Eraser: click or drag to rub pixels out (they become white).";
 "te.hint_fill" = "Fill: click a pixel to paint the whole area of the same color around it.";
 "te.hint_pick" = "Pick: click a pixel to take its color. Tip: Alt + click does the same with any tool.";
-"te.help_text" = "Drawing\n• Left mouse button paints, right mouse button erases.\n• Alt + click picks the color under the cursor.\n• Mouse wheel zooms, hold Space (or the middle button) and drag to pan the picture.\n\nKeys\n• 1-4 switch texture, V brush, N eraser, B fill, I pick.\n• [ and ] change the brush size.\n• Ctrl+Z / Ctrl+Y undo and redo, Ctrl+S saves, Esc goes back.\n\nTextures are only used in the game after you press Save.";
+"te.help_text" = "Drawing\n• Left mouse button paints, right mouse button erases.\n• Alt + click picks the color under the cursor.\n• Mouse wheel zooms. Hold Space (or the middle button) and drag to pan the picture.\n\nKeys\n• 1-4 switch texture, V brush, N eraser, B fill, I pick.\n• [ and ] change the brush size.\n• Ctrl+Z / Ctrl+Y undo and redo, Ctrl+S saves, Esc goes back.\n\nTextures are only used in the game after you press Save.";
 
 // ---------- COLOR PICKER (cp.) ----------
 "cp.choose_color" = "Choose Color";
@@ -308,4 +308,4 @@
 "me.hint_portal" = "Portal: click one cell, then another cell (it can be on another floor) to link them. R turns the arrow.";
 "me.hint_portal_one" = "One-way portal: click two cells to link them. You can only enter it from the side opposite to the arrow. R turns the arrow.";
 "me.hint_pending" = "First end placed. Now click where the second end should be (you can change the floor first). Esc cancels.";
-"me.help_text" = "Drawing\n• Left mouse button draws, right mouse button erases.\n• Alt + click picks the block under the cursor.\n• Mouse wheel zooms, hold Space (or the middle button) and drag to pan the map.\n\nKeys\n• 1-5 choose a block, N and M portals, V brush, B eraser, X box, F fill.\n• R turns the portal arrow. PageUp / PageDown change the floor.\n• Ctrl+Z / Ctrl+Y undo and redo, Ctrl+S saves, Esc goes back.\n\nGoal\nThe blue square is the start and cannot be changed. Place a green Finish and make sure there is a way to it - the \"Try it\" box tells you if there is.";
+"me.help_text" = "Drawing\n• Left mouse button draws, right mouse button erases.\n• Alt + click picks the block under the cursor.\n• Mouse wheel zooms. Hold Space (or the middle button) and drag to pan the map.\n\nKeys\n• 1-5 choose a block, N and M portals, V brush, B eraser, X box, F fill.\n• R turns the portal arrow. PageUp / PageDown change the floor.\n• Ctrl+Z / Ctrl+Y undo and redo, Ctrl+S saves, Esc goes back.\n\nGoal\nThe blue square is the start and cannot be changed. Place a green Finish and make sure there is a way to it - the \"Try it\" box tells you if there is.";
