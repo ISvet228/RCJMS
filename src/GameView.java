@@ -34,6 +34,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private final String customSeed;
     private String mazeSeedText = "";
     private final boolean isCustomMap;
+    private final int requestedWidth, requestedHeight;
     private int[][][] customFloorsForRestart;
     private PortalData[] customPortalsForRestart;
     private int customGeometryModeForRestart;
@@ -174,6 +175,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         String typedSeed = SeedUtil.normalize(seed);
         customSeed = typedSeed.isEmpty() ? null : typedSeed;
         isCustomMap = false;
+        requestedWidth = mazeWidth;
+        requestedHeight = mazeHeight;
         GEOMETRY_MODE = MazeGenerator.GeometryMode.values()[Math.clamp(geometryMode, 0, MazeGenerator.GeometryMode.values().length - 1)];
         MAZE_MODE = MazeGenerator.FinishMode.values()[mazeMode];
 
@@ -221,6 +224,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         cameraXCache = buildCameraXCache();
         customSeed = null;
         isCustomMap = true;
+        requestedWidth = requestedHeight = -1;
 
         int floors = Math.max(1, customFloors.length);
         MAZE_3D = floors > 1;
@@ -265,6 +269,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         cameraXCache = buildCameraXCache();
         customSeed = null;
         isCustomMap = true;
+        requestedWidth = requestedHeight = -1;
         MAZE_3D = false;
         GEOMETRY_MODE = MazeGenerator.GeometryMode.EUCLIDEAN;
         MAZE_FLOORS = 1;
@@ -489,7 +494,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             isGameRunning = false;
             playerX = playerY = 1.5;
             cameraAngle = cameraPitch = 0;
-            RCJMS.instance.changeView(RCJMS.instance.victoryView = new VictoryView(elapsedSeconds), "vv.victory");
+            RCJMS.instance.changeView(RCJMS.instance.victoryView = new VictoryView(elapsedSeconds, requestedWidth, requestedHeight, isCustomMap), "vv.victory");
             gameThread.interrupt();
             return;
         }

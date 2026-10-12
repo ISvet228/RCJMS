@@ -3,8 +3,7 @@ import Helpers.*;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.KeyEvent;
+import java.awt.event.*;
 import java.awt.geom.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -21,8 +20,7 @@ public class VictoryView extends JPanel {
     private static final int ROOM_SIZE = 5;
     private static final int FIREWORK_COUNT = 300;
 
-    public static final boolean RAINBOW_FILTER_DEFAULT = true;
-    public static final boolean FIREWORKS_DEFAULT = true;
+    private static final int[] PRESET_SIZES = {15, 25, 40};
     private static final float RAINBOW_STRENGTH = 0.22f;
 
     private static final Color BG_TOP = new Color(3, 5, 22);
@@ -40,10 +38,10 @@ public class VictoryView extends JPanel {
     private final GameView showcase;
     private boolean rainbowFilter;
     private boolean fireworksEnabled;
+    private final boolean keysEnabled;
     private final List<Firework> fireworks = new ArrayList<>();
     private BufferedImage frame;
 
-    private double yaw = 0.0, spin = SPIN_SPEED;
     private double timeSec = 0;
     private long lastNanos = System.nanoTime();
 
@@ -52,19 +50,18 @@ public class VictoryView extends JPanel {
     private final StyledButton exitButton = new StyledButton(currentStyle, "exit");
 
     private final Timer animationTimer;
-    private int viewportX, viewportY, ticks;
+    private int viewportX, viewportY;
     private double scale = 1.0;
     //endregion
 
     //region Constructors
-    public VictoryView(long elapsedSeconds) {
-        this(elapsedSeconds, SaveData.load().victoryRainbow, SaveData.load().victoryFireworks);
-    }
-    public VictoryView(long elapsedSeconds, boolean rainbowFilter) { this(elapsedSeconds, rainbowFilter, FIREWORKS_DEFAULT); }
-    public VictoryView(long elapsedSeconds, boolean rainbowFilter, boolean fireworksEnabled) {
+    public VictoryView(long elapsedSeconds) { this(elapsedSeconds, -1, -1, true); }
+    public VictoryView(long elapsedSeconds, int width, int height, boolean customMap) {
         this.elapsedSeconds = elapsedSeconds;
-        this.rainbowFilter = rainbowFilter;
-        this.fireworksEnabled = fireworksEnabled;
+        int preset = presetIndex(width, height);
+        this.keysEnabled = customMap || preset < 0;
+        this.rainbowFilter = !keysEnabled && (preset == 0 || preset == 2);
+        this.fireworksEnabled = !keysEnabled && (preset == 1 || preset == 2);
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setLayout(null);
         setBackground(BG_BOTTOM);
@@ -86,8 +83,10 @@ public class VictoryView extends JPanel {
         animationTimer = new Timer(16, e -> { tick(); repaint(); });
         animationTimer.start();
 
-        bindKey(KeyEvent.VK_R, "toggleRainbow", () -> { this.rainbowFilter = !this.rainbowFilter; saveEffects(); });
-        bindKey(KeyEvent.VK_F, "toggleFireworks", () -> { this.fireworksEnabled = !this.fireworksEnabled; saveEffects(); });
+        if (keysEnabled) {
+            bindKey(KeyEvent.VK_R, "toggleRainbow", () -> this.rainbowFilter = !this.rainbowFilter);
+            bindKey(KeyEvent.VK_F, "toggleFireworks", () -> this.fireworksEnabled = !this.fireworksEnabled);
+        }
 
         updateLayout();
         addComponentListener(new java.awt.event.ComponentAdapter() {
@@ -105,10 +104,10 @@ public class VictoryView extends JPanel {
         });
     }
 
-    private void saveEffects() {
-        try {
-            SaveData.saveVictoryEffects(this.rainbowFilter, this.fireworksEnabled);
-        } catch (IOException ignored) { }
+    private static int presetIndex(int width, int height) {
+        for (int i = 0; i < PRESET_SIZES.length; i++)
+            if (width == PRESET_SIZES[i] && height == PRESET_SIZES[i]) return i;
+        return -1;
     }
 
     private static int[][] buildRoomMap() {
@@ -120,9 +119,8 @@ public class VictoryView extends JPanel {
     }
 
     private GameView createShowcase() {
-        try {
-            return new GameView(buildRoomMap());
-        } catch (IOException e) {
+        try { return new GameView(buildRoomMap()); }
+        catch (IOException e) {
             e.printStackTrace();
             return null;
         }
@@ -137,7 +135,7 @@ public class VictoryView extends JPanel {
         if (showcase != null) showcase.releaseShowcase();
         super.removeNotify();
     }
-    //endregion/
+    //endregion
 
     //region Other
     @Override protected void paintComponent(Graphics g) {
@@ -224,14 +222,12 @@ public class VictoryView extends JPanel {
     }
 
     private void tick() {
-        ticks++;
         long now = System.nanoTime();
         double elapsed = (now - lastNanos) / 1e9;
         lastNanos = now;
         timeSec += elapsed;
 
-        spin = SPIN_SPEED + SPIN_WOBBLE * Math.sin(0.5 * timeSec);
-        yaw = SPIN_SPEED * timeSec + SPIN_WOBBLE * (1.0 - Math.cos(0.5 * timeSec)) / 0.5;
+        double yaw = SPIN_SPEED * timeSec + SPIN_WOBBLE * (1.0 - Math.cos(0.5 * timeSec)) / 0.5;
 
         if (showcase != null) {
             showcase.setShowcaseCamera(PLAYER_X, PLAYER_Y, yaw, 0.0, EYE_HEIGHT);
