@@ -108,6 +108,16 @@ public final class SaveData {
                         try { data.mapGeometryMode = Math.max(0, Integer.parseInt(value)); } catch (NumberFormatException ignored) { }
                     }
                 }
+                else if (section.equals("victory")) {
+                    int eq = line.indexOf('=');
+                    if (eq <= 0) continue;
+                    String key = line.substring(0, eq).trim();
+                    String value = line.substring(eq + 1).trim();
+                    switch (key) {
+                        case "rainbow" -> data.victoryRainbow = Boolean.parseBoolean(value);
+                        case "fireworks" -> data.victoryFireworks = Boolean.parseBoolean(value);
+                    }
+                }
                 else if (section.equals("portals")) {
                     String[] values = line.split("[,;\\s]+");
                     if (values.length != 9 && values.length != 11 && values.length != 12) { portalsValid = false; continue; }
@@ -171,6 +181,12 @@ public final class SaveData {
         data.mazeFog = fog;
         save(data);
     }
+    public static void saveVictoryEffects(boolean rainbow, boolean fireworks) throws IOException {
+        Data data = load();
+        data.victoryRainbow = rainbow;
+        data.victoryFireworks = fireworks;
+        save(data);
+    }
     public static void saveMap(int[][][] floors, List<int[]> portalLinks, int geometryMode, String language, Style theme, double renderScale) throws IOException {
         Data data = load();
         data.language = language;
@@ -212,6 +228,10 @@ public final class SaveData {
 
             writer.write("[mapmeta]"); writer.newLine();
             writer.write("geometry=" + data.mapGeometryMode); writer.newLine(); writer.newLine();
+
+            writer.write("[victory]"); writer.newLine();
+            writer.write("rainbow=" + data.victoryRainbow); writer.newLine();
+            writer.write("fireworks=" + data.victoryFireworks); writer.newLine(); writer.newLine();
 
             if (data.mapFloors != null && data.mapFloors.length > 0) {
                 for (int f = 0; f < data.mapFloors.length; f++) {
@@ -285,6 +305,8 @@ public final class SaveData {
         public boolean maze3D = false;
         public int mazeFloors = DEFAULT_MAZE_FLOORS;
         public boolean mazeFog = false;
+        public boolean victoryRainbow = true;
+        public boolean victoryFireworks = true;
     }
     //endregion
 }

@@ -3,6 +3,8 @@ import Helpers.*;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.awt.geom.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -12,7 +14,7 @@ import java.util.Random;
 
 public class VictoryView extends JPanel {
     //region Variables
-    private static final double SPIN_SPEED = 5;
+    private static final double SPIN_SPEED = 0.4;
     private static final double SPIN_WOBBLE = 0.0;
     private static final double EYE_HEIGHT = 0.5;
     private static final double PLAYER_X = 2.5, PLAYER_Y = 2.5;
@@ -36,8 +38,8 @@ public class VictoryView extends JPanel {
     private final Random random = new Random();
 
     private final GameView showcase;
-    private final boolean rainbowFilter;
-    private final boolean fireworksEnabled;
+    private boolean rainbowFilter;
+    private boolean fireworksEnabled;
     private final List<Firework> fireworks = new ArrayList<>();
     private BufferedImage frame;
 
@@ -55,7 +57,9 @@ public class VictoryView extends JPanel {
     //endregion
 
     //region Constructors
-    public VictoryView(long elapsedSeconds) { this(elapsedSeconds, RAINBOW_FILTER_DEFAULT, FIREWORKS_DEFAULT); }
+    public VictoryView(long elapsedSeconds) {
+        this(elapsedSeconds, SaveData.load().victoryRainbow, SaveData.load().victoryFireworks);
+    }
     public VictoryView(long elapsedSeconds, boolean rainbowFilter) { this(elapsedSeconds, rainbowFilter, FIREWORKS_DEFAULT); }
     public VictoryView(long elapsedSeconds, boolean rainbowFilter, boolean fireworksEnabled) {
         this.elapsedSeconds = elapsedSeconds;
@@ -82,10 +86,29 @@ public class VictoryView extends JPanel {
         animationTimer = new Timer(16, e -> { tick(); repaint(); });
         animationTimer.start();
 
+        bindKey(KeyEvent.VK_R, "toggleRainbow", () -> { this.rainbowFilter = !this.rainbowFilter; saveEffects(); });
+        bindKey(KeyEvent.VK_F, "toggleFireworks", () -> { this.fireworksEnabled = !this.fireworksEnabled; saveEffects(); });
+
         updateLayout();
         addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override public void componentResized(java.awt.event.ComponentEvent e) { updateLayout(); }
         });
+    }
+
+    private void bindKey(int keyCode, String name, Runnable action) {
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(keyCode, 0), name);
+        getActionMap().put(name, new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) {
+                action.run();
+                repaint();
+            }
+        });
+    }
+
+    private void saveEffects() {
+        try {
+            SaveData.saveVictoryEffects(this.rainbowFilter, this.fireworksEnabled);
+        } catch (IOException ignored) { }
     }
 
     private static int[][] buildRoomMap() {
@@ -215,7 +238,7 @@ public class VictoryView extends JPanel {
             frame = showcase.renderShowcaseFrame();
         }
 
-        if (fireworksEnabled) updateFireworks();
+        updateFireworks();
     }
 
     private void updateFireworks() {
