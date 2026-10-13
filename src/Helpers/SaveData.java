@@ -14,8 +14,8 @@ public final class SaveData {
     public static final Style DEFAULT_THEME = Style.FLAT;
     public static final double DEFAULT_RENDER_SCALE = 1.0;
     public static final boolean DEFAULT_VSYNC = false;
-    public static final boolean DEFAULT_RAY_TRACING = false;
-    public static final int DEFAULT_RAY_TRACING_QUALITY = 1;
+    public static final int DEFAULT_RENDER_ENGINE_QUALITY = 1;
+    public static final int DEFAULT_RENDER_ENGINE = 0;
     public static final int DEFAULT_WINDOW_WIDTH = 960;
     public static final int DEFAULT_WINDOW_HEIGHT = 540;
     public static final boolean DEFAULT_FULLSCREEN = false;
@@ -43,6 +43,7 @@ public final class SaveData {
             Map<Integer, int[][]> floorRows = new TreeMap<>();
             List<int[]> portalLinks = new ArrayList<>();
             boolean portalsValid = true;
+            boolean engineSet = false;
 
             for (String raw : lines) {
                 String line = raw.trim();
@@ -74,8 +75,8 @@ public final class SaveData {
                                 if (scale >= 0.1 && scale <= 1.0) data.renderScale = scale;
                             }
                             case "vsync" -> data.vsync = Boolean.parseBoolean(value);
-                            case "rayTracing" -> data.rayTracing = Boolean.parseBoolean(value);
-                            case "rayTracingQuality" -> data.rayTracingQuality = Math.clamp(Integer.parseInt(value), 0, 2);
+                            case "renderEngine" -> { data.renderEngine = Math.clamp(Integer.parseInt(value), 0, 3); engineSet = true; }
+                            case "renderEngineQuality" -> data.renderEngineQuality = Math.clamp(Integer.parseInt(value), 0, 2);
                             case "windowWidth" -> { int w = Integer.parseInt(value); if (w >= 960) data.windowWidth = w; }
                             case "windowHeight" -> { int h = Integer.parseInt(value); if (h >= 540) data.windowHeight = h; }
                             case "fullscreen" -> data.fullscreen = Boolean.parseBoolean(value);
@@ -145,6 +146,7 @@ public final class SaveData {
             if (readingMap && !rows.isEmpty() && legacyMapValid) data.map = rows.toArray(new int[0][]);
             if (readingFloor && !rows.isEmpty()) floorRows.put(readingFloorIndex, rows.toArray(new int[0][]));
 
+            if (!engineSet) data.renderEngine = 1;
             if (!floorRows.isEmpty()) {
                 data.mapFloors = new int[floorRows.size()][][];
                 int i = 0;
@@ -157,14 +159,14 @@ public final class SaveData {
         } catch (IOException ignored) { }
         return data;
     }
-    public static void saveSettings(String language, Style theme, double renderScale, boolean vsync, boolean rayTracing, int rayTracingQuality, int windowWidth, int windowHeight, boolean fullscreen) throws IOException {
+    public static void saveSettings(String language, Style theme, double renderScale, boolean vsync, int renderEngine, int renderEngineQuality, int windowWidth, int windowHeight, boolean fullscreen) throws IOException {
         Data data = load();
         data.language = language;
         data.theme = theme;
         data.renderScale = renderScale;
         data.vsync = vsync;
-        data.rayTracing = rayTracing;
-        data.rayTracingQuality = Math.clamp(rayTracingQuality, 0, 2);
+        data.renderEngine = Math.clamp(renderEngine, 0, 3);
+        data.renderEngineQuality = Math.clamp(renderEngineQuality, 0, 2);
         data.windowWidth = windowWidth >= 960 ? windowWidth : DEFAULT_WINDOW_WIDTH;
         data.windowHeight = windowHeight >= 540 ? windowHeight : DEFAULT_WINDOW_HEIGHT;
         data.fullscreen = fullscreen;
@@ -179,12 +181,6 @@ public final class SaveData {
         data.maze3D = mode3D;
         data.mazeFloors = Math.clamp(floors, 2, 20);
         data.mazeFog = fog;
-        save(data);
-    }
-    public static void saveVictoryEffects(boolean rainbow, boolean fireworks) throws IOException {
-        Data data = load();
-        data.victoryRainbow = rainbow;
-        data.victoryFireworks = fireworks;
         save(data);
     }
     public static void saveMap(int[][][] floors, List<int[]> portalLinks, int geometryMode, String language, Style theme, double renderScale) throws IOException {
@@ -211,8 +207,8 @@ public final class SaveData {
             writer.write("theme=" + data.theme.name()); writer.newLine();
             writer.write("renderQuality=" + formatScale(data.renderScale)); writer.newLine();
             writer.write("vsync=" + data.vsync); writer.newLine();
-            writer.write("rayTracing=" + data.rayTracing); writer.newLine();
-            writer.write("rayTracingQuality=" + data.rayTracingQuality); writer.newLine();
+            writer.write("renderEngine=" + data.renderEngine); writer.newLine();
+            writer.write("renderEngineQuality=" + data.renderEngineQuality); writer.newLine();
             writer.write("windowWidth=" + data.windowWidth); writer.newLine();
             writer.write("windowHeight=" + data.windowHeight); writer.newLine();
             writer.write("fullscreen=" + data.fullscreen); writer.newLine(); writer.newLine();
@@ -290,8 +286,8 @@ public final class SaveData {
         public Style theme = DEFAULT_THEME;
         public double renderScale = DEFAULT_RENDER_SCALE;
         public boolean vsync = DEFAULT_VSYNC;
-        public boolean rayTracing = DEFAULT_RAY_TRACING;
-        public int rayTracingQuality = DEFAULT_RAY_TRACING_QUALITY;
+        public int renderEngineQuality = DEFAULT_RENDER_ENGINE_QUALITY;
+        public int renderEngine = DEFAULT_RENDER_ENGINE;
         public int windowWidth = DEFAULT_WINDOW_WIDTH;
         public int windowHeight = DEFAULT_WINDOW_HEIGHT;
         public boolean fullscreen = DEFAULT_FULLSCREEN;

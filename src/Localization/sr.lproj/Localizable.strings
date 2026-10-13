@@ -78,6 +78,15 @@
 "mm.fog_minimap" = "MAGLA-RATA MINI MAPA";
 "mm.size_summary" = "Lavirint %d × %d";
 "mm.size_summary_3d" = "Lavirint %d × %d · %d spratova";
+"mm.section_render" = "";
+"mm.engine_dda" = "";
+"mm.engine_rt" = "";
+"mm.engine_rm" = "";
+"mm.engine_rc" = "";
+"mm.quality_dda" = "";
+"mm.quality_rt" = "";
+"mm.quality_rm" = "";
+"mm.quality_rc" = "";
 
 // ---------- SETTINGS (st.) ----------
 "st.settings" = "Podešavanja";
@@ -90,8 +99,8 @@
 "st.graphics" = "Grafike";
 "st.render_scale" = "Kvalitet Crtanja";
 "st.resolution" = "Rezolucija";
-"st.ray_tracing" = "Rej Trejsing";
-"st.ray_tracing_quality" = "Kvalitet Rej Trejsinga";
+"st.render_engine" = "";
+"st.render_quality" = "";
 
 // ---------- INFO (if.) ----------
 "if.info" = "Info";

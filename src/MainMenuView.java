@@ -5,8 +5,7 @@ import StyleUI.*;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
-import java.awt.geom.AffineTransform;
-import java.awt.geom.Point2D;
+import java.awt.geom.*;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -162,10 +161,10 @@ public class MainMenuView extends JPanel implements MainMenuHost {
     @Override public void setRenderScale(double scale) { GameView.setRenderScale(scale); }
     @Override public boolean isVSyncEnabled() { return GameView.isVSyncEnabled(); }
     @Override public void setVSyncEnabled(boolean enabled) { GameView.setVSyncEnabled(enabled); }
-    @Override public boolean isRayTracingEnabled() { return GameView.isRayTracingEnabled(); }
-    @Override public void setRayTracingEnabled(boolean enabled) { GameView.setRayTracingEnabled(enabled); }
-    @Override public int getRayTracingQuality() { return GameView.getRayTracingQuality(); }
-    @Override public void setRayTracingQuality(int quality) { GameView.setRayTracingQuality(quality); }
+    @Override public int getRenderEngine() { return GameView.getRenderEngine(); }
+    @Override public void setRenderEngine(int engine) { GameView.setRenderEngine(engine); }
+    @Override public int getRenderEngineQuality() { return GameView.getRenderEngineQuality(); }
+    @Override public void setRenderEngineQuality(int quality) { GameView.setRenderEngineQuality(quality); }
     //endregion
 
     //region Screens
@@ -223,15 +222,15 @@ public class MainMenuView extends JPanel implements MainMenuHost {
         frame.repaint();
     }
     private void saveSettings(String language, Style style) {
-        try { SaveData.saveSettings(language, style, GameView.getRenderScale(), GameView.isVSyncEnabled(), GameView.isRayTracingEnabled(), GameView.getRayTracingQuality(), windowWidth, windowHeight, fullscreen); }
+        try { SaveData.saveSettings(language, style, GameView.getRenderScale(), GameView.isVSyncEnabled(), GameView.getRenderEngine(), GameView.getRenderEngineQuality(), windowWidth, windowHeight, fullscreen); }
         catch (IOException ex) { ex.printStackTrace(); }
     }
     private void applySavedSettings() {
         SaveData.Data savedData = SaveData.load();
         GameView.setRenderScale(savedData.renderScale);
         GameView.setVSyncEnabled(savedData.vsync);
-        GameView.setRayTracingEnabled(savedData.rayTracing);
-        GameView.setRayTracingQuality(savedData.rayTracingQuality);
+        GameView.setRenderEngine(savedData.renderEngine);
+        GameView.setRenderEngineQuality(savedData.renderEngineQuality);
         NSLocalizedString.setLanguage(savedData.language);
         windowWidth = savedData.windowWidth;
         windowHeight = savedData.windowHeight;

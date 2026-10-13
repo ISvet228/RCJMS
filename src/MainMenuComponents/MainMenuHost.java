@@ -19,8 +19,8 @@ public interface MainMenuHost {
     void setRenderScale(double scale);
     boolean isVSyncEnabled();
     void setVSyncEnabled(boolean enabled);
-    boolean isRayTracingEnabled();
-    void setRayTracingEnabled(boolean enabled);
-    int getRayTracingQuality();
-    void setRayTracingQuality(int quality);
+    int getRenderEngine();
+    void setRenderEngine(int engine);
+    int getRenderEngineQuality();
+    void setRenderEngineQuality(int quality);
 }

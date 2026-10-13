@@ -16,17 +16,21 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     private static final String[] THEME_KEYS = {"st.flat", "st.neumorphic", "st.glass"};
     private static final String[] RENDER_SCALE_NAMES = {"100%", "75%", "50%", "10%"};
     private static final double[] RENDER_SCALES = {1.0, 0.75, 0.5, 0.1};
+    private static final String[] ENGINE_NAMES = {"DDA", "Ray Tracing", "Ray Marching", "Ray Casting"};
+    private static final String[] ENGINE_HINT_KEYS = {"mm.engine_dda", "mm.engine_rt", "mm.engine_rm", "mm.engine_rc"};
     private static final String[] QUALITY_KEYS = {"mm.quality_low", "mm.quality_medium", "mm.quality_high"};
+    private static final String[] QUALITY_HINT_KEYS = {"mm.quality_dda", "mm.quality_rt", "mm.quality_rm", "mm.quality_rc"};
     private static final int RESOLUTION_STEPS = 4, STEP_WIDTH = 480, STEP_HEIGHT = 270;
     private final int[][] resolutions = buildResolutions();
     private final String[] resolutionNames = buildResolutionNames();
 
     private final ButtonGroup themeGroup = new ButtonGroup();
     private final StyledToggleButton[] themeButtons = new StyledToggleButton[THEMES.length];
-    private final StyledComboBox languageBox, renderScaleBox, resolutionBox, qualityBox;
-    private final StyledToggle fullscreenToggle, vsyncToggle, rayTracingToggle;
+    private final StyledComboBox languageBox, renderScaleBox, resolutionBox, engineBox, qualityBox;
+    private final StyledToggle fullscreenToggle, vsyncToggle;
     private final StyledLabel heading, sectionInterface, languageCaption, themeCaption, sectionDisplay, vsyncHint;
-    private final StyledLabel resolutionCaption, resolutionHint, scaleCaption, scaleHint, sectionLighting, rayTracingHint, qualityCaption;
+    private final StyledLabel resolutionCaption, resolutionHint, scaleCaption, scaleHint, sectionRender;
+    private final StyledLabel engineCaption, engineHint, qualityCaption, qualityHint;
     private final StyledButton backButton;
     private boolean syncing;
     //endregion
@@ -39,7 +43,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         heading = label("mm.settings", MainMenuCanvas.ACCENT);
         sectionInterface = label("mm.section_interface", MainMenuCanvas.ACCENT);
         sectionDisplay = label("mm.section_display", MainMenuCanvas.ACCENT);
-        sectionLighting = label("mm.section_lighting", MainMenuCanvas.ACCENT);
+        sectionRender = label("mm.section_render", MainMenuCanvas.ACCENT);
         languageCaption = label("st.language", MainMenuCanvas.TEXT);
         themeCaption = label("st.themes", MainMenuCanvas.TEXT);
         vsyncHint = label("mm.vsync_hint", MainMenuCanvas.MUTED);
@@ -47,16 +51,18 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         resolutionHint = label("mm.resolution_hint", MainMenuCanvas.MUTED);
         scaleCaption = label("st.render_scale", MainMenuCanvas.TEXT);
         scaleHint = label("mm.render_scale_hint", MainMenuCanvas.MUTED);
-        rayTracingHint = label("mm.rt_hint", MainMenuCanvas.MUTED);
-        qualityCaption = label("st.ray_tracing_quality", MainMenuCanvas.TEXT);
+        engineCaption = label("st.render_engine", MainMenuCanvas.TEXT);
+        engineHint = label(ENGINE_HINT_KEYS[0], MainMenuCanvas.MUTED);
+        qualityCaption = label("st.render_quality", MainMenuCanvas.TEXT);
+        qualityHint = label(QUALITY_HINT_KEYS[0], MainMenuCanvas.MUTED);
 
         languageBox = new StyledComboBox(style, LANGUAGE_NAMES);
         renderScaleBox = new StyledComboBox(style, RENDER_SCALE_NAMES);
         resolutionBox = new StyledComboBox(style, resolutionNames);
+        engineBox = new StyledComboBox(style, ENGINE_NAMES);
         qualityBox = new StyledComboBox(style, QUALITY_KEYS);
         fullscreenToggle = new StyledToggle(style, "st.fullscreen");
         vsyncToggle = new StyledToggle(style, "mm.vsync");
-        rayTracingToggle = new StyledToggle(style, "st.ray_tracing");
         backButton = button("mm.back");
         for (int i = 0; i < THEMES.length; i++) {
             themeButtons[i] = new StyledToggleButton(style, THEME_KEYS[i]);
@@ -70,11 +76,13 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         add(languageBox);
         add(themeCaption);
         for (StyledToggleButton themeButton : themeButtons) add(themeButton);
-        add(sectionLighting);
-        add(rayTracingToggle);
-        add(rayTracingHint);
+        add(sectionRender);
+        add(engineCaption);
+        add(engineBox);
+        add(engineHint);
         add(qualityCaption);
         add(qualityBox);
+        add(qualityHint);
         add(sectionDisplay);
         add(fullscreenToggle);
         add(vsyncToggle);
@@ -104,9 +112,10 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             resolutionBox.setEnabled(!menu.isFullscreen());
             renderScaleBox.setSelectedIndex(renderScaleIndex(menu.getRenderScale()));
             vsyncToggle.setSelected(menu.isVSyncEnabled());
-            rayTracingToggle.setSelected(menu.isRayTracingEnabled());
-            qualityBox.setSelectedIndex(menu.getRayTracingQuality());
-            qualityBox.setEnabled(menu.isRayTracingEnabled());
+            int engine = Math.clamp(menu.getRenderEngine(), 0, ENGINE_NAMES.length - 1);
+            engineBox.setSelectedIndex(engine);
+            qualityBox.setSelectedIndex(menu.getRenderEngineQuality());
+            updateEngineHints(engine);
         } finally {
             syncing = false;
         }
@@ -130,11 +139,14 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         themeButtons[1].setStyle(Style.NEUMORPHIC);
         themeButtons[2].setStyle(Style.GLASS);
         for (int i = 0; i < themeButtons.length; i++) canvas.place(themeButtons[i], 150 + i * 106, 216, 98, 36);
-        canvas.text(sectionLighting, 13, 150, 276, 310, 20);
-        canvas.place(rayTracingToggle, 150, 304, 310, 34);
-        canvas.text(rayTracingHint, 12, 150, 342, 310, 18);
-        canvas.text(qualityCaption, 13, 150, 372, 310, 18);
-        canvas.combo(qualityBox, 150, 392, 310, 36);
+
+        canvas.text(sectionRender, 13, 150, 276, 310, 20);
+        canvas.text(engineCaption, 13, 150, 302, 310, 18);
+        canvas.combo(engineBox, 150, 322, 310, 36);
+        canvas.text(engineHint, 12, 150, 362, 310, 18);
+        canvas.text(qualityCaption, 13, 150, 388, 310, 18);
+        canvas.combo(qualityBox, 150, 408, 310, 36);
+        canvas.text(qualityHint, 12, 150, 448, 310, 18);
 
         canvas.text(sectionDisplay, 13, 500, 96, 310, 20);
         canvas.place(fullscreenToggle, 500, 124, 310, 34);
@@ -184,19 +196,26 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
                 menu.saveSettings();
             }
         });
-        rayTracingToggle.addActionListener(e -> {
-            boolean enabled = rayTracingToggle.isSelected();
-            menu.setRayTracingEnabled(enabled);
-            qualityBox.setEnabled(enabled);
-            menu.saveSettings();
+        engineBox.addActionListener(e -> {
+            int index = engineBox.getSelectedIndex();
+            if (!syncing && index >= 0 && index < ENGINE_NAMES.length) {
+                menu.setRenderEngine(index);
+                updateEngineHints(index);
+                menu.saveSettings();
+            }
         });
         qualityBox.addActionListener(e -> {
-            if (!syncing && qualityBox.isEnabled()) {
-                menu.setRayTracingQuality(qualityBox.getSelectedIndex());
+            int index = qualityBox.getSelectedIndex();
+            if (!syncing && index >= 0 && index < QUALITY_KEYS.length) {
+                menu.setRenderEngineQuality(index);
                 menu.saveSettings();
             }
         });
         backButton.addActionListener(e -> menu.showMain());
+    }
+    private void updateEngineHints(int engine) {
+        engineHint.setLocalizationKey(ENGINE_HINT_KEYS[engine]);
+        qualityHint.setLocalizationKey(QUALITY_HINT_KEYS[engine]);
     }
     private static int languageIndexFor(String code) {
         if (code == null) return 0;

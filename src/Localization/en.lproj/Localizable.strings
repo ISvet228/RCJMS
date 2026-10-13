@@ -78,6 +78,15 @@
 "mm.fog_minimap" = "FOG-OF-WAR MINIMAP";
 "mm.size_summary" = "Maze %d × %d";
 "mm.size_summary_3d" = "Maze %d × %d · %d floors";
+"mm.section_render" = "RENDERING";
+"mm.engine_dda" = "Fast grid stepping. Default.";
+"mm.engine_rt" = "Lighting and reflections. Slower.";
+"mm.engine_rm" = "Distance-field tracing. Smooth edges. Slowest.";
+"mm.engine_rc" = "Plain fixed-step casting. Slow";
+"mm.quality_dda" = "Low: flat floors. High: smooth textures.";
+"mm.quality_rt" = "Resolution 35 / 50 / 100%. No reflections on Low.";
+"mm.quality_rm" = "Steps: 48 / 96 / 160.";
+"mm.quality_rc" = "Step 0.15 / 0.08 / 0.04 cells.";
 
 // ---------- SETTINGS (st.) ----------
 "st.settings" = "Settings";
@@ -90,8 +99,8 @@
 "st.graphics" = "Graphics";
 "st.render_scale" = "Render scale";
 "st.resolution" = "Resolution";
-"st.ray_tracing" = "Ray Tracing";
-"st.ray_tracing_quality" = "Ray Tracing Quality";
+"st.render_engine" = "Render engine";
+"st.render_quality" = "Quality";
 
 // ---------- INFO (if.) ----------
 "if.info" = "Info";

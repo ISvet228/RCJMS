@@ -1,6 +1,5 @@
+import Helpers.*;
 import EditorUI.*;
-import Helpers.AppPaths;
-import Helpers.SaveData;
 import StyleUI.*;
 
 import javax.imageio.ImageIO;
@@ -10,8 +9,7 @@ import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.RoundRectangle2D;
-import java.awt.image.BufferedImage;
-import java.awt.image.DataBufferInt;
+import java.awt.image.*;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
@@ -790,19 +788,6 @@ public class TextureEditorView extends JPanel {
     private enum Tool {BRUSH, ERASER, FILL, PICK}
     private record Snapshot(int mode, int[][] data) {}
 
-    public static final class RuntimeTexture {
-        public final int width, height;
-        public final int[] pixels;
-
-        private RuntimeTexture(int width, int height, int[] pixels) { this.width = width; this.height = height; this.pixels = pixels; }
-        static RuntimeTexture empty() { return new RuntimeTexture(0, 0, new int[0]); }
-        int[][] toMatrix() {
-            if (width == 0 || height == 0) return new int[0][0];
-            int[][] result = new int[height][width];
-            for (int y = 0; y < height; y++) System.arraycopy(pixels, y * width, result[y], 0, width);
-            return result;
-        }
-    }
 
     private final class ModeTab extends JComponent {
         private final TextureMode tabMode;
