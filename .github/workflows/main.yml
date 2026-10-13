@@ -13,24 +13,10 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.platform }}
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: Windows
-            os: windows-latest
-            archive: RCJMS-With-JDK-Windows.zip
-
-          - platform: Linux
-            os: ubuntu-latest
-            archive: RCJMS-With-JDK-Linux.zip
-
-          - platform: macOS
-            os: macos-15
-            archive: RCJMS-With-JDK-macOS.zip
+    name: Build Windows
+    runs-on: windows-latest
+    env:
+      ARCHIVE: RCJMS-With-JDK-Windows.zip
 
     steps:
       - name: Checkout
@@ -94,38 +80,19 @@ jobs:
             --dest dist
 
       - name: Create Windows archive
-        if: matrix.platform == 'Windows'
         shell: bash
         run: |
           test -d dist/RCJMS
           cd dist/RCJMS
-          7z a "../../${{ matrix.archive }}" .
-
-      - name: Create macOS archive
-        if: matrix.platform == 'macOS'
-        shell: bash
-        run: |
-          test -d dist/RCJMS.app
-          ditto -c -k --sequesterRsrc --keepParent \
-            dist/RCJMS.app \
-            "${{ matrix.archive }}"
-
-      - name: Create Linux archive
-        if: matrix.platform == 'Linux'
-        shell: bash
-        run: |
-          test -d dist/RCJMS
-          cd dist/RCJMS
-          zip -r "../../${{ matrix.archive }}" .
+          7z a "../../${{ env.ARCHIVE }}" .
 
       - name: Upload portable build
         uses: actions/upload-artifact@v5
         with:
-          name: RCJMS-With-JDK-${{ matrix.platform }}
-          path: ${{ matrix.archive }}
+          name: RCJMS-With-JDK-Windows
+          path: ${{ env.ARCHIVE }}
 
       - name: Upload JAR
-        if: matrix.platform == 'Linux'
         uses: actions/upload-artifact@v5
         with:
           name: RCJMS-JAR
@@ -149,8 +116,36 @@ jobs:
           ls -lah artifacts
           test -f artifacts/RCJMS.jar
           test -f artifacts/RCJMS-With-JDK-Windows.zip
-          test -f artifacts/RCJMS-With-JDK-Linux.zip
-          test -f artifacts/RCJMS-With-JDK-macOS.zip
+
+      - name: Delete existing release and tag (if any)
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const tag = 'Complete-Ver';
+            const { owner, repo } = context.repo;
+            // Try to find existing release by tag and delete it
+            try {
+              const rel = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              await github.rest.repos.deleteRelease({ owner, repo, release_id: rel.data.id });
+              console.log(`Deleted existing release id=${rel.data.id} (tag=${tag})`);
+            } catch (e) {
+              if (e.status === 404) {
+                console.log(`No existing release with tag ${tag}`);
+              } else {
+                throw e;
+              }
+            }
+            // Try to delete the git tag ref as well (ignore if absent)
+            try {
+              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
+              console.log(`Deleted git tag refs/tags/${tag}`);
+            } catch (e) {
+              if (e.status === 422 || e.status === 404) {
+                console.log(`Tag refs/tags/${tag} not found or already deleted`);
+              } else {
+                throw e;
+              }
+            }
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -163,7 +158,5 @@ jobs:
           files: |
             artifacts/RCJMS.jar
             artifacts/RCJMS-With-JDK-Windows.zip
-            artifacts/RCJMS-With-JDK-Linux.zip
-            artifacts/RCJMS-With-JDK-macOS.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
