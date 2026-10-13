@@ -273,8 +273,9 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     public void releaseShowcase() { renderWorkers.shutdown(); }
     private void copyRenderBuffer() {
-        if (renderScale == 1.0) System.arraycopy(renderPixels, 0, pixels, 0, pixels.length);
-        else {
+        if (renderWidth == bufferedImage.getWidth() && renderHeight == bufferedImage.getHeight()) {
+            System.arraycopy(renderPixels, 0, pixels, 0, pixels.length);
+        } else {
             Graphics2D g2d = bufferedImage.createGraphics();
             g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
             g2d.drawImage(renderImage, 0, 0, RCJMS.GAME_WIDTH, RCJMS.GAME_HEIGHT, null);
