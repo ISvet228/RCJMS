@@ -54,9 +54,9 @@
 "mm.new_game" = "NOVA IGRA";
 "mm.play_hint" = "Izaberi veličinu i započni. Sve ostalo je opciono.";
 "mm.size" = "VELIČINA";
-"mm.size_small" = "MALI";
-"mm.size_medium" = "SREDNJI";
-"mm.size_large" = "VELIKI";
+"mm.size_small" = "MALA";
+"mm.size_medium" = "SREDNJA";
+"mm.size_large" = "VELIKA";
 "mm.seed_hint" = "Isto seme, isti lavirint. Ostavi prazno za nasumično generisan lavirint";
 "mm.advanced" = "NAPREDNE OPCIJE";
 "mm.finish_position" = "POZICIJA CILJA";
@@ -78,15 +78,15 @@
 "mm.fog_minimap" = "MAGLA-RATA MINI MAPA";
 "mm.size_summary" = "Lavirint %d × %d";
 "mm.size_summary_3d" = "Lavirint %d × %d · %d spratova";
-"mm.section_render" = "";
-"mm.engine_dda" = "";
-"mm.engine_rt" = "";
-"mm.engine_rm" = "";
-"mm.engine_rc" = "";
-"mm.quality_dda" = "";
-"mm.quality_rt" = "";
-"mm.quality_rm" = "";
-"mm.quality_rc" = "";
+"mm.section_render" = "CRTANJE";
+"mm.engine_dda" = "Brzo prelaženje ćelija. Podrazumevano.";
+"mm.engine_rt" = "Osvetljenje i odrazi. Sporije.";
+"mm.engine_rm" = "Iscrtavanje bazirano na udaljenosti. Glatke ivice. Najsporije.";
+"mm.engine_rc" = "Povlačenje po fiksnom koraku. Sporo.";
+"mm.quality_dda" = "Nizak: ravan pod. Visok: glatke teksture.";
+"mm.quality_rt" = "Rezolucija 35 / 50 / 100%. Nema odraza na niskom kvalitetu.";
+"mm.quality_rm" = "Koraci: 48 / 96 / 160.";
+"mm.quality_rc" = "Koračanje po 0.15 / 0.08 / 0.04 ćelija.";
 
 // ---------- SETTINGS (st.) ----------
 "st.settings" = "Podešavanja";
@@ -97,10 +97,10 @@
 "st.glass" = "Stakleni";
 "st.fullscreen" = "Pun Ekran";
 "st.graphics" = "Grafike";
-"st.render_scale" = "Kvalitet Crtanja";
+"st.render_scale" = "Skala Iscrtavanja";
 "st.resolution" = "Rezolucija";
-"st.render_engine" = "";
-"st.render_quality" = "";
+"st.render_engine" = "Algoritam Crtanja";
+"st.render_quality" = "Kvalitet Crtanja";
 
 // ---------- INFO (if.) ----------
 "if.info" = "Info";
