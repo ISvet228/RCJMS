@@ -3,7 +3,7 @@ package GameViewComponents;
 import Helpers.*;
 
 public final class RayMarchingEngine  extends RenderEngineBase {
-    private  static final double RM_HIT = 0.01, RM_STEP_SCALE = 0.8, RM_MAX_DISTANCE = 48, RM_MIN_STEP = 0.01;
+    private  static final double RM_HIT = 0.001, RM_STEP_SCALE = 0.8, RM_MAX_DISTANCE = 48, RM_MIN_STEP = 0.001;
 
     public void renderRayMarching() {
         if (RenderEngineConfig.GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG) { renderRayMarchingHyp(); return; }
@@ -137,6 +137,7 @@ public final class RayMarchingEngine  extends RenderEngineBase {
         addColumnSegment(c, 0, s);
         double dist = 0;
         boolean inFinish = false;
+        double prevWall = Double.POSITIVE_INFINITY;
         int i = 0;
         for (; i < maxSteps && dist < maxDistance; i++) {
             int[][] m = s.map;
@@ -145,16 +146,19 @@ public final class RayMarchingEngine  extends RenderEngineBase {
             if (cx < 0 || cy < 0 || cx >= m[0].length || cy >= m.length) { c.exitD = dist; return; }
             if (m[cy][cx] == MazeGenerator.PORTAL && enterPortal(s, cx, cy)) {
                 addColumnSegment(c, dist, s);
+                prevWall = s.field.wallAt(s.x, s.y);
                 continue;
             }
             double dWall = field.wallAt(s.x, s.y);
+            boolean approaching = dWall < prevWall;
+            prevWall = dWall;
             double dFinish = field.hasFinish ? field.finishAt(s.x, s.y) : Double.MAX_VALUE;
-            if (dWall < RM_HIT) {
+            if (dWall < RM_HIT && dist > RM_HIT && approaching) {
                 resolveWallFace(s);
                 c.wallDist = dist; c.wallTexU = s.hitU; c.wallSide = s.hitSide;
                 return;
             }
-            if (dFinish < RM_HIT) {
+            if (dFinish < RM_HIT && dist > RM_HIT) {
                 if (!inFinish && c.finCount < ColumnRay.MAX_FIN) {
                     resolveWallFace(s);
                     int k = c.finCount++;
@@ -164,6 +168,7 @@ public final class RayMarchingEngine  extends RenderEngineBase {
             }
             else inFinish = false;
             double step = Math.clamp(Math.min(dWall, dFinish) * RM_STEP_SCALE, RM_MIN_STEP, 0.5);
+            if (dWall < RM_HIT) step = Math.max(step, 4 * RM_HIT);
             if (field.hasPortals) step = Math.min(step, portalStepLimit(m, s.x, s.y, s.dx, s.dy) + 1e-7);
             s.x += s.dx * step;
             s.y += s.dy * step;
@@ -190,12 +195,12 @@ public final class RayMarchingEngine  extends RenderEngineBase {
             SDFField field = s.field;
             double dWall = field.wallAt(s.x, s.y);
             double dFinish = field.hasFinish ? field.finishAt(s.x, s.y) : Double.MAX_VALUE;
-            if (dWall < RM_HIT) {
+            if (dWall < RM_HIT && s.dist > RM_HIT) {
                 s.hitKind = HIT_WALL; s.hitType = 1; s.hitDist = hypPerceivedOf(s);
                 resolveWallFace(s); setWallFraction(s);
                 return;
             }
-            if (dFinish < RM_HIT && s.z <= 0.5) {
+            if (dFinish < RM_HIT && s.z <= 0.5 && s.dist > RM_HIT) {
                 s.hitKind = HIT_WALL; s.hitType = 2; s.hitDist = hypPerceivedOf(s);
                 resolveWallFace(s); setWallFraction(s);
                 return;
@@ -215,6 +220,7 @@ public final class RayMarchingEngine  extends RenderEngineBase {
         SDFField field = s.field;
         double x = s.x, y = s.y, z = s.z, dx = s.dx, dy = s.dy, dz = s.dz, dist = s.dist;
         final double planeAbs = dist + (dz < 0 ? z / -dz : dz > 0 ? (1.0 - z) / dz : Double.POSITIVE_INFINITY);
+        double prevWall = Double.POSITIVE_INFINITY;
         int i = 0;
         for (; i < maxSteps && dist < maxDistance; i++) {
             int cx = (int) Math.floor(x), cy = (int) Math.floor(y);
@@ -224,17 +230,20 @@ public final class RayMarchingEngine  extends RenderEngineBase {
                 if (enterPortal(s, cx, cy)) {
                     x = s.x; y = s.y; z = s.z; dx = s.dx; dy = s.dy; dist = s.dist;
                     map = s.map; field = s.field;
+                    prevWall = field.wallAt(x, y);
                     continue;
                 }
             }
             double dWall = field.wallAt(x, y);
+            boolean approaching = dWall < prevWall;
+            prevWall = dWall;
             double dFinish = field.hasFinish ? field.finishAt(x, y) : Double.MAX_VALUE;
             if (z <= RM_HIT || 1.0 - z <= RM_HIT) {
                 storeMarch(s, x, y, z, dx, dy, dz, dist);
                 setPlaneHit(s, z <= RM_HIT ? HIT_FLOOR : HIT_CEIL);
                 return;
             }
-            if (dWall < RM_HIT) {
+            if (dWall < RM_HIT && dist > RM_HIT && approaching) {
                 storeMarch(s, x, y, z, dx, dy, dz, dist);
                 s.hitKind = HIT_WALL;
                 s.hitType = 1;
@@ -243,7 +252,7 @@ public final class RayMarchingEngine  extends RenderEngineBase {
                 setWallFraction(s);
                 return;
             }
-            if (dFinish < RM_HIT && z <= 0.5) {
+            if (dFinish < RM_HIT && z <= 0.5 && dist > RM_HIT) {
                 storeMarch(s, x, y, z, dx, dy, dz, dist);
                 s.hitKind = HIT_WALL;
                 s.hitType = 2;
@@ -256,6 +265,7 @@ public final class RayMarchingEngine  extends RenderEngineBase {
             double distance = Math.min(Math.min(dWall, dFinishBox), Math.min(z, 1.0 - z));
             double step = Math.clamp(distance * RM_STEP_SCALE, RM_MIN_STEP, 0.5);
             if (field.hasPortals) step = Math.min(step, portalStepLimit(map, x, y, dx, dy) + 1e-7);
+            if (dWall < RM_HIT) step = Math.max(step, 4 * RM_HIT);
             step = Math.min(step, planeAbs - dist);
             x += dx * step;
             y += dy * step;

@@ -9,7 +9,7 @@ import java.util.*;
 
 public final class SaveData {
     //region Variables
-    public static final String VERSION = "1.999";
+    public static final String VERSION = "2.3";
     public static final String DEFAULT_LANGUAGE = Locale.getDefault().getLanguage();
     public static final Style DEFAULT_THEME = Style.FLAT;
     public static final double DEFAULT_RENDER_SCALE = 1.0;

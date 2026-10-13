@@ -17,8 +17,6 @@ public final class SoftwareRayCastingEngine extends RenderEngineBase {
         ensureRaycastCaches(width, height);
         fillRowCaches(focal, halfHeight, pitchSin, pitchCos);
         final double[] rowInvA = rowInvACache, rowZA = rowZACache;
-        final double step = softwareRayCastStep();
-        final int maxSteps = (int) Math.ceil(RC_MAX_DISTANCE / step) + 1;
         final double lightDistance = effectiveFlashlightDistance(false);
         final int[][] baseMap = map;
         final PortalData basePortals = portals;
@@ -28,7 +26,7 @@ public final class SoftwareRayCastingEngine extends RenderEngineBase {
             for (int x = 0; x < width; x++) {
                 double lateral = cameraXCache[x] * planeLength * rowScale;
                 s.reset(playerX, playerY, cameraHeight, dirX - lateral * dirY, dirY + lateral * dirX, rowZ, baseMap, basePortals, null);
-                softwareMarch(s, step, RC_MAX_DISTANCE, maxSteps);
+                softwareMarchExact(s, RC_MAX_DISTANCE);
                 renderPixels[y * width + x] = s.hitKind == 0 ? ceilingBaseColor : shadeMarch(s, lightDistance);
             }
         });
@@ -66,11 +64,13 @@ public final class SoftwareRayCastingEngine extends RenderEngineBase {
         final double focal = height, horizon = height / 2.0 + cameraPitch * height / 2.0;
         final double step = softwareRayCastStep();
         final int[][] baseMap = map;
+        final double lightDistance = effectiveFlashlightDistance(true);
         parallelRange(0, height, y -> {
             RayState s = new RayState();
             for (int x = 0; x < width; x++) {
                 s.resetHyp(playerX, playerY, cameraHeight, hypPixelRay(cameraXCache[x], y + 0.5, dirX, dirY, focal, horizon), baseMap, null);
                 softwareMarchNaive(s, step, RC_MAX_DISTANCE);
+                renderPixels[y * width + x] = s.hitKind == 0 ? ceilingBaseColor : shadeMarch(s, lightDistance);
             }
         });
         copyRenderBuffer();
@@ -88,15 +88,18 @@ public final class SoftwareRayCastingEngine extends RenderEngineBase {
             int[][] m = s.map;
             double tX = ux > 0 ? (cx + 1 - s.x) / ux : ux < 0 ? (s.x - cx) / -ux : Double.POSITIVE_INFINITY;
             double tY = uy > 0 ? (cy + 1 - s.y) / uy : uy < 0 ? (s.y - cy) / -uy : Double.POSITIVE_INFINITY;
-            boolean alongX = tX <= tY;
-            double t = alongX ? tX : tY;
+            final boolean corner = Math.abs(tX - tY) <= 1e-9;
+            boolean alongX = tX < tY;
+            double t = Math.min(tX, tY);
             if (dist + t > maxDistance) { s.x += ux * (maxDistance - dist); s.y += uy * (maxDistance - dist); return; }
             s.x += ux * t; s.y += uy * t; dist += t;
-            if (alongX) cx += ux > 0 ? 1 : -1; else cy += uy > 0 ? 1 : -1;
+            if (corner) { cx += ux > 0 ? 1 : -1; cy += uy > 0 ? 1 : -1; alongX = true; }
+            else if (alongX) cx += ux > 0 ? 1 : -1; else cy += uy > 0 ? 1 : -1;
             if (cx < 0 || cy < 0 || cx >= m[0].length || cy >= m.length) { c.exitD = dist; return; }
             int type = m[cy][cx];
             if (type == MazeGenerator.PORTAL && enterPortal(s, cx, cy)) {
                 addColumnSegment(c, dist, s);
+                ux = s.dx; uy = s.dy;
                 cx = (int) Math.floor(s.x); cy = (int) Math.floor(s.y);
                 continue;
             }
@@ -147,65 +150,79 @@ public final class SoftwareRayCastingEngine extends RenderEngineBase {
             }
         }
     }
-    private void softwareMarch(RayState s, double step, double maxDistance, int maxSteps) {
+    private void softwareMarchExact(RayState s, double maxDistance) {
         s.hitKind = 0;
+        final double hl = Math.sqrt(s.dx * s.dx + s.dy * s.dy);
+        if (hl < 1e-9) {
+            double t = s.dz < 0 ? s.z / -s.dz : s.dz > 0 ? (1.0 - s.z) / s.dz : Double.POSITIVE_INFINITY;
+            if (!(t <= maxDistance)) return;
+            s.z = s.dz < 0 ? 0.0 : 1.0;
+            s.dist = t;
+            setPlaneHit(s, s.dz < 0 ? HIT_FLOOR : HIT_CEIL);
+            return;
+        }
+        final double scale = 1.0 / hl;
+        final double sigma = s.dz / hl;
+        final double maxH = maxDistance / scale;
+        double d = 0;
+        double zc = s.z;
         int cx = (int) Math.floor(s.x), cy = (int) Math.floor(s.y);
         int side = 0;
-        for (int i = 0; i < maxSteps && s.dist < maxDistance; i++) {
-            double px = s.x, py = s.y, pz = s.z;
-            double sx = s.dx * step, sy = s.dy * step, sz = s.dz * step;
-            double nxp = px + sx, nyp = py + sy, nzp = pz + sz;
-            int nx = (int) Math.floor(nxp), ny = (int) Math.floor(nyp);
-            if (nx < 0 || ny < 0 || nx >= s.map[0].length || ny >= s.map.length) return;
+        for (int guard = 0; guard < 8192 && d < maxH; guard++) {
+            final int[][] m = s.map;
+            if (cx < 0 || cy < 0 || cx >= m[0].length || cy >= m.length) return;
+            final double ux = s.dx / hl, uy = s.dy / hl;
+            double tX = ux > 0 ? (cx + 1 - s.x) / ux : ux < 0 ? (s.x - cx) / -ux : Double.POSITIVE_INFINITY;
+            double tY = uy > 0 ? (cy + 1 - s.y) / uy : uy < 0 ? (s.y - cy) / -uy : Double.POSITIVE_INFINITY;
+            final boolean corner = Math.abs(tX - tY) <= 1e-9;
+            boolean alongX = tX < tY;
+            double boundary = Math.min(tX, tY);
+            double seg = Math.min(boundary, maxH - d);
 
-            double tPlane = Double.POSITIVE_INFINITY;
-            int planeKind = 0;
-            if (nzp <= 0 && sz < 0) { tPlane = Math.clamp(-pz / sz, 0.0, 1.0); planeKind = HIT_FLOOR; }
-            else if (nzp >= 1.0 && sz > 0) { tPlane = Math.clamp((1.0 - pz) / sz, 0.0, 1.0); planeKind = HIT_CEIL; }
-
-            boolean crossed = nx != cx || ny != cy;
-            int wallSide = side;
-            double tWall = 1.0;
-            if (crossed) {
-                wallSide = nx != cx ? 0 : 1;
-                double boundary = wallSide == 0 ? (s.dx > 0 ? nx : nx + 1) : (s.dy > 0 ? ny : ny + 1);
-                double along = wallSide == 0 ? sx : sy;
-                tWall = Math.clamp((boundary - (wallSide == 0 ? px : py)) / along, 0.0, 1.0);
-            }
-
-            if (planeKind != 0 && tPlane <= tWall) {
-                s.x = px + sx * tPlane;
-                s.y = py + sy * tPlane;
-                s.z = planeKind == HIT_FLOOR ? 0.0 : 1.0;
-                s.dist += step * tPlane;
-                setPlaneHit(s, planeKind);
+            double tPlane = sigma < 0 ? zc / -sigma : sigma > 0 ? (1.0 - zc) / sigma : Double.POSITIVE_INFINITY;
+            if (tPlane <= seg) {
+                s.x += ux * tPlane; s.y += uy * tPlane;
+                s.z = sigma < 0 ? 0.0 : 1.0;
+                s.dist = (d + tPlane) * scale;
+                setPlaneHit(s, sigma < 0 ? HIT_FLOOR : HIT_CEIL);
                 return;
             }
 
-            s.x = px + sx * tWall;
-            s.y = py + sy * tWall;
-            s.z = pz + sz * tWall;
-            s.dist += step * tWall;
-            if (crossed) {
-                side = wallSide;
-                cx = nx;
-                cy = ny;
+            s.x += ux * seg; s.y += uy * seg;
+            zc += sigma * seg;
+            d += seg;
+            s.z = zc;
+            if (d >= maxH) return;
+
+            if (corner) {
+                cx += ux > 0 ? 1 : -1; cy += uy > 0 ? 1 : -1;
+                s.x = ux > 0 ? cx : cx + 1;
+                s.y = uy > 0 ? cy : cy + 1;
+                side = 0;
+            } else if (alongX) {
+                cx += ux > 0 ? 1 : -1; side = 0;
+                s.x = ux > 0 ? cx : cx + 1;
+            } else {
+                cy += uy > 0 ? 1 : -1; side = 1;
+                s.y = uy > 0 ? cy : cy + 1;
             }
-            int type = s.map[cy][cx];
-            if (type == MazeGenerator.PORTAL) {
-                if (enterPortal(s, cx, cy)) {
-                    cx = (int) Math.floor(s.x);
-                    cy = (int) Math.floor(s.y);
-                }
+            if (cx < 0 || cy < 0 || cx >= m[0].length || cy >= m.length) return;
+
+            int type = m[cy][cx];
+            if (type == MazeGenerator.PORTAL && enterPortal(s, cx, cy)) {
+                cx = (int) Math.floor(s.x);
+                cy = (int) Math.floor(s.y);
+                continue;
             }
-            else if ((type == 1 || type == 2) && s.z <= wallHeightForType(type)) {
+            if ((type == 1 || type == 2) && zc <= wallHeightForType(type)) {
                 s.hitKind = HIT_WALL;
                 s.hitType = type;
-                s.hitDist = s.dist;
                 s.hitSide = side;
-                double ux = side == 0 ? s.y - Math.floor(s.y) : s.x - Math.floor(s.x);
-                if ((side == 0 && s.dx < 0) || (side == 1 && s.dy > 0)) ux = 1 - ux;
-                s.hitU = Math.clamp(ux, 0.0, 0.999999);
+                s.dist = d * scale;
+                s.hitDist = s.dist;
+                double u = side == 0 ? s.y - Math.floor(s.y) : s.x - Math.floor(s.x);
+                if ((side == 0 && s.dx < 0) || (side == 1 && s.dy > 0)) u = 1 - u;
+                s.hitU = Math.clamp(u, 0.0, 0.999999);
                 setWallFraction(s);
                 return;
             }

@@ -60,6 +60,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Dynamic Player Stats
     private double playerX = 1.5;
     private double playerY = 1.5;
+    private static final double PLAYER_RADIUS = 0.01;
     private double cameraAngle = 0;
     private double cameraPitch = 0;
     private boolean w, a, s, d, shift;
@@ -362,6 +363,59 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             else Thread.onSpinWait();
         }
     }
+
+    private static boolean isSolidForPlayer(int[][] m, int x, int y) {
+        if (y < 0 || x < 0 || y >= m.length || x >= m[0].length) return true;
+        return m[y][x] == 1;
+    }
+    private static boolean isPlayerBlocked(int[][] m, double x, double y) {
+        final double r = PLAYER_RADIUS;
+        int minX = (int) Math.floor(x - r), maxX = (int) Math.floor(x + r);
+        int minY = (int) Math.floor(y - r), maxY = (int) Math.floor(y + r);
+        for (int cy = minY; cy <= maxY; cy++) {
+            for (int cx = minX; cx <= maxX; cx++) {
+                if (!isSolidForPlayer(m, cx, cy)) continue;
+                double nearX = Math.clamp(x, cx, cx + 1.0), nearY = Math.clamp(y, cy, cy + 1.0);
+                double ddx = x - nearX, ddy = y - nearY;
+                if (ddx * ddx + ddy * ddy < r * r) return true;
+            }
+        }
+        return false;
+    }
+    private void pushPlayerOutOfWalls(int[][] m) {
+        final double r = PLAYER_RADIUS;
+        for (int iter = 0; iter < 4; iter++) {
+            boolean moved = false;
+            int minX = (int) Math.floor(playerX - r), maxX = (int) Math.floor(playerX + r);
+            int minY = (int) Math.floor(playerY - r), maxY = (int) Math.floor(playerY + r);
+            for (int cy = minY; cy <= maxY; cy++) {
+                for (int cx = minX; cx <= maxX; cx++) {
+                    if (!isSolidForPlayer(m, cx, cy)) continue;
+                    double nearX = Math.clamp(playerX, cx, cx + 1.0), nearY = Math.clamp(playerY, cy, cy + 1.0);
+                    double ddx = playerX - nearX, ddy = playerY - nearY;
+                    double d2 = ddx * ddx + ddy * ddy;
+                    if (d2 >= r * r) continue;
+                    if (d2 > 1e-12) {
+                        double d = Math.sqrt(d2), push = (r - d) / d;
+                        playerX += ddx * push;
+                        playerY += ddy * push;
+                    }
+                    else {
+                        double left = playerX - cx, right = cx + 1.0 - playerX;
+                        double up = playerY - cy, down = cy + 1.0 - playerY;
+                        double best = Math.min(Math.min(left, right), Math.min(up, down));
+                        if (best == left) playerX = cx - r;
+                        else if (best == right) playerX = cx + 1.0 + r;
+                        else if (best == up) playerY = cy - r;
+                        else playerY = cy + 1.0 + r;
+                    }
+                    moved = true;
+                }
+            }
+            if (!moved) break;
+        }
+    }
+
     private void update(double deltaTiime) {
         if (isFloorTransitioning) {
             double speed = Math.max(0.05, STAIR_ANIMATION_SPEED);
@@ -420,23 +474,16 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             playerY = nextY;
         }
         else {
-            int nextMapX = (int)Math.floor(nextX);
-            int currentMapY = (int)Math.floor(playerY);
-
-            if (nextMapX >= 0 && nextMapX < mapWidth() && currentMapY >= 0 && currentMapY < mapHeight() && map[currentMapY][nextMapX] != 1) playerX = nextX;
-            else {
-                if (playerX < nextX) playerX = Math.min(Math.ceil(playerX) - 0.0001, mapWidth() - 0.0001);
-                else if (playerX > nextX) playerX = Math.max(Math.floor(playerX) + 0.0001, 0.0001);
+            double totalDX = nextX - playerX, totalDY = nextY - playerY;
+            int substeps = Math.max(1, (int) Math.ceil(Math.max(Math.abs(totalDX), Math.abs(totalDY)) / 0.05));
+            double stepDX = totalDX / substeps, stepDY = totalDY / substeps;
+            for (int i = 0; i < substeps; i++) {
+                double tryX = playerX + stepDX;
+                if (!isPlayerBlocked(map, tryX, playerY)) playerX = tryX;
+                double tryY = playerY + stepDY;
+                if (!isPlayerBlocked(map, playerX, tryY)) playerY = tryY;
             }
-
-            int currentMapX = (int)Math.floor(playerX);
-            int nextMapY = (int)Math.floor(nextY);
-
-            if (currentMapX >= 0 && currentMapX < mapWidth() && nextMapY >= 0 && nextMapY < mapHeight() && map[nextMapY][currentMapX] != 1) playerY = nextY;
-            else {
-                if (playerY < nextY) playerY = Math.min(Math.ceil(playerY) - 0.0001, mapHeight() - 0.0001);
-                else if (playerY > nextY) playerY = Math.max(Math.floor(playerY) + 0.0001, 0.0001);
-            }
+            pushPlayerOutOfWalls(map);
         }
 
         playerX = Math.clamp(playerX, 0.0001, mapWidth() - 0.0001);
@@ -458,6 +505,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                     }
                     playerX = Math.clamp(warped[0], 0.0001, mapWidth() - 0.0001);
                     playerY = Math.clamp(warped[1], 0.0001, mapHeight() - 0.0001);
+                    if (!noClip) pushPlayerOutOfWalls(map);
                     double[] warpedFacing = PortalData.transformDirection(portal, Math.cos(cameraAngle), Math.sin(cameraAngle));
                     cameraAngle = Math.atan2(warpedFacing[1], warpedFacing[0]);
                     hasLastMousePos = false;
