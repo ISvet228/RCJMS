@@ -68,7 +68,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private final double moveSpeed = 1.5;
     private final double runSpeed = 3;
     private final double mouseSensitivity = 0.003;
-    private final double playerWidth = 0.4;
     private boolean noClip = false;
     //endregion
     //region Multi-Thread Render
@@ -363,10 +362,10 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             else Thread.onSpinWait();
         }
     }
-    private void update(double deltaTime) {
+    private void update(double deltaTiime) {
         if (isFloorTransitioning) {
             double speed = Math.max(0.05, STAIR_ANIMATION_SPEED);
-            floorTransitionTime += deltaTime * speed;
+            floorTransitionTime += deltaTiime * speed;
 
             if (!floorSwitchApplied && floorTransitionTime >= FADE_OUT_DURATION) {
                 currentFloor = transitionToFloor;
@@ -387,7 +386,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             if (floorTransitionTime < controlsLockedUntil) return;
         }
 
-        double speed = ((shift) ? runSpeed : moveSpeed) * deltaTime;
+        double speed = ((shift) ? runSpeed : moveSpeed) * deltaTiime;
 
         double dirX = Math.cos(cameraAngle), dirY = Math.sin(cameraAngle);
         double nextX = playerX;
@@ -413,39 +412,35 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         movementX = nextX - playerX;
         movementY = nextY - playerY;
-        nextX = Math.clamp(nextX, Float.MIN_VALUE, mapWidth() - Float.MIN_VALUE);
-        nextY = Math.clamp(nextY, Float.MIN_VALUE, mapHeight() - Float.MIN_VALUE);
+        nextX = Math.clamp(nextX, 0.0001, mapWidth() - 0.0001);
+        nextY = Math.clamp(nextY, 0.0001, mapHeight() - 0.0001);
 
         if (noClip) {
             playerX = nextX;
             playerY = nextY;
         }
         else {
-            if (nextX < playerWidth / 2.0) nextX = playerWidth / 2.0;
-            if (nextX > mapWidth() - playerWidth / 2.0) nextX = mapWidth() - playerWidth / 2.0;
-            if (nextY < playerWidth / 2.0) nextY = playerWidth / 2.0;
-            if (nextY > mapHeight() - playerWidth / 2.0) nextY = mapHeight() - playerWidth / 2.0;
+            int nextMapX = (int)Math.floor(nextX);
+            int currentMapY = (int)Math.floor(playerY);
 
-            int mapX = (int)Math.floor(playerX);
-            int mapY = (int)Math.floor(playerY);
-            int nextMapX;
-            int nextMapY;
+            if (nextMapX >= 0 && nextMapX < mapWidth() && currentMapY >= 0 && currentMapY < mapHeight() && map[currentMapY][nextMapX] != 1) playerX = nextX;
+            else {
+                if (playerX < nextX) playerX = Math.min(Math.ceil(playerX) - 0.0001, mapWidth() - 0.0001);
+                else if (playerX > nextX) playerX = Math.max(Math.floor(playerX) + 0.0001, 0.0001);
+            }
 
-            nextMapX = (int)Math.floor(nextX + playerWidth / 2.0);
-            if (map[mapY][nextMapX] == 1) nextX = mapX + 1 - playerWidth / 2.0 - Float.MIN_VALUE;
-            nextMapX = (int)Math.floor(nextX - playerWidth / 2.0);
-            if (map[mapY][nextMapX] == 1) nextX = mapX + playerWidth / 2.0 + Float.MIN_VALUE;
-            playerX = nextX;
+            int currentMapX = (int)Math.floor(playerX);
+            int nextMapY = (int)Math.floor(nextY);
 
-            nextMapY = (int)Math.floor(nextY + playerWidth / 2.0);
-            if (map[nextMapY][mapX] == 1) nextY = mapY + 1 - playerWidth / 2.0 - Float.MIN_VALUE;
-            nextMapY = (int)Math.floor(nextY - playerWidth / 2.0);
-            if (map[nextMapY][mapX] == 1) nextY = mapY + playerWidth / 2.0 + Float.MIN_VALUE;
-            playerY = nextY;
+            if (currentMapX >= 0 && currentMapX < mapWidth() && nextMapY >= 0 && nextMapY < mapHeight() && map[nextMapY][currentMapX] != 1) playerY = nextY;
+            else {
+                if (playerY < nextY) playerY = Math.min(Math.ceil(playerY) - 0.0001, mapHeight() - 0.0001);
+                else if (playerY > nextY) playerY = Math.max(Math.floor(playerY) + 0.0001, 0.0001);
+            }
         }
 
-        playerX = Math.clamp(playerX, Float.MIN_VALUE + playerWidth / 2.0, mapWidth() - Float.MIN_VALUE - playerWidth / 2.0);
-        playerY = Math.clamp(playerY, Float.MIN_VALUE + playerWidth / 2.0, mapHeight() - Float.MIN_VALUE - playerWidth / 2.0);
+        playerX = Math.clamp(playerX, 0.0001, mapWidth() - 0.0001);
+        playerY = Math.clamp(playerY, 0.0001, mapHeight() - 0.0001);
 
         int portalCellY = Math.clamp((int) playerY, 0, mapHeight() - 1);
         int portalCellX = Math.clamp((int) playerX, 0, mapWidth() - 1);
@@ -483,7 +478,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             return;
         }
 
-        if (fogMinimap) updateFog(deltaTime);
+        if (fogMinimap) updateFog(deltaTiime);
         if (is3D()) handleStairs(cellType);
     }
     private void handleStairs(int cellType) {
