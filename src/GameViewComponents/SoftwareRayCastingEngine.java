@@ -126,7 +126,11 @@ public final class SoftwareRayCastingEngine extends RenderEngineBase {
         final int mapW = m[0].length, mapH = m.length;
         final double plane = Math.min(s.floorD, s.ceilD);
         final int maxSteps = (int) Math.ceil(maxDistance / step) + 1;
+        int prevCx = (int) Math.floor(s.x), prevCy = (int) Math.floor(s.y);
+        int faceSide = 0;
+        double faceCoord = 0.0;
         for (int i = 0; i < maxSteps && s.dist < maxDistance; i++) {
+            final double px = s.x, py = s.y;
             double advance = Math.min(step, plane - s.dist);
             s.x += s.dx * advance; s.y += s.dy * advance; s.dist += advance;
             if (s.dist >= plane) {
@@ -138,13 +142,28 @@ public final class SoftwareRayCastingEngine extends RenderEngineBase {
             }
             int cx = (int) Math.floor(s.x), cy = (int) Math.floor(s.y);
             if (cx < 0 || cy < 0 || cx >= mapW || cy >= mapH) return;
+            if (cx != prevCx || cy != prevCy) {
+                double tX = cx != prevCx ? ((s.dx > 0 ? cx : cx + 1) - px) / s.dx : Double.POSITIVE_INFINITY;
+                double tY = cy != prevCy ? ((s.dy > 0 ? cy : cy + 1) - py) / s.dy : Double.POSITIVE_INFINITY;
+                if (tX < tY) {
+                    faceSide = 0;
+                    faceCoord = py + s.dy * tX;
+                } else {
+                    faceSide = 1;
+                    faceCoord = px + s.dx * tY;
+                }
+                prevCx = cx; prevCy = cy;
+            }
             s.z = hypHeight(s);
             int type = m[cy][cx];
             if ((type == 1 || type == 2) && s.z >= 0.0 && s.z <= wallHeightForType(type)) {
                 s.hitKind = HIT_WALL;
                 s.hitType = type;
                 s.hitDist = hypPerceivedOf(s);
-                resolveWallFace(s);
+                s.hitSide = faceSide;
+                double u = faceCoord - Math.floor(faceCoord);
+                if ((faceSide == 0 && s.dx < 0) || (faceSide == 1 && s.dy > 0)) u = 1.0 - u;
+                s.hitU = Math.clamp(u, 0.0, 0.999999);
                 setWallFraction(s);
                 return;
             }

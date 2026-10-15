@@ -75,6 +75,8 @@
 "mm.quality_low" = "Nizak";
 "mm.quality_medium" = "Srednji";
 "mm.quality_high" = "Visok";
+"mm.quality_auto" = "";
+"mm.quality_auto_hint" = "";
 "mm.fog_minimap" = "MAGLA-RATA MINI MAPA";
 "mm.size_summary" = "Lavirint %d × %d";
 "mm.size_summary_3d" = "Lavirint %d × %d · %d spratova";
@@ -83,10 +85,12 @@
 "mm.engine_rt" = "Osvetljenje i odrazi. Sporije.";
 "mm.engine_rm" = "Iscrtavanje bazirano na udaljenosti. Glatke ivice. Najsporije.";
 "mm.engine_rc" = "Povlačenje po fiksnom koraku. Sporo.";
+"mm.engine_moriarty" = "";
 "mm.quality_dda" = "Nizak: ravan pod. Visok: glatke teksture.";
-"mm.quality_rt" = "Rezolucija 35 / 50 / 100%. Nema odraza na niskom kvalitetu.";
+"mm.quality_rt" = ".";
 "mm.quality_rm" = "Koraci: 48 / 96 / 160.";
 "mm.quality_rc" = "Koračanje po 0.15 / 0.08 / 0.04 ćelija.";
+"mm.quality_moriarty" = ".";
 
 // ---------- SETTINGS (st.) ----------
 "st.settings" = "Podešavanja";

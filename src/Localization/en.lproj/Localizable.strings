@@ -75,6 +75,8 @@
 "mm.quality_low" = "Low";
 "mm.quality_medium" = "Medium";
 "mm.quality_high" = "High";
+"mm.quality_auto" = "Auto";
+"mm.quality_auto_hint" = "Adapts scale and quality to keep 45–150 FPS.";
 "mm.fog_minimap" = "FOG-OF-WAR MINIMAP";
 "mm.size_summary" = "Maze %d × %d";
 "mm.size_summary_3d" = "Maze %d × %d · %d floors";
@@ -83,10 +85,12 @@
 "mm.engine_rt" = "Lighting and reflections. Slower.";
 "mm.engine_rm" = "Distance-field tracing. Smooth edges. Slowest.";
 "mm.engine_rc" = "Plain fixed-step casting. Slow";
+"mm.engine_moriarty" = "DDA, raymarched shadows and reflections in one pass. Smooth edges. Slow.";
 "mm.quality_dda" = "Low: flat floors. High: smooth textures.";
-"mm.quality_rt" = "Resolution 35 / 50 / 100%. No reflections on Low.";
+"mm.quality_rt" = "Reflection reach 6 / 16 / 48 steps. High adds a second bounce.";
 "mm.quality_rm" = "Steps: 48 / 96 / 160.";
 "mm.quality_rc" = "Step 0.15 / 0.08 / 0.04 cells.";
+"mm.quality_moriarty" = "Occlusion samples 2 / 3 / 4. Reflection bounces 0 / 1 / 2. Edge rounding off / 2x2 / 3x3.";
 
 // ---------- SETTINGS (st.) ----------
 "st.settings" = "Settings";

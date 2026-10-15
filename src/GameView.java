@@ -46,9 +46,10 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private static final double MINI_MAP_MIN_CELL_PIXELS = 4.0;
     private static volatile int miniMapCellPixels = 6;
     private final BufferedImage bufferedImage;
-    private final BufferedImage renderImage;
-    private final int[] pixels, renderPixels; //PUXELS
-    private final int renderWidth, renderHeight;
+    private BufferedImage renderImage;
+    private final int[] pixels;
+    private int[] renderPixels; //PUXELS
+    private int renderWidth, renderHeight;
     //endregion
     //region Textures & Colors
     private final RuntimeTexture wallTexture = TextureEditorView.readRuntimeTexture(AppPaths.WALL_TEXTURE_FILE, TextureEditorView.MAX_TEXTURE_SIZE, TextureEditorView.MAX_TEXTURE_SIZE);
@@ -78,8 +79,10 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Graphics Settings
     private static volatile double renderScale = 1.0;
     private static volatile boolean vsync = false;
-    public static final int ENGINE_DDA = 0, ENGINE_RAY_TRACING = 1, ENGINE_RAY_MARCHING = 2, ENGINE_RAY_CASTING = 3;
+    public static final int ENGINE_DDA = 0, ENGINE_RAY_TRACING = 1, ENGINE_RAY_MARCHING = 2, ENGINE_RAY_CASTING = 3, ENGINE_MORIARTY = 4;
     private static volatile int renderEngine = ENGINE_DDA;
+    private static volatile int renderQualitySetting = 1;
+    private final AutoRenderController autoRender = new AutoRenderController();
     //endregion
     //region Game State
     private boolean isGameRunning = false;
@@ -94,7 +97,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private boolean hasLastMousePos = false; //Wayland fallback delta-based mouse-look
     private int lastMouseScreenX, lastMouseScreenY; //Wayland fallback cursor position
     private static final boolean MOUSE_WARP_SUPPORTED = detectMouseWarpSupport();
-    private final double[] cameraXCache;
+    private double[] cameraXCache;
     //endregion
     //region FPS Counter
     private int frameCounter = 0, currentFps = 0;
@@ -301,10 +304,13 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             while (isGameRunning) {
                 try {
                     long currentFrameTime = System.nanoTime();
-                    double deltaTime = (currentFrameTime - lastFrameTime) / 1_000_000_000.0;
+                    double frameSeconds = (currentFrameTime - lastFrameTime) / 1_000_000_000.0;
                     lastFrameTime = currentFrameTime;
-                    deltaTime = Math.min(deltaTime, 0.1);
-                    if (!isPaused) update(deltaTime);
+                    double deltaTime = Math.min(frameSeconds, 0.1);
+                    if (!isPaused) {
+                        update(deltaTime);
+                        autoRender.update(frameSeconds);
+                    }
 
                     render();
                     if (isVSyncEnabled()) {
@@ -550,7 +556,30 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
 
     //region Rendering
+    //region Auto Render Quality
+    private void applyRenderQuality() {
+        double scale = renderScale;
+        if (renderQualitySetting == RenderEngineConfig.QUALITY_AUTO) {
+            double level = autoRender.level();
+            RenderEngineConfig.renderEngineQuality = AutoRenderController.tierFor(level);
+            scale = AutoRenderController.scaleFor(level);
+        }
+        resizeRenderBuffers(scale);
+    }
+    private void resizeRenderBuffers(double scale) {
+        int w = Math.max(1, (int) Math.round(RCJMS.GAME_WIDTH * scale));
+        int h = Math.max(1, (int) Math.round(RCJMS.GAME_HEIGHT * scale));
+        if (w == renderWidth && h == renderHeight) return;
+        renderWidth = w;
+        renderHeight = h;
+        renderImage = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        renderPixels = ((DataBufferInt) renderImage.getRaster().getDataBuffer()).getData();
+        cameraXCache = buildCameraXCache();
+    }
+    //endregion
+
     private void render() {
+        applyRenderQuality();
         renderSelectedEngine();
         drawTimer();
         int hudLine = 0;
@@ -570,6 +599,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private final SoftwareRayCastingEngine softwareRayCastingEngine = new SoftwareRayCastingEngine();
     private final RayMarchingEngine rayMarchingEngine = new RayMarchingEngine();
     private final RayTracingEngine rayTracingEngine = new RayTracingEngine();
+    private final MoriartyEngine moriartyEngine = new MoriartyEngine();
     private void syncRenderer(RenderEngineBase r) {
         r.bufferedImage = bufferedImage;
         r.cameraAngle = cameraAngle;
@@ -600,6 +630,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             case ENGINE_RAY_TRACING -> { syncRenderer(rayTracingEngine); rayTracingEngine.renderRayTracing(); }
             case ENGINE_RAY_MARCHING -> { syncRenderer(rayMarchingEngine); rayMarchingEngine.renderRayMarching(); }
             case ENGINE_RAY_CASTING -> { syncRenderer(softwareRayCastingEngine); softwareRayCastingEngine.renderSoftwareRayCasting(); }
+            case ENGINE_MORIARTY -> { syncRenderer(moriartyEngine); moriartyEngine.renderMoriarty(); }
             default -> { syncRenderer(DDAEngine); DDAEngine.renderRayCasting(); }
         }
     }
@@ -843,7 +874,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private void drawFpsCounter() {
         Graphics2D g2d = bufferedImage.createGraphics();
         g2d.scale(uiScale(), uiScale());
-        String fpsText = "FPS: " + currentFps;
+        boolean auto = renderQualitySetting == RenderEngineConfig.QUALITY_AUTO;
+        String fpsText = "FPS: " + currentFps + (auto ? "  AUTO " + Math.round(renderHeight * 100.0 / RCJMS.GAME_HEIGHT) + "%" : "");
 
         g2d.setFont(fpsFont);
         g2d.setColor(Color.BLACK);
@@ -1268,9 +1300,12 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     public static boolean isVSyncEnabled() { return vsync; }
     public static void setVSyncEnabled(boolean enabled) { vsync = enabled; }
     public static int getRenderEngine() { return renderEngine; }
-    public static void setRenderEngine(int engine) { renderEngine = Math.clamp(engine, ENGINE_DDA, ENGINE_RAY_CASTING); }
-    public static int getRenderEngineQuality() { return renderEngineQuality; }
-    public static void setRenderEngineQuality(int quality) { renderEngineQuality = Math.clamp(quality, 0, 2); }
+    public static void setRenderEngine(int engine) { renderEngine = Math.clamp(engine, ENGINE_DDA, ENGINE_MORIARTY); }
+    public static int getRenderEngineQuality() { return renderQualitySetting; }
+    public static void setRenderEngineQuality(int quality) {
+        renderQualitySetting = Math.clamp(quality, 0, RenderEngineConfig.QUALITY_AUTO);
+        if (renderQualitySetting != RenderEngineConfig.QUALITY_AUTO) RenderEngineConfig.renderEngineQuality = renderQualitySetting;
+    }
     private static boolean detectMouseWarpSupport() {
         String os = System.getProperty("os.name", "").toLowerCase();
         if (!(os.contains("nux") || os.contains("nix"))) return true;

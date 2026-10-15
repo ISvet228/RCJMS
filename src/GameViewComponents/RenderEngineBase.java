@@ -264,6 +264,25 @@ public abstract class RenderEngineBase {
         }
         return result;
     }
+    protected static double smooth(double t) { t = Math.clamp(t, 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
+    protected static double glintPow(double x, int exp) {
+        double x2 = x * x, x4 = x2 * x2, x8 = x4 * x4, x16 = x8 * x8;
+        if (exp == 16) return x16;
+        if (exp == 24) return x16 * x8;
+        return x16 * x8 * x4 * x2;
+    }
+    protected static double toneCurve(double v) { return v <= 0.7 ? v : 0.7 + 0.3 * (1.0 - Math.exp(-(v - 0.7) / 0.3)); }
+    protected static double wallOcclusion(double z, double height) {
+        double ao = 1.0 - 0.45 * (1.0 - smooth(z / 0.22));
+        ao *= 1.0 - 0.25 * (1.0 - smooth((height - z) / 0.14));
+        return ao;
+    }
+    protected static int mixColor(int a, int b, double amount) {
+        amount = Math.clamp(amount, 0, 1);
+        int ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+        int br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+        return ((int) (ar * (1 - amount) + br * amount) << 16) | ((int) (ag * (1 - amount) + bg * amount) << 8) | (int) (ab * (1 - amount) + bb * amount);
+    }
     protected void resolveWallFace(RayState s) {
         double fx = s.x - Math.floor(s.x), fy = s.y - Math.floor(s.y);
         int cx = (int) Math.floor(s.x), cy = (int) Math.floor(s.y);
@@ -349,7 +368,7 @@ public abstract class RenderEngineBase {
             return applyBrightness(color, brightness);
         }
         boolean floor = s.hitKind == HIT_FLOOR;
-        int color = floor ? sampleTexture(floorTexture, s.hitX, s.hitY, floorBaseColor) : sampleTexture(ceilingTexture, s.hitX, s.hitY, ceilingBaseColor);
+        int color = floor ? planeColor(floorTexture, s.hitX, s.hitY, floorBaseColor) : planeColor(ceilingTexture, s.hitX, s.hitY, ceilingBaseColor);
         if (floor && is3D()) color = tintStairs(color, s.hitX, s.hitY, s.map);
         double brightness = Math.clamp(1.0 - s.hitDist / lightDistance, 0.05, 1.0);
         return applyBrightness(color, brightness);
@@ -373,7 +392,7 @@ public abstract class RenderEngineBase {
         if (!hit.hit) return ceilingBaseColor;
         if (hit.isPlane) {
             boolean floor = hit.type == -1;
-            int color = floor ? sampleTexture(floorTexture, hit.x, hit.y, floorBaseColor) : sampleTexture(ceilingTexture, hit.x, hit.y, ceilingBaseColor);
+            int color = floor ? planeColor(floorTexture, hit.x, hit.y, floorBaseColor) : planeColor(ceilingTexture, hit.x, hit.y, ceilingBaseColor);
             if (floor && is3D()) color = tintStairs(color, hit.x, hit.y, hit.map);
             return applyBrightness(color, Math.clamp(1.0 - hit.distance / lightDistance, 0.05, 1.0));
         }
@@ -391,6 +410,9 @@ public abstract class RenderEngineBase {
         int tx = Math.min((int)(fracX * width), width - 1);
         int ty = Math.min((int)(fracY * height), height - 1);
         return texture.pixels()[ty * width + tx];
+    }
+    protected int planeColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
+        return sampleTexture(texture, worldX, worldY, baseColor);
     }
     protected int sampleWallTexture(RuntimeTexture texture, TraceHit hit) {
         if (texture.width() <= 0 || texture.height() <= 0) return hit.type == 2 ? finishBaseColor : wallBaseColor;
@@ -513,9 +535,17 @@ public abstract class RenderEngineBase {
         double wallAt(double x, double y) { return sample(wall, x, y); }
         double finishAt(double x, double y) { return sample(finish, x, y); }
     }
+    protected void prepareSdfFields() {
+        if (map3D != null) for (int[][] floor : map3D) sdfFieldFor(floor);
+        else sdfFieldFor(map);
+    }
     protected SDFField sdfFieldFor(int[][] m) {
         SDFField field = sdfFields.get(m);
-        if (field == null) field = new SDFField(m);
+        if (field == null) {
+            field = new SDFField(m);
+            if (sdfFields.size() > 32) sdfFields.clear();
+            sdfFields.put(m, field);
+        }
         return field;
     }
     protected static final class ColumnRay {

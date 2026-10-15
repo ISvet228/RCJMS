@@ -2,11 +2,9 @@ package GameViewComponents;
 
 import Helpers.*;
 
-import java.awt.*;
-import java.awt.image.*;
-
 public final class RayTracingEngine extends RenderEngineBase {
-    private static final int REFLECTION_STEPS = 48;
+    private static final int[] REFLECTION_STEPS = {6, 16, 48};
+    private static final int[] REFLECTION_DEPTH = {1, 1, 2};
     private static final double FLASH_RANGE = 3.0;
     private static final double[] AMBIENT_LIGHT = {0.10, 0.115, 0.17};
     private static final double[] FILL_LIGHT = {0.30, 0.28, 0.25};
@@ -17,35 +15,32 @@ public final class RayTracingEngine extends RenderEngineBase {
     private static final int TONE_STEPS = 2048;
     private static final double TONE_MAX = 3.0;
     private static final double[] TONE_LUT = buildToneLut();
-    private BufferedImage rtImage;
-    private int[] rtPixels;
     private static volatile double glossiness = .75;
 
     public void renderRayTracing() {
-        final int targetWidth = renderWidth, targetHeight = renderHeight;
-        final double internalScale = RenderEngineConfig.renderEngineQuality == 0 ? 0.35 : RenderEngineConfig.renderEngineQuality == 1 ? 0.50 : 1;
-        final int width = Math.max(240, (int) Math.round(targetWidth * internalScale));
-        final int height = Math.max(135, (int) Math.round(targetHeight * internalScale));
-        if (rtImage == null || rtImage.getWidth() != width || rtImage.getHeight() != height) {
-            rtImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-            rtPixels = ((DataBufferInt) rtImage.getRaster().getDataBuffer()).getData();
-        }
-        final int[] rtPixels = this.rtPixels;
+        final int width = renderWidth, height = renderHeight;
+        final int quality = Math.clamp(RenderEngineConfig.renderEngineQuality, 0, 2);
+        final int reflectionSteps = REFLECTION_STEPS[quality];
+        final int reflectionDepth = REFLECTION_DEPTH[quality];
+        final int[] rtPixels = renderPixels;
         final double tanHalfFov = Math.tan(Math.toRadians(60.0) * 0.5);
         final double verticalTan = tanHalfFov / ((double) width / height);
         final double dirX = Math.cos(cameraAngle), dirY = Math.sin(cameraAngle);
         final double cp = Math.cos(cameraPitch), sp = Math.sin(cameraPitch);
-        final boolean reflections = RenderEngineConfig.renderEngineQuality >= 1;
         final boolean hyperbolic = RenderEngineConfig.GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG;
         final double horizonH = height / 2.0 + cameraPitch * height / 2.0;
+        prepareSdfFields();
 
         parallelRange(0, height, y -> {
-            TraceHit primary = new TraceHit(), secondary = new TraceHit();
+            TraceHit primary = new TraceHit();
+            TraceHit[] reflectionScratch = {new TraceHit(), new TraceHit()};
             for (int x = 0; x < width; x++) {
                 if (hyperbolic) {
                     double[] pr = hypPixelRay((x + 0.5) / width * 2.0 - 1.0, y + 0.5, dirX, dirY, height, horizonH);
                     TraceHit hitH = traceHyp(playerX, playerY, cameraHeight, pr[0], pr[1], pr[2], pr[3], primary, MAX_PRIMARY_STEPS);
-                    rtPixels[y * width + x] = hitH.hit ? shadeSurface(hitH, -hitH.dirX, -hitH.dirY, -hitH.dirZ + 0.18, 0, reflections, secondary) : ceilingBaseColor;
+                    rtPixels[y * width + x] = hitH.hit
+                            ? shadeSurface(hitH, -hitH.dirX, -hitH.dirY, -hitH.dirZ + 0.18, 0, reflectionDepth, reflectionSteps, reflectionScratch)
+                            : ceilingBaseColor;
                     continue;
                 }
                 double sx = ((x + 0.5) / width * 2.0 - 1.0) * tanHalfFov;
@@ -57,51 +52,24 @@ public final class RayTracingEngine extends RenderEngineBase {
                 rx *= inv; ry *= inv; rz *= inv;
                 TraceHit hit = traceRay(playerX, playerY, cameraHeight, rx, ry, rz, map, portals, primary, MAX_PRIMARY_STEPS);
                 if (!hit.hit) { rtPixels[y * width + x] = ceilingBaseColor; continue; }
-                rtPixels[y * width + x] = shadeSurface(hit, -hit.dirX, -hit.dirY, -hit.dirZ + 0.18, 0, reflections, secondary);
+                rtPixels[y * width + x] = shadeSurface(hit, -hit.dirX, -hit.dirY, -hit.dirZ + 0.18, 0, reflectionDepth, reflectionSteps, reflectionScratch);
             }
         });
-
-        if (width == targetWidth && height == targetHeight) System.arraycopy(rtPixels, 0, renderPixels, 0, renderPixels.length);
-        else {
-            Graphics2D g2d = renderImage.createGraphics();
-            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g2d.drawImage(rtImage, 0, 0, targetWidth, targetHeight, null);
-            g2d.dispose();
-        }
         copyRenderBuffer();
     }
 
-    private static boolean solidCell(int[][] m, int x, int y) {
-        if (y < 0 || y >= m.length || x < 0 || x >= m[0].length) return true;
-        int t = m[y][x];
-        return t == 1 || t == 2;
-    }
     private static double[] buildToneLut() {
         double[] lut = new double[TONE_STEPS + 1];
         for (int i = 0; i <= TONE_STEPS; i++) lut[i] = toneCurve(i * TONE_MAX / TONE_STEPS);
         return lut;
     }
-    private static double glintPow(double x, int exp) {
-        double x2 = x * x, x4 = x2 * x2, x8 = x4 * x4, x16 = x8 * x8;
-        if (exp == 16) return x16;
-        if (exp == 24) return x16 * x8;
-        return x16 * x8 * x4 * x2;
-    }
-    private static double planeOcclusion(int[][] m, double x, double y) {
-        int cx = (int) Math.floor(x), cy = (int) Math.floor(y);
-        double fx = x - cx, fy = y - cy, ao = 1.0;
-        final double reach = 0.30, strength = 0.6;
-        if (solidCell(m, cx - 1, cy)) ao *= 1.0 - strength * (1.0 - smooth(fx / reach));
-        if (solidCell(m, cx + 1, cy)) ao *= 1.0 - strength * (1.0 - smooth((1.0 - fx) / reach));
-        if (solidCell(m, cx, cy - 1)) ao *= 1.0 - strength * (1.0 - smooth(fy / reach));
-        if (solidCell(m, cx, cy + 1)) ao *= 1.0 - strength * (1.0 - smooth((1.0 - fy) / reach));
-        return ao;
-    }
-    private static double smooth(double t) { t = Math.clamp(t, 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
-    private static double toneCurve(double v) { return v <= 0.7 ? v : 0.7 + 0.3 * (1.0 - Math.exp(-(v - 0.7) / 0.3)); }
-    private static double wallOcclusion(double z, double height) {
-        double ao = 1.0 - 0.45 * (1.0 - smooth(z / 0.22));
-        ao *= 1.0 - 0.25 * (1.0 - smooth((height - z) / 0.14));
+    private static double planeOcclusion(SDFField field, double x, double y) {
+        double d = field.wallAt(x, y);
+        if (field.hasFinish) d = Math.min(d, field.finishAt(x, y));
+        final double nearReach = 0.30, nearStrength = 0.6;
+        final double farReach = 0.90, farStrength = 0.2;
+        double ao = 1.0 - nearStrength * (1.0 - smooth(d / nearReach));
+        ao *= 1.0 - farStrength * (1.0 - smooth(d / farReach));
         return ao;
     }
     private static int toneToByte(double light) {
@@ -109,13 +77,7 @@ public final class RayTracingEngine extends RenderEngineBase {
         if (light >= TONE_MAX) return 255;
         return (int) (TONE_LUT[(int) (light * TONE_STEPS / TONE_MAX)] * 255.0 + 0.5);
     }
-    private int mixColor(int a, int b, double amount) {
-        amount = Math.clamp(amount, 0, 1);
-        int ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
-        int br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
-        return ((int)(ar * (1 - amount) + br * amount) << 16) | ((int)(ag * (1 - amount) + bg * amount) << 8) | (int)(ab * (1 - amount) + bb * amount);
-    }
-    private int shadeSurface(TraceHit hit, double lx, double ly, double lz, double pathBefore, boolean reflections, TraceHit scratch) {
+    private int shadeSurface(TraceHit hit, double lx, double ly, double lz, double pathBefore, int depth, int steps, TraceHit[] scratch) {
         if (!hit.hit) return ceilingBaseColor;
         double llen = Math.sqrt(lx * lx + ly * ly + lz * lz);
         if (llen > 1e-9) { lx /= llen; ly /= llen; lz /= llen; }
@@ -129,7 +91,7 @@ public final class RayTracingEngine extends RenderEngineBase {
             base = sampleTexture(floor ? floorTexture : ceilingTexture, hit.x, hit.y, floor ? floorBaseColor : ceilingBaseColor);
             if (floor && is3D()) base = tintStairs(base, hit.x, hit.y, hit.map);
             nx = 0; ny = 0; nz = floor ? 1 : -1;
-            ao = planeOcclusion(hit.map, hit.x, hit.y);
+            ao = planeOcclusion(sdfFieldFor(hit.map), hit.x, hit.y);
             shininess = floor ? 30 : 16;
             specStrength = floor ? 0.16 : 0.10;
             reflectivity = floor ? 0.12 : 0.06;
@@ -173,7 +135,7 @@ public final class RayTracingEngine extends RenderEngineBase {
 
         double level = (lightR + lightG + lightB) / 3.0;
         reflectivity *= glossiness * Math.clamp(level, 0.15, 1.0);
-        if (!reflections || reflectivity < 0.012) return lit;
+        if (depth <= 0 || reflectivity < 0.012) return lit;
 
         double dot = hit.dirX * nx + hit.dirY * ny + hit.dirZ * nz;
         double rrx = hit.dirX - 2.0 * dot * nx, rry = hit.dirY - 2.0 * dot * ny, rrz = hit.dirZ - 2.0 * dot * nz;
@@ -181,15 +143,16 @@ public final class RayTracingEngine extends RenderEngineBase {
         if (rlen < 1e-9) return lit;
         rrx /= rlen; rry /= rlen; rrz /= rlen;
 
-        TraceHit reflected;
+        TraceHit reflected = scratch[depth - 1];
         if (hit.hyp) {
             double hl = Math.sqrt(rrx * rrx + rry * rry);
             if (hl < 1e-9) return lit;
             double reflectedSlope = hit.isPlane ? -hit.hypSlope : hit.hypSlope;
-            reflected = traceHyp(hit.x + nx * 0.004, hit.y + ny * 0.004, hit.z + nz * 0.004, rrx / hl, rry / hl, 1.0, reflectedSlope, scratch, REFLECTION_STEPS);
+            traceHyp(hit.x + nx * 0.004, hit.y + ny * 0.004, hit.z + nz * 0.004, rrx / hl, rry / hl, 1.0, reflectedSlope, reflected, steps);
         }
-        else reflected = traceRay(hit.x + nx * 0.004, hit.y + ny * 0.004, hit.z + nz * 0.004, rrx, rry, rrz, hit.map, hit.portals, scratch, REFLECTION_STEPS);
-        int reflectedColor = reflected.hit ? shadeSurface(reflected, -rrx, -rry, -rrz + 0.18, dist, false, scratch) : ceilingBaseColor;
+        else traceRay(hit.x + nx * 0.004, hit.y + ny * 0.004, hit.z + nz * 0.004, rrx, rry, rrz, hit.map, hit.portals, reflected, steps);
+        if (!reflected.hit) return lit;
+        int reflectedColor = shadeSurface(reflected, -rrx, -rry, -rrz + 0.18, dist, depth - 1, steps, scratch);
         return mixColor(lit, reflectedColor, reflectivity);
     }
 }

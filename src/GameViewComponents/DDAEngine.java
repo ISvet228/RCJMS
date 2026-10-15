@@ -170,6 +170,7 @@ public final class DDAEngine extends RenderEngineBase {
             for (int y = drawStart; y <= drawEnd; y++) {
                 double fraction;
                 double rowWallX = wallX;
+                double rowT = perp, rowNorm = 1.0; // hit depth along this row's ray, and ray length per unit depth
                 if (hyperbolic) fraction = hitType == 2 ? (y - horizon) / Math.max(wallHeightPx / 2.0, 1.0) : (y - (horizon - wallHeightPx / 2.0)) / wallHeightOld;
                 else if (exactFace) {
                     double lateralRow = lateral * rowInvA[y];
@@ -177,6 +178,8 @@ public final class DDAEngine extends RenderEngineBase {
                     double depth = Math.abs(faceDen) > 1e-9 ? faceC / faceDen : perp;
                     double along = side == 0 ? playerY + depth * (dirY + lateralRow * dirX) : playerX + depth * (dirX - lateralRow * dirY);
                     double cellLo = side == 0 ? hitCellY : hitCellX;
+                    rowT = depth;
+                    rowNorm = Math.sqrt(1.0 + lateralRow * lateralRow + rowZA[y] * rowZA[y]);
                     if (along >= cellLo && along <= cellLo + 1.0) {
                         fraction = (wallTopZ - (depth * rowZA[y])) / (wallTopZ + cameraHeight);
                         rowWallX = along - cellLo;
@@ -188,6 +191,7 @@ public final class DDAEngine extends RenderEngineBase {
                             double rowTopZ = wallHeightForType((int) rowHit[3]) - cameraHeight;
                             fraction = (rowTopZ - (rowHit[0] * rowZA[y])) / (rowTopZ + cameraHeight);
                             rowWallX = rowHit[2];
+                            rowT = rowHit[0];
                         } else {
                             fraction = (wallTopZ - (depth * rowZA[y])) / (wallTopZ + cameraHeight);
                             rowWallX = wallX;
@@ -209,7 +213,8 @@ public final class DDAEngine extends RenderEngineBase {
                 if (hitType == 2 && finishWidth > 0 && finishHeight > 0) color = finishPixels[texY * finishWidth + texX];
                 else if (hitType != 2 && wallWidth > 0 && wallHeight > 0) color = wallPixels[texY * wallWidth + texX];
                 else color = hitType == 2 ? finishBaseColor : wallBaseColor;
-                renderPixels[offset] = applyBrightness(color, brightness);
+                double rowBrightness = exactFace ? wallBrightness(rowT * rowNorm, lightDistance, side) : brightness;
+                renderPixels[offset] = applyBrightness(color, rowBrightness);
                 offset += screenWidth;
             }
         });
@@ -218,6 +223,13 @@ public final class DDAEngine extends RenderEngineBase {
         copyRenderBuffer();
     }
 
+    @Override protected int planeColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
+        return surfaceColor(texture, worldX, worldY, baseColor, RenderEngineConfig.renderEngineQuality);
+    }
+    private static double wallBrightness(double dist, double lightDistance, int side) {
+        double b = Math.clamp(1.0 - dist / lightDistance, 0.03, 1.0);
+        return side == 1 ? b * 0.85 : b;
+    }
     private static double solveWallEdge(double faceC, double nf, double nr, double lateral, double offset, double focal, double halfHeight, double sinP, double cosP, double startDepth) {
         double row = projectY(startDepth, offset, focal, halfHeight, sinP, cosP);
         for (int i = 0; i < 3 && Double.isFinite(row); i++) {
@@ -340,6 +352,7 @@ public final class DDAEngine extends RenderEngineBase {
                 double lateralRow = cameraXCache[x] * planeLength * rowScale;
                 double rx = dirX - lateralRow * dirY, ry = dirY + lateralRow * dirX;
                 int offset = y * width + x;
+                final double norm = Math.sqrt(rx * rx + ry * ry + rowZ * rowZ); // metres per unit of t
 
                 int mapX = (int) Math.floor(baseX), mapY = (int) Math.floor(baseY);
                 double deltaX = rx == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / rx);
@@ -392,15 +405,14 @@ public final class DDAEngine extends RenderEngineBase {
                         color = finish ? finishPixels[ty * tw + tx] : wallPixels[ty * tw + tx];
                     }
                     else color = finish ? finishBaseColor : wallBaseColor;
-                    double brightness = Math.clamp(1.0 - wT / lightDistance, 0.03, 1.0);
-                    if (wSide == 1) brightness *= 0.85;
+                    double brightness = wallBrightness(wT * norm, lightDistance, wSide);
                     renderPixels[offset] = applyBrightness(color, brightness);
                 }
                 else if (Double.isFinite(tPlane)) {
                     double wx = baseX + rx * tPlane, wy = baseY + ry * tPlane;
                     int color = floorPlane ? surfaceColor(floorTexture, wx, wy, floorBaseColor, RenderEngineConfig.renderEngineQuality) : surfaceColor(ceilingTexture, wx, wy, ceilingBaseColor, RenderEngineConfig.renderEngineQuality);
                     if (floorPlane && is3D()) color = tintStairs(color, wx, wy, m);
-                    double brightness = Math.clamp(1.0 - tPlane / lightDistance, 0.05, 1.0);
+                    double brightness = Math.clamp(1.0 - tPlane * norm / lightDistance, 0.05, 1.0);
                     renderPixels[offset] = applyBrightness(color, brightness);
                 }
                 else {
@@ -417,7 +429,8 @@ public final class DDAEngine extends RenderEngineBase {
         final double[] floorEdge = portalFloorEdgeCache, ceilEdge = portalCeilEdgeCache;
         final boolean tinted = is3D();
         final int quality = RenderEngineConfig.renderEngineQuality;
-        final double[] rowInvA = rowInvACache;
+        final double[] rowInvA = rowInvACache, rowZA = rowZACache;
+        final double planeLength2 = planeX * planeX + planeY * planeY;
 
         parallelRange(0, renderHeight, y -> {
             double depth = rowDepth(y, horizon, focal, halfHeight, sinP, cosP, (-cameraHeight), hyperbolic);
@@ -433,6 +446,7 @@ public final class DDAEngine extends RenderEngineBase {
             double perceived = depth;
             double flatDepth = hyperbolic ? HyperbolicMath.inverseHyperbolicDistance(perceived, RenderEngineConfig.HYPERBOLIC_CURVATURE) : depth;
             double brightness = Math.clamp(1.0 - perceived / lightDistance, 0.05, 1.0);
+            final double rowV = rowZA[y];
             double worldX = playerX + flatDepth * leftRayX, worldY = playerY + flatDepth * leftRayY;
             double stepX = flatDepth * rayStepX, stepY = flatDepth * rayStepY;
             int offset = y * width;
@@ -441,7 +455,13 @@ public final class DDAEngine extends RenderEngineBase {
                 if (!covered) {
                     int color = floor ? surfaceColor(floorTexture, worldX, worldY, floorBaseColor, quality) : surfaceColor(ceilingTexture, worldX, worldY, ceilingBaseColor, quality);
                     if (floor && tinted) color = tintStairs(color, worldX, worldY, map);
-                    renderPixels[offset + x] = applyBrightness(color, brightness);
+                    // Same law as every other path: distance = depth * |ray|, where |ray| includes the lateral angle.
+                    double pixelBrightness = brightness;
+                    if (!hyperbolic) {
+                        double c = cameraXCache[x];
+                        pixelBrightness = Math.clamp(1.0 - depth * Math.sqrt(1.0 + planeLength2 * c * c + rowV * rowV) / lightDistance, 0.05, 1.0);
+                    }
+                    renderPixels[offset + x] = applyBrightness(color, pixelBrightness);
                 }
                 worldX += stepX; worldY += stepY;
             }

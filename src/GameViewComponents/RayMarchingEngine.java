@@ -117,17 +117,6 @@ public final class RayMarchingEngine  extends RenderEngineBase {
         });
         copyRenderBuffer();
     }
-    private void prepareSdfFields() {
-        if (map3D != null)
-            for (int[][] floor : map3D)
-                if (!sdfFields.containsKey(floor))
-                    sdfFields.put(floor, new SDFField(floor));
-        else if (!sdfFields.containsKey(map)) {
-            if (sdfFields.size() > 32)
-                sdfFields.clear();
-            sdfFields.put(map, new SDFField(map));
-        }
-    }
     private void marchColumn(ColumnRay c, double px, double py, double ux, double uy, SDFField field0, int[][] map0, PortalData portals0, double maxDistance, int maxSteps) {
         RayState s = c.ray;
         s.x = px; s.y = py; s.dx = ux; s.dy = uy; s.dz = 0; s.dist = 0;

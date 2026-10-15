@@ -1,5 +1,6 @@
 package MainMenuComponents;
 
+import GameViewComponents.RenderEngineConfig;
 import Helpers.*;
 import StyleUI.*;
 
@@ -16,10 +17,11 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     private static final String[] THEME_KEYS = {"st.flat", "st.neumorphic", "st.glass"};
     private static final String[] RENDER_SCALE_NAMES = {"100%", "75%", "50%", "10%"};
     private static final double[] RENDER_SCALES = {1.0, 0.75, 0.5, 0.1};
-    private static final String[] ENGINE_NAMES = {"DDA", "Ray Tracing", "Ray Marching", "Ray Casting"};
-    private static final String[] ENGINE_HINT_KEYS = {"mm.engine_dda", "mm.engine_rt", "mm.engine_rm", "mm.engine_rc"};
-    private static final String[] QUALITY_KEYS = {"mm.quality_low", "mm.quality_medium", "mm.quality_high"};
-    private static final String[] QUALITY_HINT_KEYS = {"mm.quality_dda", "mm.quality_rt", "mm.quality_rm", "mm.quality_rc"};
+    private static final String[] ENGINE_NAMES = {"DDA", "Ray Tracing", "Ray Marching", "Ray Casting", "Moriarty Engine(TEST NOT READY FOR USE)"};
+    private static final String[] ENGINE_HINT_KEYS = {"mm.engine_dda", "mm.engine_rt", "mm.engine_rm", "mm.engine_rc", "mm.engine_moriarty"};
+    private static final String[] QUALITY_KEYS = {"mm.quality_low", "mm.quality_medium", "mm.quality_high", "mm.quality_auto"};
+    private static final String[] QUALITY_HINT_KEYS = {"mm.quality_dda", "mm.quality_rt", "mm.quality_rm", "mm.quality_rc", "mm.quality_moriarty"};
+    private static final String QUALITY_AUTO_HINT_KEY = "mm.quality_auto_hint";
     private static final int RESOLUTION_STEPS = 4, STEP_WIDTH = 480, STEP_HEIGHT = 270;
     private final int[][] resolutions = buildResolutions();
     private final String[] resolutionNames = buildResolutionNames();
@@ -208,6 +210,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             int index = qualityBox.getSelectedIndex();
             if (!syncing && index >= 0 && index < QUALITY_KEYS.length) {
                 menu.setRenderEngineQuality(index);
+                updateEngineHints(engineBox.getSelectedIndex());
                 menu.saveSettings();
             }
         });
@@ -215,7 +218,9 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     }
     private void updateEngineHints(int engine) {
         engineHint.setLocalizationKey(ENGINE_HINT_KEYS[engine]);
-        qualityHint.setLocalizationKey(QUALITY_HINT_KEYS[engine]);
+        boolean auto = qualityBox.getSelectedIndex() == RenderEngineConfig.QUALITY_AUTO;
+        qualityHint.setLocalizationKey(auto ? QUALITY_AUTO_HINT_KEY : QUALITY_HINT_KEYS[engine]);
+        renderScaleBox.setEnabled(!auto);
     }
     private static int languageIndexFor(String code) {
         if (code == null) return 0;

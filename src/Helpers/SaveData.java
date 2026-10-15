@@ -75,8 +75,8 @@ public final class SaveData {
                                 if (scale >= 0.1 && scale <= 1.0) data.renderScale = scale;
                             }
                             case "vsync" -> data.vsync = Boolean.parseBoolean(value);
-                            case "renderEngine" -> { data.renderEngine = Math.clamp(Integer.parseInt(value), 0, 3); engineSet = true; }
-                            case "renderEngineQuality" -> data.renderEngineQuality = Math.clamp(Integer.parseInt(value), 0, 2);
+                            case "renderEngine" -> { data.renderEngine = Math.clamp(Integer.parseInt(value), 0, 4); engineSet = true; }
+                            case "renderEngineQuality" -> data.renderEngineQuality = Math.clamp(Integer.parseInt(value), 0, 3);
                             case "windowWidth" -> { int w = Integer.parseInt(value); if (w >= 960) data.windowWidth = w; }
                             case "windowHeight" -> { int h = Integer.parseInt(value); if (h >= 540) data.windowHeight = h; }
                             case "fullscreen" -> data.fullscreen = Boolean.parseBoolean(value);
@@ -165,8 +165,8 @@ public final class SaveData {
         data.theme = theme;
         data.renderScale = renderScale;
         data.vsync = vsync;
-        data.renderEngine = Math.clamp(renderEngine, 0, 3);
-        data.renderEngineQuality = Math.clamp(renderEngineQuality, 0, 2);
+        data.renderEngine = Math.clamp(renderEngine, 0, 4);
+        data.renderEngineQuality = Math.clamp(renderEngineQuality, 0, 3);
         data.windowWidth = windowWidth >= 960 ? windowWidth : DEFAULT_WINDOW_WIDTH;
         data.windowHeight = windowHeight >= 540 ? windowHeight : DEFAULT_WINDOW_HEIGHT;
         data.fullscreen = fullscreen;
