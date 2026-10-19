@@ -37,7 +37,7 @@ jobs:
           mkdir -p build
 
           find src -name "*.java" -print > sources.txt
-          javac -d build @sources.txt
+          javac -encoding UTF-8 -d build @sources.txt
 
       - name: Copy resources
         shell: bash
@@ -71,13 +71,29 @@ jobs:
       - name: Create portable application
         shell: bash
         run: |
+          # jdk.compiler is needed at runtime so engine mods can be compiled.
+          # jpackage doesn't add it on its own because the game only refers to javax.tools.
           jpackage \
             --type app-image \
             --input package \
             --name RCJMS \
             --main-jar RCJMS.jar \
             --main-class RCJMS \
+            --add-modules java.desktop,jdk.compiler \
             --dest dist
+
+      - name: Verify compiler module in runtime
+        shell: bash
+        run: |
+          dist/RCJMS/runtime/bin/java.exe --list-modules | grep -q "^jdk.compiler@"
+
+      - name: Add engine mods folder
+        shell: bash
+        run: |
+          # Mods are read from ExternalEngines next to RCJMS.exe.
+          if [ -d ExternalEngines ]; then
+            cp -r ExternalEngines dist/RCJMS/
+          fi
 
       - name: Create Windows archive
         shell: bash
@@ -151,7 +167,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "Complete-Ver"
-          name: "Latest Tusted"
+          name: "Latest Trusted"
           draft: false
           prerelease: false
           make_latest: true
