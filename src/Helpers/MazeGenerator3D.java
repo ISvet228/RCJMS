@@ -39,6 +39,7 @@ public class MazeGenerator3D {
         for (int f = 0; f < floorCount; f++) {
             Long floorSeed = seed != null ? seed + f * 104729L : null;
             MazeGenerator generator = floorSeed != null ? new MazeGenerator(width, height, floorSeed, geometryMode) : new MazeGenerator(width, height, geometryMode);
+            generator.setProgressRange(f / (double) floorCount, 1.0 / floorCount);
             floors[f] = generator.generateRaw();
             floorPortals[f] = generator.getPortals();
         }

@@ -1,6 +1,7 @@
 package MainMenuComponents;
 
 import GameViewComponents.RenderEngineConfig;
+import GameViewComponents.RenderEngines;
 import Helpers.*;
 import StyleUI.*;
 
@@ -17,14 +18,15 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     private static final String[] THEME_KEYS = {"st.flat", "st.neumorphic", "st.glass"};
     private static final String[] RENDER_SCALE_NAMES = {"100%", "75%", "50%", "10%"};
     private static final double[] RENDER_SCALES = {1.0, 0.75, 0.5, 0.1};
-    private static final String[] ENGINE_NAMES = {"DDA", "Ray Tracing", "Ray Marching", "Ray Casting", "Moriarty Engine(TEST NOT READY FOR USE)"};
-    private static final String[] ENGINE_HINT_KEYS = {"mm.engine_dda", "mm.engine_rt", "mm.engine_rm", "mm.engine_rc", "mm.engine_moriarty"};
     private static final String[] QUALITY_KEYS = {"mm.quality_low", "mm.quality_medium", "mm.quality_high", "mm.quality_auto"};
-    private static final String[] QUALITY_HINT_KEYS = {"mm.quality_dda", "mm.quality_rt", "mm.quality_rm", "mm.quality_rc", "mm.quality_moriarty"};
     private static final String QUALITY_AUTO_HINT_KEY = "mm.quality_auto_hint";
     private static final int RESOLUTION_STEPS = 4, STEP_WIDTH = 480, STEP_HEIGHT = 270;
     private final int[][] resolutions = buildResolutions();
     private final String[] resolutionNames = buildResolutionNames();
+    private static final String NO_ENGINE_LABEL = "\u2014";
+    private final String[] engineNames = RenderEngines.names().length == 0 ? new String[]{NO_ENGINE_LABEL} : RenderEngines.names();
+    private final String[] engineHintKeys = RenderEngines.hintKeys();
+    private final String[] qualityHintKeys = RenderEngines.qualityHintKeys();
 
     private final ButtonGroup themeGroup = new ButtonGroup();
     private final StyledToggleButton[] themeButtons = new StyledToggleButton[THEMES.length];
@@ -54,14 +56,14 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         scaleCaption = label("st.render_scale", MainMenuCanvas.TEXT);
         scaleHint = label("mm.render_scale_hint", MainMenuCanvas.MUTED);
         engineCaption = label("st.render_engine", MainMenuCanvas.TEXT);
-        engineHint = label(ENGINE_HINT_KEYS[0], MainMenuCanvas.MUTED);
+        engineHint = label("mm.engine_dda", MainMenuCanvas.MUTED);
         qualityCaption = label("st.render_quality", MainMenuCanvas.TEXT);
-        qualityHint = label(QUALITY_HINT_KEYS[0], MainMenuCanvas.MUTED);
+        qualityHint = label("mm.quality_dda", MainMenuCanvas.MUTED);
 
         languageBox = new StyledComboBox(style, LANGUAGE_NAMES);
         renderScaleBox = new StyledComboBox(style, RENDER_SCALE_NAMES);
         resolutionBox = new StyledComboBox(style, resolutionNames);
-        engineBox = new StyledComboBox(style, ENGINE_NAMES);
+        engineBox = new StyledComboBox(style, engineNames);
         qualityBox = new StyledComboBox(style, QUALITY_KEYS);
         fullscreenToggle = new StyledToggle(style, "st.fullscreen");
         vsyncToggle = new StyledToggle(style, "mm.vsync");
@@ -114,8 +116,9 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             resolutionBox.setEnabled(!menu.isFullscreen());
             renderScaleBox.setSelectedIndex(renderScaleIndex(menu.getRenderScale()));
             vsyncToggle.setSelected(menu.isVSyncEnabled());
-            int engine = Math.clamp(menu.getRenderEngine(), 0, ENGINE_NAMES.length - 1);
+            int engine = Math.clamp(menu.getRenderEngine(), 0, Math.max(0, engineNames.length - 1));
             engineBox.setSelectedIndex(engine);
+            engineBox.setEnabled(!RenderEngines.all().isEmpty());
             qualityBox.setSelectedIndex(menu.getRenderEngineQuality());
             updateEngineHints(engine);
         } finally {
@@ -200,7 +203,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         });
         engineBox.addActionListener(e -> {
             int index = engineBox.getSelectedIndex();
-            if (!syncing && index >= 0 && index < ENGINE_NAMES.length) {
+            if (!syncing && index >= 0 && index < engineNames.length && !RenderEngines.all().isEmpty()) {
                 menu.setRenderEngine(index);
                 updateEngineHints(index);
                 menu.saveSettings();
@@ -217,9 +220,16 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         backButton.addActionListener(e -> menu.showMain());
     }
     private void updateEngineHints(int engine) {
-        engineHint.setLocalizationKey(ENGINE_HINT_KEYS[engine]);
+        if (engine >= 0 && engine < engineHintKeys.length && engineHintKeys[engine] != null) {
+            engineHint.setLocalizationKey(engineHintKeys[engine]);
+            engineHint.setVisible(true);
+        } else engineHint.setVisible(false);
         boolean auto = qualityBox.getSelectedIndex() == RenderEngineConfig.QUALITY_AUTO;
-        qualityHint.setLocalizationKey(auto ? QUALITY_AUTO_HINT_KEY : QUALITY_HINT_KEYS[engine]);
+        String qualityKey = auto ? QUALITY_AUTO_HINT_KEY : engine >= 0 && engine < qualityHintKeys.length ? qualityHintKeys[engine] : null;
+        if (qualityKey != null) {
+            qualityHint.setLocalizationKey(qualityKey);
+            qualityHint.setVisible(true);
+        } else qualityHint.setVisible(false);
         renderScaleBox.setEnabled(!auto);
     }
     private static int languageIndexFor(String code) {

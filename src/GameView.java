@@ -79,10 +79,16 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Graphics Settings
     private static volatile double renderScale = 1.0;
     private static volatile boolean vsync = false;
-    public static final int ENGINE_DDA = 0, ENGINE_RAY_TRACING = 1, ENGINE_RAY_MARCHING = 2, ENGINE_RAY_CASTING = 3, ENGINE_MORIARTY = 4;
-    private static volatile int renderEngine = ENGINE_DDA;
+    private static volatile String renderEngineId = "";
     private static volatile int renderQualitySetting = 1;
     private final AutoRenderController autoRender = new AutoRenderController();
+    private volatile boolean renderPrepPending = true;
+    private int preparedFloor = -1;
+    private volatile Thread busyWorker;
+    private volatile Runnable pendingWork;
+    private final Progress busyProgress = new Progress();
+    private volatile long busyStartNanos;
+    //endregion
     //endregion
     //region Game State
     private boolean isGameRunning = false;
@@ -96,7 +102,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private WindowListener windowWatcher;
     private boolean hasLastMousePos = false; //Wayland fallback delta-based mouse-look
     private int lastMouseScreenX, lastMouseScreenY; //Wayland fallback cursor position
-    private static final boolean MOUSE_WARP_SUPPORTED = detectMouseWarpSupport();
+    private static final int EDGE_MARGIN = 96, MAX_LOOK_STEP = 80;
     private double[] cameraXCache;
     //endregion
     //region FPS Counter
@@ -120,6 +126,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private int fogFrame = 0;
     //endregion
     //region Floor Transition Animation
+    private static final int BUSY_FRAME_MS = 16;
     private static final double FADE_OUT_DURATION = 0.6;
     private static final double FADE_IN_DURATION = 0.6;
     private static final double CAPTION_ROLL_DURATION = 0.5;
@@ -303,16 +310,27 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             boolean errorReported = false;
             while (isGameRunning) {
                 try {
+                    if (busyWorker != null && !busyWorker.isAlive()) {
+                        busyWorker = null;
+                        autoRender.reset();
+                        lastFrameTime = System.nanoTime();
+                        onLoadingFinished();
+                    }
+                    if (busyWorker == null) startNextBusyWork();
                     long currentFrameTime = System.nanoTime();
                     double frameSeconds = (currentFrameTime - lastFrameTime) / 1_000_000_000.0;
                     lastFrameTime = currentFrameTime;
                     double deltaTime = Math.min(frameSeconds, 0.1);
-                    if (!isPaused) {
-                        update(deltaTime);
-                        autoRender.update(frameSeconds);
+                    if (busyWorker != null) {
+                        drawBusyOverlay();
                     }
-
-                    render();
+                    else {
+                        if (!isPaused) {
+                            update(deltaTime);
+                            autoRender.update(frameSeconds);
+                        }
+                        render();
+                    }
                     if (isVSyncEnabled()) {
                         paintFrameSynchronously();
                         Toolkit.getDefaultToolkit().sync();
@@ -323,7 +341,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                     }
                     else {
                         repaint();
-                        Thread.sleep(1);
+                        Thread.sleep(busyWorker != null ? BUSY_FRAME_MS : 1);
                         nextVSyncTime = System.nanoTime();
                     }
                     trackFps();
@@ -595,12 +613,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
 
     //region Renderers
-    private final DDAEngine DDAEngine = new DDAEngine();
-    private final SoftwareRayCastingEngine softwareRayCastingEngine = new SoftwareRayCastingEngine();
-    private final RayMarchingEngine rayMarchingEngine = new RayMarchingEngine();
-    private final RayTracingEngine rayTracingEngine = new RayTracingEngine();
-    private final MoriartyEngine moriartyEngine = new MoriartyEngine();
-    private void syncRenderer(RenderEngineBase r) {
+    private final RenderFrame renderFrame = new RenderFrame();
+    private void syncRenderer(RenderFrame r) {
         r.bufferedImage = bufferedImage;
         r.cameraAngle = cameraAngle;
         r.cameraHeight = cameraHeight;
@@ -610,8 +624,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         r.finishTexture = finishTexture;
         r.floorPortalsAll = floorPortalsAll;
         r.floorTexture = floorTexture;
-        RenderEngineConfig.outputWidth = RCJMS.GAME_WIDTH;
-        RenderEngineConfig.outputHeight = RCJMS.GAME_HEIGHT;
+        r.outputWidth = RCJMS.GAME_WIDTH;
+        r.outputHeight = RCJMS.GAME_HEIGHT;
+        r.quality = RenderEngineConfig.renderEngineQuality;
+        r.geometry = GEOMETRY_MODE;
+        r.curvature = HYPERBOLIC_CURVATURE;
         r.map = map;
         r.map3D = map3D;
         r.pixels = pixels;
@@ -625,14 +642,61 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         r.renderWorkers = renderWorkers;
         r.wallTexture = wallTexture;
     }
-    private void renderSelectedEngine() {
-        switch (renderEngine) {
-            case ENGINE_RAY_TRACING -> { syncRenderer(rayTracingEngine); rayTracingEngine.renderRayTracing(); }
-            case ENGINE_RAY_MARCHING -> { syncRenderer(rayMarchingEngine); rayMarchingEngine.renderRayMarching(); }
-            case ENGINE_RAY_CASTING -> { syncRenderer(softwareRayCastingEngine); softwareRayCastingEngine.renderSoftwareRayCasting(); }
-            case ENGINE_MORIARTY -> { syncRenderer(moriartyEngine); moriartyEngine.renderMoriarty(); }
-            default -> { syncRenderer(DDAEngine); DDAEngine.renderRayCasting(); }
+    private boolean isBusy() { return busyWorker != null; }
+    private void onLoadingFinished() {
+        gameStartTime = System.currentTimeMillis();
+        pausedTime = 0;
+        releaseInput();
+    }
+    private void prepareRenderer() {
+        preparedFloor = currentFloor;
+        syncRenderer(renderFrame);
+        resolveRenderEngine().prepare(renderFrame);
+    }
+    private void startNextBusyWork() {
+        Runnable work = pendingWork;
+        if (work != null) {
+            pendingWork = null;
+            startBusy(work, "load.title");
         }
+        else if (renderPrepPending) {
+            renderPrepPending = false;
+            startBusy(this::prepareRenderer, "load.render");
+        }
+    }
+    private void startBusy(Runnable work, String stage) {
+        busyProgress.set(stage, 0);
+        busyStartNanos = System.nanoTime();
+        busyWorker = new Thread(() -> {
+            Progress.bind(busyProgress);
+            try { work.run(); }
+            catch (Throwable ex) { ex.printStackTrace(); }
+            finally { Progress.unbind(); }
+        }, "game-background-work");
+        busyWorker.setDaemon(true);
+        busyWorker.start();
+    }
+    private void drawBusyOverlay() {
+        Graphics2D g = bufferedImage.createGraphics();
+        double seconds = (System.nanoTime() - busyStartNanos) / 1e9;
+        LoadingScreen.paint(g, bufferedImage.getWidth(), bufferedImage.getHeight(), busyProgress.fraction(), NSLocalizedString.get(busyProgress.stage()), seconds);
+        g.dispose();
+        repaint();
+    }
+    private void renderSelectedEngine() {
+        syncRenderer(renderFrame);
+        resolveRenderEngine().render(renderFrame);
+    }
+    private RenderEngine mapEngine;
+    public RenderEngine resolveRenderEngine() {
+        if (mapEngine != null) return mapEngine;
+        int[][][] floors = map3D != null ? map3D : new int[][][]{map};
+        int width = 0, height = 0;
+        for (int[][] floor : floors) { width = Math.max(width, floor[0].length); height = Math.max(height, floor.length); }
+        RenderEngine engine = RenderEngines.forMapSize(renderEngineId, width, height);
+        if (engine == null) throw new NoRenderEngineException(width, height);
+        mapEngine = engine;
+        return engine;
     }
     //endregion
 
@@ -1083,13 +1147,15 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Input
     @Override public void keyPressed(KeyEvent e) {
         int key = e.getKeyCode();
-        if (key == KeyEvent.VK_W) w = true;
-        if (key == KeyEvent.VK_S) s = true;
-        if (key == KeyEvent.VK_A) a = true;
-        if (key == KeyEvent.VK_D) d = true;
+        boolean loading = isBusy();
+        if (loading && (key == KeyEvent.VK_ESCAPE || key == KeyEvent.VK_R)) return;
+        if (key == KeyEvent.VK_W) w = !loading;
+        if (key == KeyEvent.VK_S) s = !loading;
+        if (key == KeyEvent.VK_A) a = !loading;
+        if (key == KeyEvent.VK_D) d = !loading;
         if (key == KeyEvent.VK_B) isDebugMode = !isDebugMode;
         if (key == KeyEvent.VK_M && fogMinimap) fogMapVisible = !fogMapVisible;
-        if (key == KeyEvent.VK_SHIFT) shift = true;
+        if (key == KeyEvent.VK_SHIFT) shift = !loading;
         if (key == KeyEvent.VK_F1) noClip = !noClip;
         if (key == KeyEvent.VK_EQUALS || key == KeyEvent.VK_PLUS || key == KeyEvent.VK_ADD) miniMapCellPixels = Math.min(20, miniMapCellPixels + 1);
         if (key == KeyEvent.VK_MINUS || key == KeyEvent.VK_SUBTRACT) miniMapCellPixels = Math.max(3, miniMapCellPixels - 1);
@@ -1120,7 +1186,13 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 } catch (IOException ex) {throw new RuntimeException(ex);}
                 return;
             }
-            else if (is3D()) {
+            else {
+                pendingWork = this::regenerateMaze;
+            }
+        }
+    }
+    private void regenerateMaze() {
+        if (is3D()) {
                 mazeGenerator3D = new MazeGenerator3D(mapWidth(), mapHeight(), floorCount(), chooseSeed(), GEOMETRY_MODE);
                 map3D = mazeGenerator3D.generate(MAZE_MODE);
                 currentFloor = 0;
@@ -1145,7 +1217,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             floorTransitionTime = 0;
             gameStartTime = System.currentTimeMillis();
             pausedTime = 0;
-        }
+            renderPrepPending = true;
     }
     @Override public void keyReleased(KeyEvent e) {
         int key = e.getKeyCode();
@@ -1158,41 +1230,41 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     @Override public void mouseMoved(MouseEvent e) { handleMouseLook(e); }
     @Override public void mouseDragged(MouseEvent e) { handleMouseLook(e); }
     private void handleMouseLook(MouseEvent e) {
-        if (isPaused) return;
+        if (isPaused || isBusy()) return;
         if (isFloorTransitioning && floorTransitionTime < FADE_OUT_DURATION + FADE_IN_DURATION) return;
-        if (MOUSE_WARP_SUPPORTED && cursorRobot != null) mouseMovedWithWarp(e);
-        else mouseMovedWithDelta(e);
-    }
-    private void mouseMovedWithWarp(MouseEvent e) {
         if (!isShowing()) return;
-        Point onScreen;
-        try { onScreen = getLocationOnScreen(); }
+        Point origin;
+        try { origin = getLocationOnScreen(); }
         catch (IllegalComponentStateException ex) { return; }
-        int centerX = onScreen.x + getWidth() / 2;
-        int centerY = onScreen.y + getHeight() / 2;
-        int dx = e.getXOnScreen() - centerX, dy = e.getYOnScreen() - centerY;
-        if (dx == 0 && dy == 0) return;
+
+        int x = e.getXOnScreen(), y = e.getYOnScreen();
+        if (!hasLastMousePos) { setLastMouse(x, y); return; }
+
+        int dx = x - lastMouseScreenX, dy = y - lastMouseScreenY;
+        setLastMouse(x, y);
+        if (Math.abs(dx) > MAX_LOOK_STEP || Math.abs(dy) > MAX_LOOK_STEP) return;
+
         cameraAngle += dx * mouseSensitivity;
         cameraPitch = Math.clamp(cameraPitch - dy * mouseSensitivity, -1.2, 1.2);
-        cursorRobot.mouseMove(centerX, centerY);
+
+        if (cursorRobot != null && nearViewEdge(x, y, origin)) recentreCursor(origin);
     }
-    private void mouseMovedWithDelta(MouseEvent e) {
-        int x = e.getXOnScreen();
-        int y = e.getYOnScreen();
-
-        if (!hasLastMousePos) {
-            lastMouseScreenX = x;
-            lastMouseScreenY = y;
-            hasLastMousePos = true;
-            return;
-        }
-
-        cameraAngle += (x - lastMouseScreenX) * mouseSensitivity;
-        cameraPitch -= (y - lastMouseScreenY) * mouseSensitivity;
-        cameraPitch = Math.clamp(cameraPitch, -1.2, 1.2);
-
+    private void setLastMouse(int x, int y) {
         lastMouseScreenX = x;
         lastMouseScreenY = y;
+        hasLastMousePos = true;
+    }
+    private boolean nearViewEdge(int x, int y, Point origin) {
+        int left = x - origin.x, top = y - origin.y;
+        return left < EDGE_MARGIN || top < EDGE_MARGIN || getWidth() - left < EDGE_MARGIN || getHeight() - top < EDGE_MARGIN;
+    }
+    private void recentreCursor(Point origin) {
+        int cx = origin.x + getWidth() / 2, cy = origin.y + getHeight() / 2;
+        try {
+            cursorRobot.mouseMove(cx, cy);
+            setLastMouse(cx, cy);
+        }
+        catch (RuntimeException ex) { cursorRobot = null; }
     }
     //endregion
 
@@ -1243,6 +1315,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private void showCursor() { setCursor(Cursor.getDefaultCursor()); hasLastMousePos = false; }
     private void setPaused(boolean paused) {
         if (paused == isPaused) return;
+        if (paused && isBusy()) return;
         isPaused = paused;
         if (paused) {
             pauseStartTime = System.currentTimeMillis();
@@ -1299,20 +1372,17 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     public static void setRenderScale(double scale) { renderScale = Math.clamp(scale, 0.1, 1.0); }
     public static boolean isVSyncEnabled() { return vsync; }
     public static void setVSyncEnabled(boolean enabled) { vsync = enabled; }
-    public static int getRenderEngine() { return renderEngine; }
-    public static void setRenderEngine(int engine) { renderEngine = Math.clamp(engine, ENGINE_DDA, ENGINE_MORIARTY); }
+    public static int getRenderEngine() { return RenderEngines.indexOf(renderEngineId); }
+    public static void setRenderEngine(int index) { renderEngineId = RenderEngines.idAt(index); }
+    public static String getRenderEngineId() { return renderEngineId; }
+    public static void setRenderEngineId(String id) {
+        RenderEngine engine = RenderEngines.find(id);
+        if (engine != null) renderEngineId = engine.id();
+    }
     public static int getRenderEngineQuality() { return renderQualitySetting; }
     public static void setRenderEngineQuality(int quality) {
         renderQualitySetting = Math.clamp(quality, 0, RenderEngineConfig.QUALITY_AUTO);
         if (renderQualitySetting != RenderEngineConfig.QUALITY_AUTO) RenderEngineConfig.renderEngineQuality = renderQualitySetting;
-    }
-    private static boolean detectMouseWarpSupport() {
-        String os = System.getProperty("os.name", "").toLowerCase();
-        if (!(os.contains("nux") || os.contains("nix"))) return true;
-        String sessionType = System.getenv("XDG_SESSION_TYPE");
-        if (sessionType != null && sessionType.equalsIgnoreCase("wayland")) return false;
-        String waylandDisplay = System.getenv("WAYLAND_DISPLAY");
-        return waylandDisplay == null || waylandDisplay.isEmpty();
     }
     //endregion
 }

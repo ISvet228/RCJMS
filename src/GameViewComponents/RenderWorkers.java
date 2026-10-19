@@ -10,34 +10,47 @@ public final class RenderWorkers {
     private int start, end, remaining;
     private long generation;
     private boolean stopping;
+    private Throwable failure;
     private final AtomicInteger nextIndex = new AtomicInteger();
 
     public RenderWorkers(int count) {
         workers = new Worker[count];
         for (int i = 0; i < count; i++) {
-            workers[i] = new Worker("GameViewRenderWorker-" + i, i);
+            workers[i] = new Worker("EngineRenderWorker-" + i, i);
             workers[i].start();
         }
     }
     public void execute(int start, int end, IntConsumer task) {
+        Throwable error;
+        boolean interrupted = false;
         synchronized (lock) {
             this.start = start;
             this.end = end;
             this.task = task;
+            this.failure = null;
             nextIndex.set(start);
             remaining = workers.length;
             generation++;
             lock.notifyAll();
             while (remaining > 0 && !stopping) {
                 try { lock.wait(); }
-                catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+                catch (InterruptedException e) { interrupted = true; }
             }
+            error = failure;
+            failure = null;
         }
+        if (interrupted) Thread.currentThread().interrupt();
+        if (error != null) throw new IllegalStateException("Render worker task failed", error);
     }
     public void shutdown() {
         synchronized (lock) {
             stopping = true;
             lock.notifyAll();
+        }
+    }
+    private void recordFailure(Throwable t) {
+        synchronized (lock) {
+            if (failure == null) failure = t;
         }
     }
     private final class Worker extends Thread {
@@ -47,7 +60,7 @@ public final class RenderWorkers {
         @Override public void run() {
             while (true) {
                 IntConsumer localTask;
-                int localStart, localEnd, index;
+                int localStart, localEnd;
                 synchronized (lock) {
                     while (!stopping && seenGeneration == generation) {
                         try { lock.wait(); }
@@ -57,13 +70,20 @@ public final class RenderWorkers {
                     seenGeneration = generation;
                     localEnd = end;
                     localTask = task;
-                    localStart = Math.max(1, (end - start) / (workers.length * 8)); //block size: small enough to balance uneven rows
+                    localStart = Math.max(1, (end - start) / (workers.length * 8));
                 }
-                for (int from = nextIndex.getAndAdd(localStart); from < localEnd; from = nextIndex.getAndAdd(localStart)) {
-                    int to = Math.min(localEnd, from + localStart);
-                    for (int i = from; i < to; i++) localTask.accept(i);
+                try {
+                    for (int from = nextIndex.getAndAdd(localStart); from < localEnd; from = nextIndex.getAndAdd(localStart)) {
+                        int to = Math.min(localEnd, from + localStart);
+                        for (int i = from; i < to; i++) {
+                            try { localTask.accept(i); }
+                            catch (Throwable t) { recordFailure(t); }
+                        }
+                    }
                 }
-                synchronized (lock) { if (--remaining == 0) lock.notifyAll(); }
+                finally {
+                    synchronized (lock) { if (--remaining == 0) lock.notifyAll(); }
+                }
             }
         }
     }

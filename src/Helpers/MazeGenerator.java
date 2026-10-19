@@ -13,6 +13,15 @@ public class MazeGenerator {
     private final PortalData portals = new PortalData();
     //endregion
 
+    //region Progress
+    private double progressBase = 0, progressSpan = 1;
+    private int carvedCells;
+    void setProgressRange(double base, double span) { progressBase = base; progressSpan = span; }
+    private void reportPhase(String stage, double from, double to, double part) {
+        Progress.report(stage, progressBase + progressSpan * (from + (to - from) * Math.clamp(part, 0.0, 1.0)));
+    }
+    //endregion
+
     //region Constructors
     public MazeGenerator(int width, int height, GeometryMode geometryMode) {
         this.width = width % 2 == 0 ? width + 1 : width;
@@ -42,12 +51,14 @@ public class MazeGenerator {
         carve(1, 1);
         addBranchesFUN();
         generatePortals();
+        reportPhase("load.portals", 0.9, 1.0, 1.0);
         return maze;
     }
     //endregion
 
     //region Portals
     private void generatePortals() {
+        reportPhase("load.portals", 0.9, 1.0, 0.0);
         if (geometryMode != GeometryMode.LOOPED) return;
 
         List<int[]> deadEnds = findDeadEnds();
@@ -137,27 +148,42 @@ public class MazeGenerator {
     //endregion
 
     //region Helpers
-    private void carve(int x, int y) {
+    private static final class CarveFrame {
+        final int x, y;
+        final List<int[]> directions;
+        int next;
+        CarveFrame(int x, int y, List<int[]> directions) { this.x = x; this.y = y; this.directions = directions; }
+    }
+    private void carve(int startX, int startY) {
+        Deque<CarveFrame> stack = new ArrayDeque<>();
+        enterCarveCell(startX, startY, stack);
+        while (!stack.isEmpty()) {
+            CarveFrame frame = stack.peek();
+            if (frame.next >= frame.directions.size()) { stack.pop(); continue; }
+            int[] dir = frame.directions.get(frame.next++);
+            int nx = frame.x + dir[0];
+            int ny = frame.y + dir[1];
+
+            if (nx > 0 && ny > 0 && nx < width - 1 && ny < height - 1 && maze[ny][nx] == 1) {
+                maze[frame.y + dir[1] / 2][frame.x + dir[0] / 2] = 0;
+                enterCarveCell(nx, ny, stack);
+            }
+        }
+    }
+    private void enterCarveCell(int x, int y, Deque<CarveFrame> stack) {
+        if ((++carvedCells & 511) == 0) reportPhase("load.carve", 0.0, 0.8, carvedCells / (double) Math.max(1, (width / 2) * (height / 2)));
         maze[y][x] = 0;
         int[][] dirs = {{0, -2}, {2, 0}, {0, 2}, {-2, 0}};
         List<int[]> directions = Arrays.asList(dirs);
         Collections.shuffle(directions, random);
-
-        for (int[] dir : directions) {
-            int nx = x + dir[0];
-            int ny = y + dir[1];
-
-            if (nx > 0 && ny > 0 && nx < width - 1 && ny < height - 1 && maze[ny][nx] == 1) {
-                maze[y + dir[1] / 2][x + dir[0] / 2] = 0;
-                carve(nx, ny);
-            }
-        }
+        stack.push(new CarveFrame(x, y, directions));
     }
     private void addBranchesFUN() {
         boolean wrongGeometry = geometryMode == GeometryMode.WRONG;
         int extraOpenings = wrongGeometry ? (width * height) / 10 : (width * height) / 20;
 
         for (int i = 0; i < extraOpenings; i++) {
+            if ((i & 1023) == 0) reportPhase("load.branches", 0.8, 0.9, i / (double) Math.max(1, extraOpenings));
             int x = random.nextInt(width - 2) + 1;
             int y = random.nextInt(height - 2) + 1;
 

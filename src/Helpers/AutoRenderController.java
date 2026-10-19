@@ -8,17 +8,27 @@ public final class AutoRenderController {
     private static final double DROP_RATE = 0.25, RAISE_RATE = 0.10;
     private static final double SCALE_STEP = 0.01;
     private static final double MAX_FRAME_SECONDS = 0.5;
+    private static final double HITCH_SECONDS = 0.25;
+    private static final int HITCH_STREAK_LIMIT = 4;
 
     private double level = 1.0;
     private double frameSeconds = 1.0 / 60.0;
     private double elapsed = 0;
     private boolean primed = false;
+    private int slowStreak = 0;
 
     public double level() { return level; }
+    public void reset() {
+        elapsed = 0;
+        primed = false;
+        slowStreak = 0;
+    }
     private double fps() { return 1.0 / Math.max(frameSeconds, 1e-4); }
     public void update(double dt) {
         dt = Math.clamp(dt, 0.0, MAX_FRAME_SECONDS);
         elapsed += dt;
+        slowStreak = dt > HITCH_SECONDS ? slowStreak + 1 : 0;
+        if (dt > HITCH_SECONDS && slowStreak <= HITCH_STREAK_LIMIT) return;
         if (!primed) { frameSeconds = dt; primed = true; }
         else frameSeconds += (dt - frameSeconds) * (1.0 - Math.exp(-dt / SMOOTHING_SECONDS));
         if (elapsed < WARMUP_SECONDS) return;

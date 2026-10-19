@@ -15,7 +15,11 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
     private static final String[] PRESET_KEYS = {"mm.size_small", "mm.size_medium", "mm.size_large"};
     private static final String[] FINISH_MODES = {"mm.opposite_corner", "mm.center", "mm.random_edge"};
     private static final String[] GEOMETRY_MODES = {"mm.euclidean_geometry", "mm.wrong_geometry", "mm.looped_geometry"};
-    private static final int MIN_MAZE_SIZE = 5, MAX_MAZE_SIZE = 200, MIN_FLOORS = 2, MAX_FLOORS = 20;
+    private static final int GEOMETRY_EUCLIDEAN = 0, GEOMETRY_WRONG = 1, GEOMETRY_LOOPED = 2;
+    private boolean wrongGeometryAllowed = true;
+    private static final int MIN_MAZE_SIZE = 5, MAX_MAZE_SIZE = 200, MAX_MAZE_SIZE_CTRL = 1000, MIN_FLOORS = 2, MAX_FLOORS = 20;
+    private boolean wheelHeld;
+    private boolean loadingValues;
 
     private final ButtonGroup presetGroup = new ButtonGroup();
     private final StyledToggleButton[] presetButtons = new StyledToggleButton[PRESET_SIZES.length];
@@ -113,14 +117,31 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
         SaveData.Data saved = SaveData.load();
         try {
             SaveData.saveMazeSettings(parseOr(xField.getText(), saved.mazeWidth), parseOr(yField.getText(), saved.mazeHeight),
-                    finishBox.getSelectedIndex(), geometryBox.getSelectedIndex(), mode3DToggle.isSelected(), parseOr(floorsField.getText(), saved.mazeFloors),
+                    finishBox.getSelectedIndex(), geometry(), mode3DToggle.isSelected(), parseOr(floorsField.getText(), saved.mazeFloors),
                     fogToggle.isSelected());
         } catch (IOException ex) { ex.printStackTrace(); }
     }
-    public int mazeWidth() { return Math.clamp(Integer.parseInt(xField.getText()), MIN_MAZE_SIZE, MAX_MAZE_SIZE); }
-    public int mazeHeight() { return Math.clamp(Integer.parseInt(yField.getText()), MIN_MAZE_SIZE, MAX_MAZE_SIZE); }
+    public int mazeWidth() { return Math.clamp(Integer.parseInt(xField.getText()), MIN_MAZE_SIZE, MAX_MAZE_SIZE_CTRL); }
+    public int mazeHeight() { return Math.clamp(Integer.parseInt(yField.getText()), MIN_MAZE_SIZE, MAX_MAZE_SIZE_CTRL); }
     public int finishMode() { return finishBox.getSelectedIndex(); }
-    public int geometry() { return geometryBox.getSelectedIndex(); }
+    public int geometry() { return comboToGeometry(geometryBox.getSelectedIndex()); }
+    public void setHyperbolicGeometryAllowed(boolean allowed) {
+        if (allowed == wrongGeometryAllowed) return;
+        int current = geometry();
+        wrongGeometryAllowed = allowed;
+        if (allowed) geometryBox.addItem(GEOMETRY_WRONG, GEOMETRY_MODES[GEOMETRY_WRONG]);
+        else geometryBox.removeItemAt(GEOMETRY_WRONG);
+        int target = !allowed && current == GEOMETRY_WRONG ? GEOMETRY_EUCLIDEAN : current;
+        geometryBox.setSelectedIndex(geometryToCombo(target));
+    }
+    private int comboToGeometry(int index) {
+        if (wrongGeometryAllowed || index <= GEOMETRY_EUCLIDEAN) return index;
+        return GEOMETRY_LOOPED;
+    }
+    private int geometryToCombo(int geometry) {
+        if (wrongGeometryAllowed) return geometry;
+        return geometry == GEOMETRY_LOOPED ? GEOMETRY_WRONG : GEOMETRY_EUCLIDEAN;
+    }
     public boolean is3D() { return mode3DToggle.isSelected(); }
     public String seed() {
         String seedText = SeedUtil.normalize(seedField.getText());
@@ -205,20 +226,53 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
         watchFieldsForLimits();
     }
     private void watchFieldsForLimits() {
+        watchSizeField(xField);
+        watchSizeField(yField);
         DocumentListener listener = new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent e) { changed(); }
             @Override public void removeUpdate(DocumentEvent e) { changed(); }
             @Override public void changedUpdate(DocumentEvent e) { changed(); }
-            private void changed() { SwingUtilities.invokeLater(() -> { clampFields(false); updateSummary(); }); }
+            private void changed() { SwingUtilities.invokeLater(() -> { clampField(floorsField, MIN_FLOORS, MAX_FLOORS, false); updateSummary(); }); }
         };
-        xField.getDocument().addDocumentListener(listener);
-        yField.getDocument().addDocumentListener(listener);
         floorsField.getDocument().addDocumentListener(listener);
     }
+    private void watchSizeField(StyledTextField field) {
+        field.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) { if (SwingUtilities.isMiddleMouseButton(e)) wheelHeld = true; }
+            @Override public void mouseReleased(MouseEvent e) { if (SwingUtilities.isMiddleMouseButton(e)) wheelHeld = false; }
+        });
+        field.addFocusListener(new FocusAdapter() {
+            @Override public void focusLost(FocusEvent e) { wheelHeld = false; }
+        });
+        field.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e) { changed(); }
+            @Override public void removeUpdate(DocumentEvent e) { changed(); }
+            @Override public void changedUpdate(DocumentEvent e) { changed(); }
+            private void changed() {
+                boolean programmatic = loadingValues;
+                SwingUtilities.invokeLater(() -> {
+                    if (!programmatic) clampSizeField(field, false);
+                    updateSummary();
+                });
+            }
+        });
+    }
     private void clampFields(boolean commit) {
-        clampField(xField, MIN_MAZE_SIZE, MAX_MAZE_SIZE, commit);
-        clampField(yField, MIN_MAZE_SIZE, MAX_MAZE_SIZE, commit);
+        clampSizeField(xField, commit);
+        clampSizeField(yField, commit);
         clampField(floorsField, MIN_FLOORS, MAX_FLOORS, commit);
+    }
+    private void clampSizeField(StyledTextField field, boolean commit) {
+        Integer value = parseInteger(field.getText());
+        if (value == null) return;
+        int max = commit || wheelHeld ? MAX_MAZE_SIZE_CTRL : MAX_MAZE_SIZE;
+        int clamped = value > max ? max : commit && value < MIN_MAZE_SIZE ? MIN_MAZE_SIZE : value;
+        if (clamped != value) field.setText(String.valueOf(clamped));
+    }
+    private void setSavedText(StyledTextField field, int value) {
+        loadingValues = true;
+        try { field.setText(String.valueOf(value)); }
+        finally { loadingValues = false; }
     }
     private static void clampField(StyledTextField field, int min, int max, boolean commit) {
         Integer value = parseInteger(field.getText());
@@ -229,7 +283,7 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
     private void updateSummary() {
         Integer width = parseInteger(xField.getText()), height = parseInteger(yField.getText());
         if (width == null || height == null) { summary.setText(""); return; }
-        int shownWidth = Math.clamp(width, MIN_MAZE_SIZE, MAX_MAZE_SIZE), shownHeight = Math.clamp(height, MIN_MAZE_SIZE, MAX_MAZE_SIZE);
+        int shownWidth = Math.clamp(width, MIN_MAZE_SIZE, MAX_MAZE_SIZE_CTRL), shownHeight = Math.clamp(height, MIN_MAZE_SIZE, MAX_MAZE_SIZE_CTRL);
         if (is3D()) {
             int shownFloors = Math.clamp(parseOr(floorsField.getText(), MIN_FLOORS), MIN_FLOORS, MAX_FLOORS);
             summary.setLocalizationFormat("mm.size_summary_3d", () -> new Object[]{shownWidth, shownHeight, shownFloors});
@@ -237,11 +291,11 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
     }
     private void loadSavedMazeSettings() {
         SaveData.Data saved = SaveData.load();
-        xField.setText(String.valueOf(saved.mazeWidth));
-        yField.setText(String.valueOf(saved.mazeHeight));
+        setSavedText(xField, saved.mazeWidth);
+        setSavedText(yField, saved.mazeHeight);
         floorsField.setText(String.valueOf(saved.mazeFloors));
         finishBox.setSelectedIndex(saved.mazeFinishMode);
-        geometryBox.setSelectedIndex(saved.mazeGeometry);
+        geometryBox.setSelectedIndex(geometryToCombo(saved.mazeGeometry));
         mode3DToggle.setSelected(saved.maze3D);
         fogToggle.setSelected(saved.mazeFog);
         syncPresetSelection();

@@ -1,5 +1,6 @@
 package Helpers;
 
+import GameViewComponents.RenderEngines;
 import StyleUI.Style;
 
 import java.io.*;
@@ -15,7 +16,7 @@ public final class SaveData {
     public static final double DEFAULT_RENDER_SCALE = 1.0;
     public static final boolean DEFAULT_VSYNC = false;
     public static final int DEFAULT_RENDER_ENGINE_QUALITY = 1;
-    public static final int DEFAULT_RENDER_ENGINE = 0;
+    public static final String DEFAULT_RENDER_ENGINE = "";
     public static final int DEFAULT_WINDOW_WIDTH = 960;
     public static final int DEFAULT_WINDOW_HEIGHT = 540;
     public static final boolean DEFAULT_FULLSCREEN = false;
@@ -27,6 +28,12 @@ public final class SaveData {
     //endregion
 
     //region Public API
+    private static String parseRenderEngine(String value) {
+        String trimmed = value.trim();
+        // Older saves stored the engine's position in the list instead of its id.
+        if (trimmed.matches("\\d{1,3}")) return RenderEngines.idAt(Integer.parseInt(trimmed));
+        return trimmed;
+    }
     public static Data load() {
         Data data = new Data();
         Path file = AppPaths.SAVE_FILE;
@@ -75,7 +82,7 @@ public final class SaveData {
                                 if (scale >= 0.1 && scale <= 1.0) data.renderScale = scale;
                             }
                             case "vsync" -> data.vsync = Boolean.parseBoolean(value);
-                            case "renderEngine" -> { data.renderEngine = Math.clamp(Integer.parseInt(value), 0, 4); engineSet = true; }
+                            case "renderEngine" -> { data.renderEngine = parseRenderEngine(value); engineSet = true; }
                             case "renderEngineQuality" -> data.renderEngineQuality = Math.clamp(Integer.parseInt(value), 0, 3);
                             case "windowWidth" -> { int w = Integer.parseInt(value); if (w >= 960) data.windowWidth = w; }
                             case "windowHeight" -> { int h = Integer.parseInt(value); if (h >= 540) data.windowHeight = h; }
@@ -90,8 +97,8 @@ public final class SaveData {
                     String value = line.substring(eq + 1).trim();
                     try {
                         switch (key) {
-                            case "width" -> data.mazeWidth = Math.clamp(Integer.parseInt(value), 5, 200);
-                            case "height" -> data.mazeHeight = Math.clamp(Integer.parseInt(value), 5, 200);
+                            case "width" -> data.mazeWidth = Math.clamp(Integer.parseInt(value), 5, 1000);
+                            case "height" -> data.mazeHeight = Math.clamp(Integer.parseInt(value), 5, 1000);
                             case "finishMode" -> data.mazeFinishMode = Math.clamp(Integer.parseInt(value), 0, 2);
                             case "geometry" -> data.mazeGeometry = Math.clamp(Integer.parseInt(value), 0, 2);
                             case "mode3D" -> data.maze3D = Boolean.parseBoolean(value);
@@ -146,7 +153,7 @@ public final class SaveData {
             if (readingMap && !rows.isEmpty() && legacyMapValid) data.map = rows.toArray(new int[0][]);
             if (readingFloor && !rows.isEmpty()) floorRows.put(readingFloorIndex, rows.toArray(new int[0][]));
 
-            if (!engineSet) data.renderEngine = 1;
+            if (!engineSet) data.renderEngine = "";
             if (!floorRows.isEmpty()) {
                 data.mapFloors = new int[floorRows.size()][][];
                 int i = 0;
@@ -159,13 +166,13 @@ public final class SaveData {
         } catch (IOException ignored) { }
         return data;
     }
-    public static void saveSettings(String language, Style theme, double renderScale, boolean vsync, int renderEngine, int renderEngineQuality, int windowWidth, int windowHeight, boolean fullscreen) throws IOException {
+    public static void saveSettings(String language, Style theme, double renderScale, boolean vsync, String renderEngine, int renderEngineQuality, int windowWidth, int windowHeight, boolean fullscreen) throws IOException {
         Data data = load();
         data.language = language;
         data.theme = theme;
         data.renderScale = renderScale;
         data.vsync = vsync;
-        data.renderEngine = Math.clamp(renderEngine, 0, 4);
+        data.renderEngine = renderEngine == null || renderEngine.isBlank() ? DEFAULT_RENDER_ENGINE : renderEngine.trim();
         data.renderEngineQuality = Math.clamp(renderEngineQuality, 0, 3);
         data.windowWidth = windowWidth >= 960 ? windowWidth : DEFAULT_WINDOW_WIDTH;
         data.windowHeight = windowHeight >= 540 ? windowHeight : DEFAULT_WINDOW_HEIGHT;
@@ -174,8 +181,8 @@ public final class SaveData {
     }
     public static void saveMazeSettings(int width, int height, int finishMode, int geometry, boolean mode3D, int floors, boolean fog) throws IOException {
         Data data = load();
-        data.mazeWidth = Math.clamp(width, 5, 200);
-        data.mazeHeight = Math.clamp(height, 5, 200);
+        data.mazeWidth = Math.clamp(width, 5, 1000);
+        data.mazeHeight = Math.clamp(height, 5, 1000);
         data.mazeFinishMode = Math.clamp(finishMode, 0, 2);
         data.mazeGeometry = Math.clamp(geometry, 0, 2);
         data.maze3D = mode3D;
@@ -287,7 +294,7 @@ public final class SaveData {
         public double renderScale = DEFAULT_RENDER_SCALE;
         public boolean vsync = DEFAULT_VSYNC;
         public int renderEngineQuality = DEFAULT_RENDER_ENGINE_QUALITY;
-        public int renderEngine = DEFAULT_RENDER_ENGINE;
+        public String renderEngine = DEFAULT_RENDER_ENGINE;
         public int windowWidth = DEFAULT_WINDOW_WIDTH;
         public int windowHeight = DEFAULT_WINDOW_HEIGHT;
         public boolean fullscreen = DEFAULT_FULLSCREEN;

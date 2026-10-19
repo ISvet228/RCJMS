@@ -322,3 +322,10 @@
 "me.hint_portal_one" = "One-way portal: click two cells to link them. You can only enter it from the side opposite to the arrow. R turns the arrow.";
 "me.hint_pending" = "First end placed. Now click where the second end should be (you can change the floor first). Esc cancels.";
 "me.help_text" = "Drawing\n• Left mouse button draws, right mouse button erases.\n• Alt + click picks the block under the cursor.\n• Mouse wheel zooms. Hold Space (or the middle button) and drag to pan the map.\n\nKeys\n• 1-5 choose a block, N and M portals, V brush, B eraser, X box, F fill.\n• R turns the portal arrow. PageUp / PageDown change the floor.\n• Ctrl+Z / Ctrl+Y undo and redo, Ctrl+S saves, Esc goes back.\n\nGoal\nThe blue square is the start and cannot be changed. Place a green Finish and make sure there is a way to it - the \"Try it\" box tells you if there is.";
+"load.title" = "Building the maze";
+"load.carve" = "Carving passages";
+"load.branches" = "Opening shortcuts";
+"load.portals" = "Placing portals";
+"load.render" = "Preparing the renderer";
+"mm.no_engines" = "No render engines found. Add an engine to the Engines package and restart the game.";
+"mm.no_fallback_engine" = "No render engine can draw a map this large. Add an engine that supports this map size.";

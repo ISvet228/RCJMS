@@ -710,10 +710,13 @@ public class MapEditorView extends JPanel {
             int[][][] floorsArray = floorMaps.toArray(new int[0][][]);
             PortalData[] portalsPerFloor = buildPortalDataPerFloor();
             GameView gameView = new GameView(floorsArray, portalsPerFloor, geometryIndex);
+            gameView.resolveRenderEngine();
             gameView.setFogOfWarMinimap(fogToggle.isSelected());
             RCJMS.instance.gameView = gameView;
             RCJMS.instance.changeView(gameView, "Raycast Me!");
             gameView.start();
+        } catch (GameViewComponents.NoRenderEngineException e) {
+            inform(this, currentStyle, "me.map_cannot_be_played", L("mm.no_fallback_engine"));
         } catch (IOException e) {
             inform(this, currentStyle, "save_error", L("me.could_not_save_map") + "\n" + e.getMessage());
         }

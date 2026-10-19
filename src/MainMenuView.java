@@ -1,3 +1,4 @@
+import GameViewComponents.*;
 import Helpers.*;
 import MainMenuComponents.*;
 import StyleUI.*;
@@ -78,6 +79,7 @@ public class MainMenuView extends JPanel implements MainMenuHost {
         setLayout(null);
 
         playScreen = new MainMenuPlayScreen(this);
+        syncGeometryWithEngine();
         settingsScreen = new MainMenuSettingsScreen(this);
         controlsScreen = new MainMenuControlsScreen(this);
         screens.add(playScreen);
@@ -121,16 +123,57 @@ public class MainMenuView extends JPanel implements MainMenuHost {
     @Override public boolean isFullscreen() { return fullscreen; }
     @Override public void showMain() { showScreen(Screen.MAIN); }
     @Override public void startGame() {
+        if (RenderEngines.all().isEmpty()) {
+            JOptionPane.showMessageDialog(this, NSLocalizedString.get("mm.no_engines"), NSLocalizedString.get("mm.invalid_input"), JOptionPane.ERROR_MESSAGE);
+            return;
+        }
         playScreen.saveMazeSettings();
+        final int width, height, finish, geometry, layers;
+        final String seed;
+        final boolean fog;
         try {
-            GameView gameView = createGameView(playScreen.mazeWidth(), playScreen.mazeHeight(), playScreen.finishMode(), playScreen.geometry(), playScreen.seed(), playScreen.layers());
-            gameView.setFogOfWarMinimap(playScreen.fogMinimap());
-            RCJMS.instance.changeView(RCJMS.instance.gameView = gameView, "RayCast Me!");
-            RCJMS.instance.gameView.start();
+            width = playScreen.mazeWidth();
+            height = playScreen.mazeHeight();
+            finish = playScreen.finishMode();
+            geometry = playScreen.geometry();
+            seed = playScreen.seed();
+            layers = playScreen.layers();
+            fog = playScreen.fogMinimap();
         }
-        catch (NumberFormatException | IOException ex) {
+        catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "mm.maze_size_error", "mm.invalid_input", JOptionPane.ERROR_MESSAGE);
+            return;
         }
+        final Progress progress = new Progress();
+        RCJMS.instance.changeView(new LoadingScreen(progress), "RayCast Me!");
+        Thread loader = new Thread(() -> {
+            Progress.bind(progress);
+            try {
+                GameView gameView = createGameView(width, height, finish, geometry, seed, layers);
+                gameView.resolveRenderEngine();
+                gameView.setFogOfWarMinimap(fog);
+                SwingUtilities.invokeLater(() -> {
+                    RCJMS.instance.changeView(RCJMS.instance.gameView = gameView, "RayCast Me!");
+                    gameView.start();
+                });
+            }
+            catch (NoRenderEngineException ex) {
+                SwingUtilities.invokeLater(() -> {
+                    RCJMS.instance.changeView(this, "main_menu");
+                    JOptionPane.showMessageDialog(this, NSLocalizedString.get("mm.no_fallback_engine"), NSLocalizedString.get("mm.invalid_input"), JOptionPane.ERROR_MESSAGE);
+                });
+            }
+            catch (IOException | RuntimeException | Error ex) {
+                ex.printStackTrace();
+                SwingUtilities.invokeLater(() -> {
+                    RCJMS.instance.changeView(this, "main_menu");
+                    JOptionPane.showMessageDialog(this, "mm.maze_size_error", "mm.invalid_input", JOptionPane.ERROR_MESSAGE);
+                });
+            }
+            finally { Progress.unbind(); }
+        }, "maze-loader");
+        loader.setDaemon(true);
+        loader.start();
     }
     @Override public void changeStyle(Style next) {
         if (next == currentStyle) return;
@@ -162,7 +205,12 @@ public class MainMenuView extends JPanel implements MainMenuHost {
     @Override public boolean isVSyncEnabled() { return GameView.isVSyncEnabled(); }
     @Override public void setVSyncEnabled(boolean enabled) { GameView.setVSyncEnabled(enabled); }
     @Override public int getRenderEngine() { return GameView.getRenderEngine(); }
-    @Override public void setRenderEngine(int engine) { GameView.setRenderEngine(engine); }
+    @Override public void setRenderEngine(int engine) { GameView.setRenderEngine(engine); syncGeometryWithEngine(); }
+    private void syncGeometryWithEngine() {
+        if (playScreen == null) return;
+        RenderEngine engine = RenderEngines.find(GameView.getRenderEngineId());
+        playScreen.setHyperbolicGeometryAllowed(engine != null && engine.hasHyperbolicGeometry());
+    }
     @Override public int getRenderEngineQuality() { return GameView.getRenderEngineQuality(); }
     @Override public void setRenderEngineQuality(int quality) { GameView.setRenderEngineQuality(quality); }
     //endregion
@@ -222,14 +270,14 @@ public class MainMenuView extends JPanel implements MainMenuHost {
         frame.repaint();
     }
     private void saveSettings(String language, Style style) {
-        try { SaveData.saveSettings(language, style, GameView.getRenderScale(), GameView.isVSyncEnabled(), GameView.getRenderEngine(), GameView.getRenderEngineQuality(), windowWidth, windowHeight, fullscreen); }
+        try { SaveData.saveSettings(language, style, GameView.getRenderScale(), GameView.isVSyncEnabled(), GameView.getRenderEngineId(), GameView.getRenderEngineQuality(), windowWidth, windowHeight, fullscreen); }
         catch (IOException ex) { ex.printStackTrace(); }
     }
     private void applySavedSettings() {
         SaveData.Data savedData = SaveData.load();
         GameView.setRenderScale(savedData.renderScale);
         GameView.setVSyncEnabled(savedData.vsync);
-        GameView.setRenderEngine(savedData.renderEngine);
+        GameView.setRenderEngineId(savedData.renderEngine);
         GameView.setRenderEngineQuality(savedData.renderEngineQuality);
         NSLocalizedString.setLanguage(savedData.language);
         windowWidth = savedData.windowWidth;
