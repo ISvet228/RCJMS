@@ -167,7 +167,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "Complete-Ver"
-          name: "Latest Trusted"
+          name: "Latest Tusted"
           draft: false
           prerelease: false
           make_latest: true
