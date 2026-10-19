@@ -85,7 +85,19 @@ jobs:
       - name: Verify compiler module in runtime
         shell: bash
         run: |
-          dist/RCJMS/runtime/bin/java.exe --list-modules | grep -q "^jdk.compiler@"
+          echo "Contents of dist:"
+          find dist -maxdepth 3 | head -n 60
+          # Don't hardcode the runtime location: find the java.exe jpackage actually produced.
+          JAVA=$(find dist -iname "java.exe" -path "*bin*" | head -n 1)
+          if [ -z "$JAVA" ]; then
+            echo "::error::No java.exe found under dist/. The runtime was not created."
+            exit 1
+          fi
+          echo "Checking modules with: $JAVA"
+          "$JAVA" --list-modules | grep -q "^jdk.compiler@" || {
+            echo "::error::jdk.compiler is missing from the runtime."
+            exit 1
+          }
 
       - name: Add engine mods folder
         shell: bash
@@ -167,7 +179,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "Complete-Ver"
-          name: "Latest Tusted"
+          name: "Latest Trusted"
           draft: false
           prerelease: false
           make_latest: true
