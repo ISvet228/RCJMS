@@ -85,19 +85,21 @@ jobs:
       - name: Verify compiler module in runtime
         shell: bash
         run: |
-          echo "Contents of dist:"
-          find dist -maxdepth 3 | head -n 60
-          # Don't hardcode the runtime location: find the java.exe jpackage actually produced.
-          JAVA=$(find dist -iname "java.exe" -path "*bin*" | head -n 1)
-          if [ -z "$JAVA" ]; then
-            echo "::error::No java.exe found under dist/. The runtime was not created."
+          # jpackage app-images have no java.exe in runtime/bin (the app starts from RCJMS.exe),
+          # so check the module list that jlink writes into runtime/release instead.
+          RELEASE=$(find dist -path "*runtime/release" | head -n 1)
+          if [ -z "$RELEASE" ]; then
+            echo "::error::runtime/release not found under dist/. Contents:"
+            find dist -maxdepth 3
             exit 1
           fi
-          echo "Checking modules with: $JAVA"
-          "$JAVA" --list-modules | grep -q "^jdk.compiler@" || {
+          echo "Checking: $RELEASE"
+          if ! grep "^MODULES=" "$RELEASE" | grep -q "jdk.compiler"; then
             echo "::error::jdk.compiler is missing from the runtime."
+            grep "^MODULES=" "$RELEASE"
             exit 1
-          }
+          fi
+          echo "jdk.compiler is in the runtime."
 
       - name: Add engine mods folder
         shell: bash
@@ -179,7 +181,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "Complete-Ver"
-          name: "Latest Trusted"
+          name: "Latest Tusted"
           draft: false
           prerelease: false
           make_latest: true
