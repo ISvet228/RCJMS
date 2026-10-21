@@ -45,6 +45,8 @@ jobs:
           if [ -d src/Localization ]; then
             cp -r src/Localization build/
           fi
+          # OpenCL kernels are loaded as resources next to their engine classes
+          (cd src && find . -name "*.cl" -exec cp --parents {} ../build/ \;)
 
       - name: Create JAR
         shell: bash
@@ -60,6 +62,7 @@ jobs:
           test -f RCJMS.jar
           jar --describe-module --file RCJMS.jar || true
           jar tf RCJMS.jar
+          jar tf RCJMS.jar | grep -q '\.cl$' || { echo "::error::.cl kernels missing from JAR"; exit 1; }
 
       - name: Prepare jpackage input
         shell: bash
@@ -80,6 +83,7 @@ jobs:
             --main-jar RCJMS.jar \
             --main-class RCJMS \
             --add-modules java.desktop,jdk.compiler \
+            --java-options "--enable-native-access=ALL-UNNAMED" \
             --dest dist
 
       - name: Verify compiler module in runtime
