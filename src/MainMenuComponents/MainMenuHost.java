@@ -19,6 +19,8 @@ public interface MainMenuHost {
     void setRenderScale(double scale);
     boolean isVSyncEnabled();
     void setVSyncEnabled(boolean enabled);
+    boolean isOpenClAcceleration();
+    void setOpenClAcceleration(boolean enabled);
     int getRenderEngine();
     void setRenderEngine(int engine);
     int getRenderEngineQuality();

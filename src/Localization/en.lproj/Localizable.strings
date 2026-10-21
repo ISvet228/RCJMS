@@ -69,8 +69,12 @@
 "mm.section_lighting" = "LIGHTING";
 "mm.vsync" = "VSync";
 "mm.vsync_hint" = "Syncs frames with the monitor. No tearing.";
+"mm.opencl" = "OpenCL Acceleration";
+"mm.opencl_hint" = "Uses the GPU when available. Off = CPU.";
+"mm.opencl_unsupported" = "Not available: this engine has no OpenCL path.";
+"mm.opencl_unavailable" = "The GPU cannot be used here. Details are in the console.";
 "mm.rt_hint" = "Adds lighting and reflections. Slower.";
-"mm.resolution_hint" = "Window size. Not used in fullscreen.";
+"mm.resolution_hint" = "Game resolution. In fullscreen it is scaled to the screen.";
 "mm.render_scale_hint" = "Lower is faster but blurrier.";
 "mm.quality_low" = "Low";
 "mm.quality_medium" = "Medium";

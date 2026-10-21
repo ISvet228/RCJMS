@@ -69,8 +69,12 @@
 "mm.section_lighting" = "ОСВЕЩЕНИЕ";
 "mm.vsync" = "VSync";
 "mm.vsync_hint" = "Кадры синхронизируются с монитором.";
+"mm.opencl" = "Ускорение OpenCL";
+"mm.opencl_hint" = "GPU, если доступен. Выкл. = процессор.";
+"mm.opencl_unsupported" = "Недоступно: у этого движка нет пути OpenCL.";
+"mm.opencl_unavailable" = "GPU здесь использовать нельзя. Подробности в консоли.";
 "mm.rt_hint" = "Добавляет свет и отражения. Медленнее.";
-"mm.resolution_hint" = "Размер окна. В полном экране не действует.";
+"mm.resolution_hint" = "Разрешение игры. В полном экране масштабируется на весь экран.";
 "mm.render_scale_hint" = "Ниже — быстрее, но размытее.";
 "mm.quality_low" = "Низкое";
 "mm.quality_medium" = "Среднее";

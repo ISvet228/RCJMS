@@ -1,5 +1,6 @@
 package MainMenuComponents;
 
+import GameViewComponents.RenderEngine;
 import GameViewComponents.RenderEngineConfig;
 import GameViewComponents.RenderEngines;
 import Helpers.*;
@@ -23,7 +24,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     private static final int RESOLUTION_STEPS = 4, STEP_WIDTH = 480, STEP_HEIGHT = 270;
     private final int[][] resolutions = buildResolutions();
     private final String[] resolutionNames = buildResolutionNames();
-    private static final String NO_ENGINE_LABEL = "\u2014";
+    private static final String NO_ENGINE_LABEL = "—";
     private final String[] engineNames = RenderEngines.names().length == 0 ? new String[]{NO_ENGINE_LABEL} : RenderEngines.names();
     private final String[] engineHintKeys = RenderEngines.hintKeys();
     private final String[] qualityHintKeys = RenderEngines.qualityHintKeys();
@@ -31,11 +32,13 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     private final ButtonGroup themeGroup = new ButtonGroup();
     private final StyledToggleButton[] themeButtons = new StyledToggleButton[THEMES.length];
     private final StyledComboBox languageBox, renderScaleBox, resolutionBox, engineBox, qualityBox;
-    private final StyledToggle fullscreenToggle, vsyncToggle;
-    private final StyledLabel heading, sectionInterface, languageCaption, themeCaption, sectionDisplay, vsyncHint;
+    private final StyledToggle fullscreenToggle, vsyncToggle, openClToggle;
+    private final StyledLabel heading, sectionInterface, languageCaption, themeCaption, sectionDisplay, vsyncHint, openClHint;
     private final StyledLabel resolutionCaption, resolutionHint, scaleCaption, scaleHint, sectionRender;
     private final StyledLabel engineCaption, engineHint, qualityCaption, qualityHint;
     private final StyledButton backButton;
+    private final StatusDot openClDot = new StatusDot();
+    private final javax.swing.Timer probeWatcher = new javax.swing.Timer(400, e -> updateOpenClState());
     private boolean syncing;
     //endregion
 
@@ -51,6 +54,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         languageCaption = label("st.language", MainMenuCanvas.TEXT);
         themeCaption = label("st.themes", MainMenuCanvas.TEXT);
         vsyncHint = label("mm.vsync_hint", MainMenuCanvas.MUTED);
+        openClHint = label("mm.opencl_hint", MainMenuCanvas.MUTED);
         resolutionCaption = label("st.resolution", MainMenuCanvas.TEXT);
         resolutionHint = label("mm.resolution_hint", MainMenuCanvas.MUTED);
         scaleCaption = label("st.render_scale", MainMenuCanvas.TEXT);
@@ -67,6 +71,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         qualityBox = new StyledComboBox(style, QUALITY_KEYS);
         fullscreenToggle = new StyledToggle(style, "st.fullscreen");
         vsyncToggle = new StyledToggle(style, "mm.vsync");
+        openClToggle = new StyledToggle(style, "mm.opencl");
         backButton = button("mm.back");
         for (int i = 0; i < THEMES.length; i++) {
             themeButtons[i] = new StyledToggleButton(style, THEME_KEYS[i]);
@@ -87,6 +92,9 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         add(qualityCaption);
         add(qualityBox);
         add(qualityHint);
+        add(openClToggle);
+        add(openClHint);
+        add(openClDot);
         add(sectionDisplay);
         add(fullscreenToggle);
         add(vsyncToggle);
@@ -113,7 +121,6 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
                 if (THEMES[i] == menu.style()) themeButtons[i].setSelected(true);
             fullscreenToggle.setSelected(menu.isFullscreen());
             resolutionBox.setSelectedIndex(resolutionIndexFor(menu.windowWidth()));
-            resolutionBox.setEnabled(!menu.isFullscreen());
             renderScaleBox.setSelectedIndex(renderScaleIndex(menu.getRenderScale()));
             vsyncToggle.setSelected(menu.isVSyncEnabled());
             int engine = Math.clamp(menu.getRenderEngine(), 0, Math.max(0, engineNames.length - 1));
@@ -121,13 +128,11 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             engineBox.setEnabled(!RenderEngines.all().isEmpty());
             qualityBox.setSelectedIndex(menu.getRenderEngineQuality());
             updateEngineHints(engine);
-        } finally {
-            syncing = false;
-        }
+            updateOpenClState();
+        } finally { syncing = false; }
     }
     public void syncFullscreen(boolean value) {
         fullscreenToggle.setSelected(value);
-        resolutionBox.setEnabled(!value);
     }
     //endregion
 
@@ -157,12 +162,15 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         canvas.place(fullscreenToggle, 500, 124, 310, 34);
         canvas.place(vsyncToggle, 500, 166, 310, 34);
         canvas.text(vsyncHint, 12, 500, 204, 310, 18);
-        canvas.text(resolutionCaption, 13, 500, 232, 310, 18);
-        canvas.combo(resolutionBox, 500, 252, 310, 36);
-        canvas.text(resolutionHint, 12, 500, 290, 310, 18);
-        canvas.text(scaleCaption, 13, 500, 318, 310, 18);
-        canvas.combo(renderScaleBox, 500, 338, 310, 36);
-        canvas.text(scaleHint, 12, 500, 376, 310, 18);
+        canvas.place(openClToggle, 500, 226, 310, 34);
+        canvas.place(openClDot, 818, 237, 12, 12);
+        canvas.text(openClHint, 12, 500, 262, 310, 18);
+        canvas.text(resolutionCaption, 13, 500, 282, 310, 18);
+        canvas.combo(resolutionBox, 500, 302, 310, 36);
+        canvas.text(resolutionHint, 12, 500, 340, 310, 18);
+        canvas.text(scaleCaption, 13, 500, 366, 310, 18);
+        canvas.combo(renderScaleBox, 500, 386, 310, 36);
+        canvas.text(scaleHint, 12, 500, 424, 310, 18);
 
         canvas.place(backButton, 690, 448, 120, 38);
     }
@@ -183,12 +191,16 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         }
         fullscreenToggle.addActionListener(e -> {
             menu.applyFullscreen(fullscreenToggle.isSelected());
-            resolutionBox.setEnabled(!menu.isFullscreen());
             menu.saveSettings();
         });
         vsyncToggle.addActionListener(e -> {
             menu.setVSyncEnabled(vsyncToggle.isSelected());
             menu.saveSettings();
+        });
+        openClToggle.addActionListener(e -> {
+            menu.setOpenClAcceleration(openClToggle.isSelected());
+            menu.saveSettings();
+            updateOpenClState();
         });
         resolutionBox.addActionListener(e -> {
             int index = resolutionBox.getSelectedIndex();
@@ -206,6 +218,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             if (!syncing && index >= 0 && index < engineNames.length && !RenderEngines.all().isEmpty()) {
                 menu.setRenderEngine(index);
                 updateEngineHints(index);
+                updateOpenClState();
                 menu.saveSettings();
             }
         });
@@ -218,6 +231,34 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             }
         });
         backButton.addActionListener(e -> menu.showMain());
+    }
+    private void updateOpenClState() {
+        int index = engineBox.getSelectedIndex();
+        List<RenderEngine> engines = RenderEngines.all();
+        RenderEngine engine = index >= 0 && index < engines.size() ? engines.get(index) : null;
+        boolean supported = engine != null && engine.hasOpenCL();
+        if (!supported && menu.isOpenClAcceleration()) menu.setOpenClAcceleration(false);
+        boolean on = menu.isOpenClAcceleration();
+
+        OpenCL.GpuRuntime.Health health = !on || engine == null ? OpenCL.GpuRuntime.Health.OFF
+                : OpenCL.GpuRuntime.healthFor(engine.openClKey());
+        openClToggle.setEnabled(supported);
+        openClToggle.setSelected(on);
+        if (!supported) openClHint.setLocalizationKey("mm.opencl_unsupported");
+        else if (health == OpenCL.GpuRuntime.Health.UNAVAILABLE) openClHint.setLocalizationKey("mm.opencl_unavailable");
+        else openClHint.setLocalizationKey("mm.opencl_hint");
+
+        Color dot = switch (health) {
+            case READY -> new Color(0x2ECC71);
+            case PROBING -> new Color(0xF1C40F);
+            case UNAVAILABLE -> new Color(0xE74C3C);
+            case OFF -> Color.GRAY;
+        };
+        openClDot.setColor(dot);
+
+        if (health == OpenCL.GpuRuntime.Health.PROBING) {
+            if (!probeWatcher.isRunning()) probeWatcher.start();
+        } else probeWatcher.stop();
     }
     private void updateEngineHints(int engine) {
         if (engine >= 0 && engine < engineHintKeys.length && engineHintKeys[engine] != null) {
@@ -264,6 +305,24 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         return names;
     }
     //endregion
+
+    //region Components
+    private static final class StatusDot extends JComponent {
+        private Color color = Color.GRAY;
+        StatusDot() { setOpaque(false); }
+        void setColor(Color value) {
+            if (!value.equals(color)) { color = value; repaint(); }
+        }
+        @Override protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(color);
+            g2.fillOval(0, 0, getWidth() - 1, getHeight() - 1);
+            g2.dispose();
+        }
+    }
+    //endregion
+
     //region Styling
     @Override protected Collection<? extends Component> unstyledComponents() { return List.of(themeButtons); }
     //endregion

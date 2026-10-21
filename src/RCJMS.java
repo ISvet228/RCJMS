@@ -114,7 +114,7 @@ public class RCJMS extends JFrame {
     private void saveFullscreenSetting() {
         try {
             SaveData.Data data = SaveData.load();
-            SaveData.saveSettings(data.language, data.theme, data.renderScale, data.vsync, data.renderEngine, data.renderEngineQuality, GAME_WIDTH, GAME_HEIGHT, fullscreen);
+            SaveData.saveSettings(data.language, data.theme, data.renderScale, data.vsync, data.renderEngine, data.renderEngineQuality, GAME_WIDTH, GAME_HEIGHT, fullscreen, data.openCl);
         } catch (IOException ex) { ex.printStackTrace(); }
     }
     //endregion

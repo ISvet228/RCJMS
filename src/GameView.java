@@ -9,7 +9,7 @@ import java.awt.image.*; //Buffer Library
 import java.awt.geom.Point2D;
 import java.io.IOException;
 
-public class GameView extends JPanel implements Runnable, KeyListener, MouseMotionListener {
+public class GameView extends JPanel implements Runnable, KeyListener, MouseMotionListener, MouseListener, MouseWheelListener {
     //region Variables
     //region Maze Configuration
     private static MazeGenerator.FinishMode MAZE_MODE = MazeGenerator.FinishMode.RANDOM_EDGE;
@@ -29,10 +29,10 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private Thread gameThread;
     private int[][] map;
     private PortalData portals = new PortalData();
-    private final String customSeed;
+    private String customSeed;
     private String mazeSeedText = "";
     private final boolean isCustomMap;
-    private final int requestedWidth, requestedHeight;
+    private int requestedWidth, requestedHeight;
     private int[][][] customFloorsForRestart;
     private PortalData[] customPortalsForRestart;
     private int customGeometryModeForRestart;
@@ -79,6 +79,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Graphics Settings
     private static volatile double renderScale = 1.0;
     private static volatile boolean vsync = false;
+    private static volatile boolean openClAcceleration = true;
     private static volatile String renderEngineId = "";
     private static volatile int renderQualitySetting = 1;
     private final AutoRenderController autoRender = new AutoRenderController();
@@ -86,13 +87,18 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private int preparedFloor = -1;
     private volatile Thread busyWorker;
     private volatile Runnable pendingWork;
+    private volatile LevelSpec pendingLevel;
+    private record LevelSpec(int width, int height, int floors, String seed, MazeGenerator.GeometryMode geometry) {}
     private final Progress busyProgress = new Progress();
     private volatile long busyStartNanos;
     //endregion
     //endregion
+
     //region Game State
     private boolean isGameRunning = false;
     private boolean isPaused = false, isDebugMode = false;
+    private final DevConsole console = new DevConsole();
+    private boolean consoleReady = false;
     private long gameStartTime = System.currentTimeMillis();
     private long pauseStartTime = 0, pausedTime = 0, elapsedSeconds;
     //endregion
@@ -109,6 +115,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private int frameCounter = 0, currentFps = 0;
     private long fpsWindowStart = System.currentTimeMillis();
     private final Font fpsFont = new Font(Font.MONOSPACED, Font.BOLD, 20);
+    private final Font openClFont = new Font(Font.MONOSPACED, Font.BOLD, 16);
     private final Font timerFont = new Font(Font.MONOSPACED, Font.BOLD, 24);
     private static final Font BADGE_FONT = new Font(Font.MONOSPACED, Font.BOLD, 16);
     private static final Font BIG_SANS_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 80);
@@ -187,6 +194,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         }
         addKeyListener(this);
         addMouseMotionListener(this);
+        addMouseListener(this);
+        addMouseWheelListener(this);
 
         try { cursorRobot = new Robot(); }
         catch (Exception e) { e.printStackTrace(); }
@@ -230,6 +239,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         addKeyListener(this);
         addMouseMotionListener(this);
+        addMouseListener(this);
+        addMouseWheelListener(this);
 
         try { cursorRobot = new Robot(); }
         catch (Exception e) { e.printStackTrace(); }
@@ -259,6 +270,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         map = customMap;
         addKeyListener(this);
         addMouseMotionListener(this);
+        addMouseListener(this);
+        addMouseWheelListener(this);
 
         try {cursorRobot = new Robot();}
         catch (Exception e) {e.printStackTrace();}
@@ -299,6 +312,13 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     public void start() {
         if (isGameRunning) return;
         isGameRunning = true;
+        if (!consoleReady) {
+            consoleReady = true;
+            registerConsoleCommands();
+            OpenCL.GpuRuntime.setLogSink(line -> console.log(line.contains("disabled") || line.contains("unavailable") ? DevConsole.Level.WARN : DevConsole.Level.INFO, line));
+            console.log(DevConsole.Level.INFO, "developer console: press ~ and type --help");
+            console.log(DevConsole.Level.INFO, "engine " + renderEngineId + ", OpenCL acceleration " + (openClAcceleration ? "ON" : "OFF"));
+        }
         gameThread = new Thread(this);
         gameThread.start();
     }
@@ -605,7 +625,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG) drawGeometryBadge(hudLine++);
         if (GEOMETRY_MODE == MazeGenerator.GeometryMode.LOOPED) drawGeometryBadge(hudLine++, NSLocalizedString.get("mm.looped_geometry"));
         if (is3D()) drawFloorIndicator(hudLine);
-        if (isDebugMode && !isPaused) { drawMiniMap(); drawFpsCounter(); }
+        if (isDebugMode && !isPaused) { drawMiniMap(); drawFpsCounter(); drawOpenClBadge(); }
         if (fogMinimap && fogMapVisible) drawFogMiniMap();
         if (isPaused) drawPauseMenu();
         if (isFloorTransitioning) drawFloorTransitionEffects();
@@ -688,14 +708,16 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         resolveRenderEngine().render(renderFrame);
     }
     private RenderEngine mapEngine;
+    private String mapEngineId;
     public RenderEngine resolveRenderEngine() {
-        if (mapEngine != null) return mapEngine;
+        if (mapEngine != null && renderEngineId.equals(mapEngineId)) return mapEngine;
         int[][][] floors = map3D != null ? map3D : new int[][][]{map};
         int width = 0, height = 0;
         for (int[][] floor : floors) { width = Math.max(width, floor[0].length); height = Math.max(height, floor.length); }
         RenderEngine engine = RenderEngines.forMapSize(renderEngineId, width, height);
         if (engine == null) throw new NoRenderEngineException(width, height);
         mapEngine = engine;
+        mapEngineId = renderEngineId;
         return engine;
     }
     //endregion
@@ -949,6 +971,27 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         g2d.drawString(fpsText, 38, RCJMS.SCREEN_HEIGHT - 30);
         g2d.dispose();
     }
+    private void drawOpenClBadge() {
+        RenderEngine engine = RenderEngines.find(renderEngineId);
+        boolean supported = engine != null && engine.hasOpenCL();
+        boolean on = openClAcceleration && supported;
+        OpenCL.GpuRuntime.Health health = engine == null ? OpenCL.GpuRuntime.Health.OFF : OpenCL.GpuRuntime.healthFor(engine.openClKey());
+        Color color;
+        if (!on) color = Color.RED;
+        else if (health == OpenCL.GpuRuntime.Health.READY) color = Color.GREEN;
+        else if (health == OpenCL.GpuRuntime.Health.PROBING) color = new Color(0xF1C40F);
+        else color = Color.RED;
+
+        Graphics2D g2d = bufferedImage.createGraphics();
+        g2d.scale(uiScale(), uiScale());
+        String text = "OpenCL acceleration: " + (on ? "ON" : "OFF");
+        g2d.setFont(openClFont);
+        g2d.setColor(Color.BLACK);
+        g2d.drawString(text, 40, RCJMS.SCREEN_HEIGHT - 54);
+        g2d.setColor(color);
+        g2d.drawString(text, 38, RCJMS.SCREEN_HEIGHT - 56);
+        g2d.dispose();
+    }
     private void trackFps() {
         frameCounter++;
         if (System.currentTimeMillis() - fpsWindowStart >= 1000) {
@@ -1147,6 +1190,14 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Input
     @Override public void keyPressed(KeyEvent e) {
         int key = e.getKeyCode();
+        if (key == KeyEvent.VK_BACK_QUOTE || DevConsole.isToggleChar(e.getKeyChar())) {
+            toggleConsole();
+            return;
+        }
+        if (console.isOpen()) {
+            consoleKey(e);
+            return;
+        }
         boolean loading = isBusy();
         if (loading && (key == KeyEvent.VK_ESCAPE || key == KeyEvent.VK_R)) return;
         if (key == KeyEvent.VK_W) w = !loading;
@@ -1169,55 +1220,308 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             gameThread.interrupt();
             return;
         }
-        if (key == KeyEvent.VK_R) {
-            if (isPaused) {
-                pausedTime += System.currentTimeMillis() - pauseStartTime;
-                isPaused = false;
-                hideCursor();
-            }
-            if (isCustomMap){
-                try {
-                    isGameRunning = false;
-                    GameView gameView = is3D() ? new GameView(customFloorsForRestart, customPortalsForRestart, customGeometryModeForRestart) : new GameView(map);
-                    gameView.setFogOfWarMinimap(fogMinimap);
-                    RCJMS.instance.changeView(gameView, "Raycast Me!");
-                    gameThread.interrupt();
-                    gameView.start();
-                } catch (IOException ex) {throw new RuntimeException(ex);}
-                return;
-            }
-            else {
-                pendingWork = this::regenerateMaze;
-            }
-        }
+        if (key == KeyEvent.VK_R) restartGame();
     }
-    private void regenerateMaze() {
-        if (is3D()) {
-                mazeGenerator3D = new MazeGenerator3D(mapWidth(), mapHeight(), floorCount(), chooseSeed(), GEOMETRY_MODE);
-                map3D = mazeGenerator3D.generate(MAZE_MODE);
-                currentFloor = 0;
-                floorPortalsAll = new PortalData[floorCount()];
-                for (int f = 0; f < floorCount(); f++) floorPortalsAll[f] = mazeGenerator3D.getPortals(f);
-                assert map3D != null;
-                map = map3D[currentFloor];
-                portals = floorPortalsAll[currentFloor];
-            }
-            else {
-                mazeGenerator = new MazeGenerator(mapWidth(), mapHeight(), chooseSeed(), GEOMETRY_MODE);
-                map = mazeGenerator.generate(MAZE_MODE);
-                portals = mazeGenerator.getPortals();
-            }
+    private void restartGame() { restartGame(null); }
+    private void restartGame(LevelSpec level) {
+        if (isPaused) {
+            pausedTime += System.currentTimeMillis() - pauseStartTime;
+            isPaused = false;
+            hideCursor();
+        }
+        if (isCustomMap) {
+            try {
+                isGameRunning = false;
+                GameView gameView = is3D() ? new GameView(customFloorsForRestart, customPortalsForRestart, customGeometryModeForRestart) : new GameView(map);
+                gameView.setFogOfWarMinimap(fogMinimap);
+                RCJMS.instance.changeView(gameView, "Raycast Me!");
+                gameThread.interrupt();
+                gameView.start();
+            } catch (IOException ex) { throw new RuntimeException(ex); }
+            return;
+        }
+        pendingLevel = level;
+        pendingWork = this::regenerateMaze;
+        if (level == null) console.log(DevConsole.Level.INFO, "restarting the level");
+    }
 
-            playerX = playerY = 1.5;
-            cameraAngle = cameraPitch = 0;
-            explored = null;
-            onStairsLastFrame = false;
-            isFloorTransitioning = false;
-            floorSwitchApplied = false;
-            floorTransitionTime = 0;
-            gameStartTime = System.currentTimeMillis();
-            pausedTime = 0;
-            renderPrepPending = true;
+    //region Developer console
+    private void registerConsoleCommands() {
+        console.register("--help", "--help", a -> {
+            a.info("commands:");
+            for (String line : console.helpLines()) a.info("  " + line);
+            a.info("options start with a dash; -s saves a change to the settings file");
+        });
+        console.register("engine", "engine [<name>] [-l] [-on|-off](openCL) [-s]  (no name: current engine, -l: list engines)", this::engineCommand);
+        console.register("log", "log [-s] [-c]  (-s: save the terminal to a file, -c: clear the terminal)", this::logCommand);
+        console.register("openCL", "openCL [-on|-off] [-s]  (no option: show the state)", this::openClCommand);
+        console.register("pause", "pause", a -> {
+            if (isBusy()) throw new IllegalArgumentException("the level is still loading");
+            if (isPaused) a.info("already paused");
+            else setPaused(true);
+        });
+        console.alias("--p", "pause");
+        console.register("resume", "resume", a -> {
+            if (!isPaused) a.info("the game is not paused");
+            else setPaused(false);
+        });
+        console.alias("--r", "resume");
+        console.register("restart", "restart [W [H]] [-fN] [-sSEED] [-g1|-g2|-g3]  (no options: same level)", this::restartCommand);
+        console.alias("--rs", "restart");
+        console.register("status", "status", a -> {
+            RenderEngine engine = currentEngine();
+            a.info("engine: " + (engine == null ? "none" : engine.id() + " (" + engine.displayName() + ")"));
+            a.info("OpenCL acceleration: " + (openClAcceleration ? "ON" : "OFF"));
+            if (engine != null && openClAcceleration && engine.hasOpenCL()) {
+                OpenCL.GpuRuntime.Health health = OpenCL.GpuRuntime.healthFor(engine.openClKey());
+                String reason = OpenCL.GpuRuntime.reasonFor(engine.openClKey());
+                a.info("GPU: " + health + (reason.isEmpty() ? "" : " (" + reason + ")"));
+            }
+            a.info("paused: " + (isPaused ? "yes" : "no") + ", loading: " + (isBusy() ? "yes" : "no"));
+        });
+        console.alias("--s", "status");
+        console.register("maze", "maze  (size, floors, finish, geometry, seed, finish position)", this::mazeCommand);
+        console.alias("--m", "maze");
+    }
+    private void restartCommand(DevConsole.Args a) {
+        if (isBusy()) throw new IllegalArgumentException("the level is still loading, try again");
+        java.util.List<String> values = a.values();
+        String floorsText = a.optionValue("-f");
+        String seedText = a.optionValue("-s");
+        String geometryText = a.optionValue("-g");
+        if (values.isEmpty() && floorsText == null && seedText == null && geometryText == null) {
+            restartGame(null);
+            return;
+        }
+        if (isCustomMap) throw new IllegalArgumentException("a custom map keeps its own size: restart it without options");
+        if (values.size() > 2) throw new IllegalArgumentException("restart takes a width and an optional height: restart 90 [70]");
+
+        int width = values.isEmpty() ? mapWidth() : parseSize(values.get(0), "width");
+        int height = values.size() == 2 ? parseSize(values.get(1), "height") : (values.isEmpty() ? mapHeight() : width);
+        int floors = floorsText == null ? 1 : parseFloors(floorsText);
+        String seed = seedText == null ? null : seedFrom(seedText, a);
+        MazeGenerator.GeometryMode geometry = geometryText == null ? MazeGenerator.GeometryMode.EUCLIDEAN : geometryFrom(geometryText);
+
+        RenderEngine engine = currentEngine();
+        if (geometry == MazeGenerator.GeometryMode.WRONG && (engine == null || !engine.hasHyperbolicGeometry()))
+            throw new IllegalArgumentException("engine " + nameOf(engine) + " does not support WRONG geometry (-g2)");
+        if (geometry == MazeGenerator.GeometryMode.WRONG && openClAcceleration)
+            a.warn("OpenCL is not used in WRONG geometry; it applies again in other geometries");
+        if (engine != null && !engine.supportsMapSize(width, height))
+            a.warn("engine " + engine.displayName() + " does not support " + width + "x" + height + ", another engine may draw the frame");
+        a.info("restarting: " + width + "x" + height + ", " + (floors > 1 ? floors + " floors" : "one floor") + ", "
+                + geometry + (seed != null ? ", seed " + seed : ", random seed"));
+        restartGame(new LevelSpec(width, height, floors, seed, geometry));
+    }
+    private static int parseSize(String text, String what) {
+        int value;
+        try { value = Integer.parseInt(text); }
+        catch (NumberFormatException e) { throw new IllegalArgumentException(what + " must be a number, got " + text); }
+        if (value < 5 || value > 200) throw new IllegalArgumentException(what + " must be between 5 and 200");
+        return value;
+    }
+    private static int parseFloors(String text) {
+        int value;
+        try { value = Integer.parseInt(text); }
+        catch (NumberFormatException e) { throw new IllegalArgumentException("-f needs a number of floors, for example -f15"); }
+        if (value != 1 && (value < 2 || value > 20)) throw new IllegalArgumentException("floors must be 1 or 2..20");
+        return value;
+    }
+    private static String seedFrom(String text, DevConsole.Args a) {
+        String trimmed = text.trim();
+        if (trimmed.isEmpty()) throw new IllegalArgumentException("-s needs a seed, for example -sABC123");
+        String seed = SeedUtil.normalize(trimmed);
+        if (seed.length() < trimmed.replaceAll("\\s", "").length())
+            a.warn("seed is longer than " + SeedUtil.LENGTH + " characters, shortened to " + seed);
+        return seed;
+    }
+    private static MazeGenerator.GeometryMode geometryFrom(String text) {
+        return switch (text.trim()) {
+            case "1" -> MazeGenerator.GeometryMode.EUCLIDEAN;
+            case "2" -> MazeGenerator.GeometryMode.WRONG;
+            case "3" -> MazeGenerator.GeometryMode.LOOPED;
+            default -> throw new IllegalArgumentException("geometry must be -g1 (Euclidean), -g2 (wrong) or -g3 (looped)");
+        };
+    }
+    private void mazeCommand(DevConsole.Args a) {
+        boolean three = is3D();
+        a.info("size: " + mapWidth() + " x " + mapHeight() + (three ? ", " + floorCount() + " floors" : ", one floor"));
+        a.info("finish mode: " + MAZE_MODE);
+        a.info("geometry: " + GEOMETRY_MODE);
+        a.info("seed: " + (isCustomMap ? "none (custom map)" : mazeSeedText));
+        int[][][] layers = three ? map3D : new int[][][]{map};
+        int found = 0;
+        for (int f = 0; f < layers.length; f++)
+            for (int y = 0; y < layers[f].length; y++)
+                for (int x = 0; x < layers[f][y].length; x++)
+                    if (layers[f][y][x] == 2) {
+                        found++;
+                        a.info("finish: " + (three ? "floor " + (f + 1) + ", " : "") + "x " + x + ", y " + y);
+                    }
+        if (found == 0) a.info("finish: none");
+    }
+    private void logCommand(DevConsole.Args a) {
+        boolean save = a.flag("-s");
+        boolean clear = a.flag("-c");
+        if (!a.values().isEmpty()) throw new IllegalArgumentException("unexpected argument: " + a.values().getFirst());
+        if (!save && !clear) {
+            a.info("usage: log [-s] [-c]");
+            return;
+        }
+        String text = console.transcript();
+        java.nio.file.Path file = null;
+        if (save) {
+            String stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
+            file = Helpers.AppPaths.file("log_" + stamp + ".txt");
+            try { java.nio.file.Files.writeString(file, text, java.nio.charset.StandardCharsets.UTF_8); }
+            catch (IOException e) { throw new IllegalArgumentException("could not save the log: " + e.getMessage()); }
+        }
+        if (clear) console.clearLog();
+        if (file != null) a.info("terminal saved to " + file);
+    }
+    private void openClCommand(DevConsole.Args a) {
+        boolean on = a.flag("-on");
+        boolean off = a.flag("-off");
+        boolean save = a.flag("-s");
+        if (!a.values().isEmpty()) throw new IllegalArgumentException("unexpected argument: " + a.values().getFirst());
+        if (on && off) throw new IllegalArgumentException("use either -on or -off, not both");
+        RenderEngine engine = currentEngine();
+        if (on && GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG) {
+            a.warn("OpenCL is not used in WRONG geometry: the GPU path renders only Euclidean and looped maps");
+            throw new IllegalArgumentException("cannot turn OpenCL ON in WRONG geometry (-g2)");
+        }
+        if (!on && !off) {
+            if (save) throw new IllegalArgumentException("-s needs -on or -off");
+            a.info("OpenCL acceleration: " + (openClAcceleration ? "ON" : "OFF"));
+            reportGpuState(engine);
+            return;
+        }
+        if (on && (engine == null || !engine.hasOpenCL()))
+            throw new IllegalArgumentException("engine " + nameOf(engine) + " has no OpenCL path, OpenCL stays OFF");
+        setOpenClAcceleration(on);
+        a.info("OpenCL acceleration " + (on ? "ON" : "OFF"));
+        reportGpuState(engine);
+        if (save) persistSettings(renderEngineId, on);
+    }
+    private void engineCommand(DevConsole.Args a) {
+        boolean list = a.flag("-l");
+        boolean on = a.flag("-on");
+        boolean off = a.flag("-off");
+        boolean save = a.flag("-s");
+        java.util.List<String> values = a.values();
+        RenderEngine current = currentEngine();
+
+        if (list) {
+            if (!values.isEmpty() || on || off || save) throw new IllegalArgumentException("-l only lists the engines");
+            for (RenderEngine e : RenderEngines.all())
+                a.info((e == current ? "* " : "  ") + e.id() + " = " + e.displayName() + (e.hasOpenCL() ? "  [OpenCL]" : ""));
+            return;
+        }
+        if (values.isEmpty()) {
+            if (on || off || save) throw new IllegalArgumentException("engine needs an engine name to switch to (see engine -l)");
+            if (current == null) { a.info("engine: none"); return; }
+            a.info("engine: " + current.id() + " (" + current.displayName() + "), OpenCL acceleration " + (openClAcceleration ? "ON" : "OFF"));
+            reportGpuState(current);
+            return;
+        }
+        if (values.size() > 1) throw new IllegalArgumentException("too many arguments for engine: " + values.subList(1, values.size()));
+        if (on && off) throw new IllegalArgumentException("use either -on or -off, not both");
+        RenderEngine target = findEngine(values.getFirst());
+        if (target == null) throw new IllegalArgumentException("unknown engine: " + values.getFirst() + " (see engine -l)");
+        Boolean requested = on ? Boolean.TRUE : off ? Boolean.FALSE : null;
+        if (on && GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG) {
+            a.warn("OpenCL is not used in WRONG geometry: the GPU path renders only Euclidean and looped maps");
+            throw new IllegalArgumentException("cannot turn OpenCL ON in WRONG geometry (-g2)");
+        }
+
+        renderEngineId = target.id();
+        boolean savedOpenCl = SaveData.load().openCl;
+        boolean resolved = resolveOpenClForSwap(target.hasOpenCL(), requested, savedOpenCl);
+        if (requested != null && requested && !target.hasOpenCL())
+            a.warn("engine " + target.displayName() + " has no OpenCL path, OpenCL stays OFF");
+        else if (requested == null && savedOpenCl && !target.hasOpenCL())
+            a.info("saved OpenCL setting is ON, but engine " + target.displayName() + " has no OpenCL path: OFF");
+        setOpenClAcceleration(resolved);
+        if (!target.supportsMapSize(mapWidth(), mapHeight()))
+            a.warn("engine " + target.displayName() + " does not support this map size, another engine may draw the frame");
+        a.info("engine: " + target.id() + " (" + target.displayName() + "), OpenCL acceleration " + (openClAcceleration ? "ON" : "OFF"));
+        reportGpuState(target);
+        if (save) persistSettings(target.id(), openClAcceleration);
+    }
+    static boolean resolveOpenClForSwap(boolean supported, Boolean requested, boolean savedOpenCl) {
+        boolean wanted = requested != null ? requested : savedOpenCl;
+        return wanted && supported;
+    }
+    private void reportGpuState(RenderEngine engine) {
+        if (engine == null || !openClAcceleration || !engine.hasOpenCL()) return;
+        OpenCL.GpuRuntime.Health health = OpenCL.GpuRuntime.healthFor(engine.openClKey());
+        if (health == OpenCL.GpuRuntime.Health.UNAVAILABLE)
+            console.log(DevConsole.Level.WARN, "GPU is not usable: " + OpenCL.GpuRuntime.reasonFor(engine.openClKey()));
+        else if (health == OpenCL.GpuRuntime.Health.PROBING)
+            console.log(DevConsole.Level.INFO, "GPU is still being checked");
+    }
+    private void persistSettings(String engineId, boolean openCl) {
+        try {
+            SaveData.Data data = SaveData.load();
+            SaveData.saveSettings(data.language, data.theme, data.renderScale, data.vsync, engineId,
+                    data.renderEngineQuality, data.windowWidth, data.windowHeight, data.fullscreen, openCl);
+            console.log(DevConsole.Level.INFO, "saved to the settings file");
+        } catch (IOException e) { throw new IllegalArgumentException("could not save settings: " + e.getMessage()); }
+    }
+    private static RenderEngine currentEngine() { return RenderEngines.find(renderEngineId); }
+    private static RenderEngine findEngine(String name) {
+        for (RenderEngine e : RenderEngines.all())
+            if (e.id().equalsIgnoreCase(name) || e.displayName().equalsIgnoreCase(name)) return e;
+        return null;
+    }
+    private static String nameOf(RenderEngine engine) {
+        return engine == null ? "none" : engine.displayName();
+    }
+    //endregion
+
+    private void regenerateMaze() {
+        LevelSpec level = pendingLevel;
+        pendingLevel = null;
+        int width = level != null ? level.width() : mapWidth();
+        int height = level != null ? level.height() : mapHeight();
+        if (level != null) {
+            MAZE_3D = level.floors() > 1;
+            MAZE_FLOORS = MAZE_3D ? level.floors() : 1;
+            GEOMETRY_MODE = level.geometry();
+            customSeed = level.seed();
+            requestedWidth = width;
+            requestedHeight = height;
+        }
+        mapEngine = null;
+
+        if (MAZE_3D) {
+            mazeGenerator3D = new MazeGenerator3D(width, height, MAZE_FLOORS, chooseSeed(), GEOMETRY_MODE);
+            map3D = mazeGenerator3D.generate(MAZE_MODE);
+            currentFloor = 0;
+            floorPortalsAll = new PortalData[MAZE_FLOORS];
+            for (int f = 0; f < MAZE_FLOORS; f++) floorPortalsAll[f] = mazeGenerator3D.getPortals(f);
+            map = map3D[currentFloor];
+            portals = floorPortalsAll[currentFloor];
+        }
+        else {
+            map3D = null;
+            floorPortalsAll = null;
+            currentFloor = 0;
+            mazeGenerator = new MazeGenerator(width, height, chooseSeed(), GEOMETRY_MODE);
+            map = mazeGenerator.generate(MAZE_MODE);
+            portals = mazeGenerator.getPortals();
+        }
+
+        playerX = playerY = 1.5;
+        cameraAngle = cameraPitch = 0;
+        explored = null;
+        onStairsLastFrame = false;
+        isFloorTransitioning = false;
+        floorSwitchApplied = false;
+        floorTransitionTime = 0;
+        gameStartTime = System.currentTimeMillis();
+        pausedTime = 0;
+        renderPrepPending = true;
     }
     @Override public void keyReleased(KeyEvent e) {
         int key = e.getKeyCode();
@@ -1228,9 +1532,34 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (key == KeyEvent.VK_SHIFT) shift = false;
     }
     @Override public void mouseMoved(MouseEvent e) { handleMouseLook(e); }
-    @Override public void mouseDragged(MouseEvent e) { handleMouseLook(e); }
+    @Override public void mouseDragged(MouseEvent e) {
+        if (console.isOpen()) {
+            console.mouseDragged(e.getX(), e.getY());
+            repaint();
+            return;
+        }
+        handleMouseLook(e);
+    }
+    @Override public void mousePressed(MouseEvent e) {
+        if (!console.isOpen()) return;
+        console.mousePressed(e.getX(), e.getY());
+        repaint();
+    }
+    @Override public void mouseReleased(MouseEvent e) {
+        if (!console.isOpen()) return;
+        console.mouseReleased();
+        repaint();
+    }
+    @Override public void mouseClicked(MouseEvent e) {}
+    @Override public void mouseEntered(MouseEvent e) {}
+    @Override public void mouseExited(MouseEvent e) {}
+    @Override public void mouseWheelMoved(MouseWheelEvent e) {
+        if (!console.isOpen()) return;
+        console.wheel(e.getWheelRotation());
+        repaint();
+    }
     private void handleMouseLook(MouseEvent e) {
-        if (isPaused || isBusy()) return;
+        if (isPaused || isBusy() || console.isOpen()) return;
         if (isFloorTransitioning && floorTransitionTime < FADE_OUT_DURATION + FADE_IN_DURATION) return;
         if (!isShowing()) return;
         Point origin;
@@ -1269,7 +1598,27 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
 
     //region Component Overrides
-    @Override public void keyTyped(KeyEvent e) {}
+    @Override public void keyTyped(KeyEvent e) {
+        if (console.isOpen()) {
+            console.typed(e.getKeyChar());
+            repaint();
+        }
+    }
+    private void toggleConsole() {
+        console.toggle();
+        if (console.isOpen()) {
+            releaseInput();
+            showCursor();
+        }
+        else if (!isPaused) hideCursor();
+        repaint();
+    }
+    private void consoleKey(KeyEvent e) {
+        console.handleKey(e);
+        String line = console.takeSubmitted();
+        if (line != null) console.execute(line);
+        repaint();
+    }
     @Override protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         int panelWidth = getWidth();
@@ -1293,6 +1642,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         g2d.setColor(Color.BLACK);
         g2d.fillRect(0, 0, panelWidth, panelHeight);
         g2d.drawImage(bufferedImage, drawX, drawY, drawWidth, drawHeight, null);
+        if (console.isOpen()) console.draw(g2d, panelWidth, panelHeight);
         g2d.dispose();
     }
     //endregion
@@ -1311,12 +1661,17 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         for (int x = 0; x < values.length; x++) values[x] = 2.0 * x / (double) values.length - 1.0;
         return values;
     }
-    private void hideCursor() { setCursor(invisibleCursor); hasLastMousePos = false; }
+    private void hideCursor() {
+        if (console.isOpen()) { showCursor(); return; }
+        setCursor(invisibleCursor);
+        hasLastMousePos = false;
+    }
     private void showCursor() { setCursor(Cursor.getDefaultCursor()); hasLastMousePos = false; }
     private void setPaused(boolean paused) {
         if (paused == isPaused) return;
         if (paused && isBusy()) return;
         isPaused = paused;
+        console.log(DevConsole.Level.INFO, paused ? "paused" : "resumed");
         if (paused) {
             pauseStartTime = System.currentTimeMillis();
             showCursor();
@@ -1372,6 +1727,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     public static void setRenderScale(double scale) { renderScale = Math.clamp(scale, 0.1, 1.0); }
     public static boolean isVSyncEnabled() { return vsync; }
     public static void setVSyncEnabled(boolean enabled) { vsync = enabled; }
+    public static boolean isOpenClAcceleration() { return openClAcceleration; }
+    public static void setOpenClAcceleration(boolean enabled) {
+        openClAcceleration = enabled;
+        OpenCL.GpuRuntime.setEnabled(enabled);
+    }
     public static int getRenderEngine() { return RenderEngines.indexOf(renderEngineId); }
     public static void setRenderEngine(int index) { renderEngineId = RenderEngines.idAt(index); }
     public static String getRenderEngineId() { return renderEngineId; }

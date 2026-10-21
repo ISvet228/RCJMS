@@ -74,11 +74,27 @@ final class ExternalEngines {
         }
         Path build = prepareBuildDir(folder, problems);
         if (build == null) return;
+        copyKernelSources(folder, sources, build, problems);
         List<Path> compiled = ScriptCompiler.compile(sources, build, absoluteClasspath(), problems);
         try {
             URLClassLoader loader = new URLClassLoader(new URL[]{build.toUri().toURL()}, ExternalEngines.class.getClassLoader());
             for (Path source : compiled) register(loader, qualifiedName(source), out, problems);
         } catch (IOException e) { problems.add("cannot load compiled scripts: " + e.getMessage()); }
+    }
+    private static void copyKernelSources(Path folder, List<Path> sources, Path build, List<String> problems) {
+        for (Path source : sources) {
+            String simple = source.getFileName().toString();
+            simple = simple.substring(0, simple.length() - ".java".length());
+            Path kernel = folder.resolve(simple + ".cl");
+            if (!Files.isRegularFile(kernel)) continue;
+            try {
+                String qualified = qualifiedName(source);
+                int dot = qualified.lastIndexOf('.');
+                Path dir = dot > 0 ? build.resolve(qualified.substring(0, dot).replace('.', '/')) : build;
+                Files.createDirectories(dir);
+                Files.copy(kernel, dir.resolve(simple + ".cl"), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) { problems.add(simple + ".cl: cannot copy the kernel: " + e.getMessage()); }
+        }
     }
     private static boolean compilerPresent() {
         try { return ScriptCompiler.available(); }
@@ -156,6 +172,8 @@ final class ExternalEngines {
         @Override public String hintKey() { return inner.hintKey(); }
         @Override public String qualityHintKey() { return inner.qualityHintKey(); }
         @Override public boolean hasHyperbolicGeometry() { return inner.hasHyperbolicGeometry(); }
+        @Override public boolean hasOpenCL() { return inner.hasOpenCL(); }
+        @Override public String openClKey() { return inner.openClKey(); }
         @Override public boolean supportsMapSize(int width, int height) { return inner.supportsMapSize(width, height); }
         @Override public void prepare(RenderFrame frame) { inner.prepare(frame); }
         @Override public void render(RenderFrame frame) { inner.render(frame); }

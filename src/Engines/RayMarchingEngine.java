@@ -1,15 +1,15 @@
 package Engines;
 
-import GameViewComponents.RenderEngine;
-import GameViewComponents.RenderFrame;
+import GameViewComponents.*;
 import Helpers.*;
+import OpenCL.*;
 import java.awt.*;
+import java.util.Arrays;
 import java.util.function.IntConsumer;
 
 public final class RayMarchingEngine  implements RenderEngine {
-    //region Shared helpers (kept inside this engine)
 
-    //region Engine settings (copied from the RenderFrame before every render)
+    //region Engine settings
     static volatile int cfgQuality = 1, cfgOutW = 960, cfgOutH = 540;
     static volatile MazeGenerator.GeometryMode cfgGeometry = MazeGenerator.GeometryMode.EUCLIDEAN;
     static volatile double cfgCurvature = HyperbolicMath.DEFAULT_CURVATURE;
@@ -354,10 +354,10 @@ public final class RayMarchingEngine  implements RenderEngine {
     //endregion
 
     //region Textures and shading
-    private static int tintColor(int color, int tint, double amount) {
+    private static int tintColor(int color, int tint) {
         int r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
         int tr = (tint >> 16) & 255, tg = (tint >> 8) & 255, tb = tint & 255;
-        r = (int)(r * (1 - amount) + tr * amount); g = (int)(g * (1 - amount) + tg * amount); b = (int)(b * (1 - amount) + tb * amount);
+        r = (int)(r * (1 - 0.45) + tr * 0.45); g = (int)(g * (1 - 0.45) + tg * 0.45); b = (int)(b * (1 - 0.45) + tb * 0.45);
         return (r << 16) | (g << 8) | b;
     }
     static int applyBrightness(int color, double brightness) {
@@ -405,8 +405,8 @@ public final class RayMarchingEngine  implements RenderEngine {
         int fx = (int) Math.floor(worldX), fy = (int) Math.floor(worldY);
         if (fx < 0 || fy < 0 || fy >= floorMap.length || fx >= floorMap[0].length) return color;
         int cell = floorMap[fy][fx];
-        if (cell == 3) return tintColor(color, 0x3399FF, 0.45);
-        if (cell == 4) return tintColor(color, 0xFFAA33, 0.45);
+        if (cell == 3) return tintColor(color, 0x3399FF);
+        if (cell == 4) return tintColor(color, 0xFFAA33);
         return color;
     }
     //endregion
@@ -450,10 +450,9 @@ public final class RayMarchingEngine  implements RenderEngine {
             g2d.dispose();
         }
     }
-    static void parallelRange(RenderFrame fr, int start, int end, IntConsumer task) {
-        int range = end - start;
-        if (range <= 0) return;
-        fr.renderWorkers.execute(start, end, task);
+    static void parallelRange(RenderFrame fr, int end, IntConsumer task) {
+        if (end <= 0) return;
+        fr.renderWorkers.execute(0, end, task);
     }
     //endregion
 
@@ -677,16 +676,26 @@ public final class RayMarchingEngine  implements RenderEngine {
         double nrmX, nrmY;
     }
     //endregion
-    //endregion
+
     //region Module
     private RenderFrame fr;
-    @Override public String id() { return "raymarching"; }
+    static final String ID = "raymarching";
+    @Override public String id() { return ID; }
     @Override public String displayName() { return "Ray Marching"; }
     @Override public int order() { return 2; }
     @Override public String hintKey() { return "mm.engine_rm"; }
     @Override public String qualityHintKey() { return "mm.quality_rm"; }
     @Override public boolean hasHyperbolicGeometry() { return true; }
-    @Override public void render(RenderFrame frame) { fr = frame; syncConfig(frame); renderRayMarching(); }
+    @Override public boolean hasOpenCL() { return true; }
+    @Override public void render(RenderFrame frame) {
+        fr = frame;
+        syncConfig(frame);
+        if (hasOpenCL() && cfgGeometry != MazeGenerator.GeometryMode.WRONG && Gpu.tryRender(frame)) {
+            copyRenderBuffer(frame);
+            return;
+        }
+        renderRayMarching();
+    }
     @Override public void prepare(RenderFrame frame) { prepareSdfFields(frame); }
     //endregion
     private  static final double RM_HIT = 0.001, RM_STEP_SCALE = 0.8, RM_MAX_DISTANCE = 48, RM_MIN_STEP = 0.001;
@@ -709,7 +718,7 @@ public final class RayMarchingEngine  implements RenderEngine {
         final int[][] baseMap = fr.map;
         final PortalData basePortals = fr.portals;
         final SDFField baseField = sdfFieldFor(baseMap);
-        parallelRange(fr, 0, height, y -> {
+        parallelRange(fr, height, y -> {
             RayState s = new RayState();
             double rowZ = rowZA[y], rowScale = rowInvA[y];
             for (int x = 0; x < width; x++) {
@@ -759,7 +768,7 @@ public final class RayMarchingEngine  implements RenderEngine {
         final double lightDistance = effectiveFlashlightDistance(false);
         final double z0 = fr.cameraHeight;
         final double[] rowZ = fr.rowZACache;
-        parallelRange(fr, 0, width, x -> {
+        parallelRange(fr, width, x -> {
             final double lateral = fr.cameraXCache[x] * planeLength;
             final double hx = dirX - lateral * dirY, hy = dirY + lateral * dirX;
             final double hl = Math.sqrt(hx * hx + hy * hy);
@@ -788,7 +797,7 @@ public final class RayMarchingEngine  implements RenderEngine {
         final int[][] baseMap = fr.map;
         final int maxSteps = rayMarchSteps();
         final double lightDistance = effectiveFlashlightDistance(true);
-        parallelRange(fr, 0, height, y -> {
+        parallelRange(fr, height, y -> {
             RayState s = new RayState();
             for (int x = 0; x < width; x++) {
                 double[] pr = hypPixelRay(fr.cameraXCache[x], y + 0.5, dirX, dirY, height, horizon);
@@ -849,7 +858,7 @@ public final class RayMarchingEngine  implements RenderEngine {
             s.y += s.dy * step;
             dist += step;
         }
-        if (dist < RayMarchingEngine.RM_MAX_DISTANCE && i >= maxSteps) c.exhausted = true;
+        if (dist < RayMarchingEngine.RM_MAX_DISTANCE) c.exhausted = true;
     }
     private void marchSphereHyp(RayState s, int maxSteps) {
         s.hitKind = 0;
@@ -886,7 +895,7 @@ public final class RayMarchingEngine  implements RenderEngine {
             step = Math.min(step, plane - s.dist);
             s.x += s.dx * step; s.y += s.dy * step; s.dist += step;
         }
-        if (s.dist < RayMarchingEngine.RM_MAX_DISTANCE && i >= maxSteps) s.exhausted = true;
+        if (s.dist < RayMarchingEngine.RM_MAX_DISTANCE) s.exhausted = true;
     }
     private void marchSphere(RayState s, int maxSteps) {
         s.hitKind = 0;
@@ -950,4 +959,270 @@ public final class RayMarchingEngine  implements RenderEngine {
         storeMarch(s, x, y, z, dx, dy, dz, dist);
         if (dist < RayMarchingEngine.RM_MAX_DISTANCE) s.exhausted = true;
     }
+
+    //region OpenCL plug-in
+    static final class Gpu {
+        private final String source = OpenCL.KernelSource.load(RayMarchingEngine.class);
+
+        private static final int DP_COUNT = 12, IP_COUNT = 14;
+        private static Gpu instance;
+        private static boolean disabled;
+
+        private final GpuProgram program = new GpuProgram(source, "rm_render");
+        private GpuProgram.Buffer maps, grid, meta, portals, fieldWall, fieldFinish, camX, dp, ip, out, wall, finish, floor, ceil;
+        private int[] wallSrc, finishSrc, floorSrc, ceilSrc;
+        private int[][][] fieldLayers = new int[0][][];
+        private double[] fieldWallData = new double[0], fieldFinishData = new double[0];
+        private int[] fieldOffset = new int[0], fieldCols = new int[0], fieldRows = new int[0];
+        private boolean[] fieldHasFinish = new boolean[0], fieldHasPortals = new boolean[0];
+
+        static boolean tryRender(RenderFrame fr) { synchronized (GpuRuntime.LOCK) { return tryRenderLocked(fr); } }
+
+        private static boolean tryRenderLocked(RenderFrame fr) {
+            if (disabled || GpuRuntime.session() == null) return false;
+            try {
+                if (instance == null) instance = new Gpu();
+                instance.render(fr);
+                return true;
+            }
+            catch (RuntimeException | Error e) {
+                disabled = true;
+                OpenCL.GpuRuntime.reportFailure(ID, String.valueOf(e));
+                return false;
+            }
+        }
+
+        private GpuProgram.Buffer ensure(GpuProgram.Buffer current, long bytes) {
+            long size = Math.max(4L, bytes);
+            if (current != null && current.bytes() == size) return current;
+            if (current != null) program.release(current);
+            return program.buffer(size);
+        }
+
+        private void render(RenderFrame fr) {
+            final int width = fr.renderWidth, height = fr.renderHeight;
+            if (width <= 0 || height <= 0) return;
+            if (fr.renderPixels == null || fr.renderPixels.length < width * height) throw new IllegalStateException("render buffer too small");
+            if (fr.cameraXCache == null || fr.cameraXCache.length < width) throw new IllegalStateException("camera cache too small");
+
+            int[][][] layers = layersOf(fr);
+            boolean rebuilt = !Arrays.deepEquals(layers, fieldLayers);
+            if (rebuilt) buildFields(layers);
+
+            Scene scene = Scene.of(fr, layers, this);
+            maps = ensure(maps, 4L * scene.maps.length);
+            grid = ensure(grid, 4L * scene.grid.length);
+            meta = ensure(meta, 4L * scene.meta.length);
+            portals = ensure(portals, 4L * scene.portals.length);
+            GpuProgram.Buffer before = fieldWall;
+            fieldWall = ensure(fieldWall, 4L * fieldWallData.length);
+            boolean wroteFields = rebuilt || fieldWall != before;
+            before = fieldFinish;
+            fieldFinish = ensure(fieldFinish, 4L * fieldFinishData.length);
+            wroteFields |= fieldFinish != before;
+            camX = ensure(camX, 4L * width);
+            dp = ensure(dp, 4L * DP_COUNT);
+            ip = ensure(ip, 4L * IP_COUNT);
+            out = ensure(out, 4L * width * height);
+
+            program.write(maps, scene.maps, scene.maps.length);
+            program.write(grid, scene.grid, scene.grid.length);
+            program.write(meta, scene.meta, scene.meta.length);
+            program.write(portals, scene.portals, scene.portals.length);
+            if (wroteFields) {
+                program.write(fieldWall, fieldWallData, fieldWallData.length);
+                program.write(fieldFinish, fieldFinishData, fieldFinishData.length);
+            }
+            program.write(camX, java.util.Arrays.copyOf(fr.cameraXCache, width), width);
+            program.write(dp, cameraParams(fr, width, height), DP_COUNT);
+            program.write(ip, ipValues(fr, scene, width, height), IP_COUNT);
+
+            before = wall;
+            wall = ensure(wall, 4L * fr.wallTexture.pixels().length);
+            if (wall != before || fr.wallTexture.pixels() != wallSrc) { wallSrc = fr.wallTexture.pixels(); program.write(wall, wallSrc, wallSrc.length); }
+            before = finish;
+            finish = ensure(finish, 4L * fr.finishTexture.pixels().length);
+            if (finish != before || fr.finishTexture.pixels() != finishSrc) { finishSrc = fr.finishTexture.pixels(); program.write(finish, finishSrc, finishSrc.length); }
+            before = floor;
+            floor = ensure(floor, 4L * fr.floorTexture.pixels().length);
+            if (floor != before || fr.floorTexture.pixels() != floorSrc) { floorSrc = fr.floorTexture.pixels(); program.write(floor, floorSrc, floorSrc.length); }
+            before = ceil;
+            ceil = ensure(ceil, 4L * fr.ceilingTexture.pixels().length);
+            if (ceil != before || fr.ceilingTexture.pixels() != ceilSrc) { ceilSrc = fr.ceilingTexture.pixels(); program.write(ceil, ceilSrc, ceilSrc.length); }
+
+            boolean columns = fr.cameraPitch == 0;
+            program.run(width, columns ? 1 : height, maps, grid, meta, portals, fieldWall, fieldFinish, wall, finish, floor, ceil, camX, dp, ip, out);
+            program.read(out, fr.renderPixels, width * height);
+        }
+        private static int[][][] layersOf(RenderFrame fr) {
+            int floors = fr.map3D == null ? 0 : fr.map3D.length;
+            int[][][] layers = new int[1 + floors][][];
+            layers[0] = fr.map;
+            assert fr.map3D != null;
+            System.arraycopy(fr.map3D, 0, layers, 1, floors);
+            return layers;
+        }
+        private void buildFields(int[][][] layers) {
+            int n = layers.length;
+            double[][] wallParts = new double[n][], finishParts = new double[n][];
+            fieldOffset = new int[n]; fieldCols = new int[n]; fieldRows = new int[n];
+            fieldHasFinish = new boolean[n]; fieldHasPortals = new boolean[n];
+            int total = 0;
+            for (int l = 0; l < n; l++) {
+                int[][] m = layers[l];
+                boolean finish = false, portal = false;
+                for (int[] row : m) for (int t : row) {
+                    if (t == 2) finish = true;
+                    else if (t == MazeGenerator.PORTAL) portal = true;
+                }
+                fieldHasFinish[l] = finish;
+                fieldHasPortals[l] = portal;
+                fieldCols[l] = m[0].length * SDF_SUB + 1;
+                fieldRows[l] = m.length * SDF_SUB + 1;
+                wallParts[l] = sdfField(m, false);
+                finishParts[l] = finish ? sdfField(m, true) : new double[wallParts[l].length];
+                fieldOffset[l] = total;
+                total += wallParts[l].length;
+            }
+            fieldWallData = new double[total];
+            fieldFinishData = new double[total];
+            for (int l = 0; l < n; l++) {
+                System.arraycopy(wallParts[l], 0, fieldWallData, fieldOffset[l], wallParts[l].length);
+                System.arraycopy(finishParts[l], 0, fieldFinishData, fieldOffset[l], finishParts[l].length);
+            }
+            fieldLayers = layers.clone();
+        }
+
+        static double[] sdfField(int[][] m, boolean finish) {
+            final int mh = m.length, mw = m[0].length;
+            final int cols = mw * SDF_SUB + 1, rows = mh * SDF_SUB + 1;
+            final double none = Double.POSITIVE_INFINITY;
+            double[] gaps = new double[mh * cols];
+            for (int i = 0; i < cols; i++) {
+                double px = i / (double) SDF_SUB;
+                int cx = (int) Math.floor(px);
+                int x0 = Math.max(0, cx - SDF_WINDOW), x1 = Math.min(mw - 1, cx + SDF_WINDOW);
+                for (int yy = 0; yy < mh; yy++) {
+                    double best = none;
+                    for (int xx = x0; xx <= x1; xx++) {
+                        int t = m[yy][xx];
+                        if (finish ? t != 2 : t != 1) continue;
+                        double dx = Math.max(Math.max(xx - px, px - (xx + 1)), 0);
+                        double sq = dx * dx;
+                        if (sq < best) best = sq;
+                    }
+                    gaps[yy * cols + i] = best;
+                }
+            }
+            double[] out = new double[cols * rows];
+            for (int j = 0; j < rows; j++) {
+                double py = j / (double) SDF_SUB;
+                int cy = (int) Math.floor(py);
+                int y0 = Math.max(0, cy - SDF_WINDOW), y1 = Math.min(mh - 1, cy + SDF_WINDOW);
+                for (int i = 0; i < cols; i++) {
+                    double best = none;
+                    for (int yy = y0; yy <= y1; yy++) {
+                        double gap = gaps[yy * cols + i];
+                        if (gap == none) continue;
+                        double dy = Math.max(Math.max(yy - py, py - (yy + 1)), 0);
+                        double sq = dy * dy + gap;
+                        if (sq < best) best = sq;
+                    }
+                    out[j * cols + i] = best == none ? SDF_WINDOW : Math.sqrt(best);
+                }
+            }
+            return out;
+        }
+
+        static int[] ipValues(RenderFrame fr, Scene scene, int width, int height) {
+            return new int[]{
+                    width, height, scene.floors, scene.tinted ? 1 : 0,
+                    fr.wallTexture.width(), fr.wallTexture.height(),
+                    fr.finishTexture.width(), fr.finishTexture.height(),
+                    fr.floorTexture.width(), fr.floorTexture.height(),
+                    fr.ceilingTexture.width(), fr.ceilingTexture.height(),
+                    fr.cameraPitch == 0 ? 1 : 0,
+                    cfgQuality == 0 ? 48 : cfgQuality == 1 ? 96 : 160
+            };
+        }
+        static double[] cameraParams(RenderFrame fr, int width, int height) {
+            double dirX = Math.cos(fr.cameraAngle), dirY = Math.sin(fr.cameraAngle);
+            double planeLength = Math.tan(Math.PI / 3.0 / 2.0);
+            double focal = width / (2.0 * planeLength);
+            double halfHeight = height / 2.0;
+            double pitchSin = Math.sin(fr.cameraPitch), pitchCos = Math.cos(fr.cameraPitch);
+            return new double[]{
+                    fr.playerX, fr.playerY, fr.cameraHeight,
+                    dirX, dirY, planeLength,
+                    pitchSin, pitchCos, halfHeight, focal,
+                    flashlightDistance, 0.0
+            };
+        }
+        static final class Scene {
+            int[] maps, grid, meta, portals;
+            int floors;
+            boolean tinted;
+
+            static Scene of(RenderFrame fr, int[][][] layers, Gpu owner) {
+                int floors = layers.length - 1;
+                int layerCount = layers.length;
+
+                java.util.List<PortalData> layerPortals = new java.util.ArrayList<>(layerCount);
+                layerPortals.add(fr.portals == null ? new PortalData() : fr.portals);
+                for (int f = 0; f < floors; f++) {
+                    PortalData pd = fr.floorPortalsAll == null || f >= fr.floorPortalsAll.length ? null : fr.floorPortalsAll[f];
+                    layerPortals.add(pd == null ? new PortalData() : pd);
+                }
+
+                int cells = 0, portalCount = 0;
+                for (int l = 0; l < layerCount; l++) {
+                    int[][] m = layers[l];
+                    cells += m.length * m[0].length;
+                    portalCount += layerPortals.get(l).values().size();
+                }
+
+                Scene s = new Scene();
+                s.floors = floors;
+                s.tinted = fr.map3D != null && fr.map3D.length > 1;
+                s.maps = new int[cells];
+                s.grid = new int[cells];
+                s.meta = new int[8 * layerCount];
+                s.portals = new int[Math.max(1, 9 * portalCount)];
+                java.util.Arrays.fill(s.grid, -1);
+
+                int offset = 0, portalIndex = 0;
+                for (int l = 0; l < layerCount; l++) {
+                    int[][] m = layers[l];
+                    int h = m.length, w = m[0].length;
+                    s.meta[8 * l] = offset;
+                    s.meta[8 * l + 1] = w;
+                    s.meta[8 * l + 2] = h;
+                    s.meta[8 * l + 3] = owner.fieldOffset[l];
+                    s.meta[8 * l + 4] = owner.fieldCols[l];
+                    s.meta[8 * l + 5] = owner.fieldRows[l];
+                    s.meta[8 * l + 6] = owner.fieldHasFinish[l] ? 1 : 0;
+                    s.meta[8 * l + 7] = owner.fieldHasPortals[l] ? 1 : 0;
+                    for (int y = 0; y < h; y++) System.arraycopy(m[y], 0, s.maps, offset + y * w, w);
+                    for (PortalData.Portal p : layerPortals.get(l).values()) {
+                        if (p.x < 0 || p.y < 0 || p.x >= w || p.y >= h) continue;
+                        s.grid[offset + p.y * w + p.x] = portalIndex;
+                        int base = 9 * portalIndex;
+                        s.portals[base] = p.x;
+                        s.portals[base + 1] = p.y;
+                        s.portals[base + 2] = p.dirX;
+                        s.portals[base + 3] = p.dirY;
+                        s.portals[base + 4] = p.linkedX;
+                        s.portals[base + 5] = p.linkedY;
+                        s.portals[base + 6] = p.linkedDirX;
+                        s.portals[base + 7] = p.linkedDirY;
+                        s.portals[base + 8] = p.linkedFloor;
+                        portalIndex++;
+                    }
+                    offset += w * h;
+                }
+                return s;
+            }
+        }
+    }
+    //endregion
 }

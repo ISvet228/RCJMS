@@ -15,6 +15,7 @@ public final class SaveData {
     public static final Style DEFAULT_THEME = Style.FLAT;
     public static final double DEFAULT_RENDER_SCALE = 1.0;
     public static final boolean DEFAULT_VSYNC = false;
+    public static final boolean DEFAULT_OPENCL = true;
     public static final int DEFAULT_RENDER_ENGINE_QUALITY = 1;
     public static final String DEFAULT_RENDER_ENGINE = "";
     public static final int DEFAULT_WINDOW_WIDTH = 960;
@@ -82,6 +83,7 @@ public final class SaveData {
                                 if (scale >= 0.1 && scale <= 1.0) data.renderScale = scale;
                             }
                             case "vsync" -> data.vsync = Boolean.parseBoolean(value);
+                            case "openCl" -> data.openCl = Boolean.parseBoolean(value);
                             case "renderEngine" -> { data.renderEngine = parseRenderEngine(value); engineSet = true; }
                             case "renderEngineQuality" -> data.renderEngineQuality = Math.clamp(Integer.parseInt(value), 0, 3);
                             case "windowWidth" -> { int w = Integer.parseInt(value); if (w >= 960) data.windowWidth = w; }
@@ -166,7 +168,7 @@ public final class SaveData {
         } catch (IOException ignored) { }
         return data;
     }
-    public static void saveSettings(String language, Style theme, double renderScale, boolean vsync, String renderEngine, int renderEngineQuality, int windowWidth, int windowHeight, boolean fullscreen) throws IOException {
+    public static void saveSettings(String language, Style theme, double renderScale, boolean vsync, String renderEngine, int renderEngineQuality, int windowWidth, int windowHeight, boolean fullscreen, boolean openCl) throws IOException {
         Data data = load();
         data.language = language;
         data.theme = theme;
@@ -177,6 +179,7 @@ public final class SaveData {
         data.windowWidth = windowWidth >= 960 ? windowWidth : DEFAULT_WINDOW_WIDTH;
         data.windowHeight = windowHeight >= 540 ? windowHeight : DEFAULT_WINDOW_HEIGHT;
         data.fullscreen = fullscreen;
+        data.openCl = openCl;
         save(data);
     }
     public static void saveMazeSettings(int width, int height, int finishMode, int geometry, boolean mode3D, int floors, boolean fog) throws IOException {
@@ -218,7 +221,8 @@ public final class SaveData {
             writer.write("renderEngineQuality=" + data.renderEngineQuality); writer.newLine();
             writer.write("windowWidth=" + data.windowWidth); writer.newLine();
             writer.write("windowHeight=" + data.windowHeight); writer.newLine();
-            writer.write("fullscreen=" + data.fullscreen); writer.newLine(); writer.newLine();
+            writer.write("fullscreen=" + data.fullscreen); writer.newLine();
+            writer.write("openCl=" + data.openCl); writer.newLine(); writer.newLine();
 
             writer.write("[maze]"); writer.newLine();
             writer.write("width=" + data.mazeWidth); writer.newLine();
@@ -293,6 +297,7 @@ public final class SaveData {
         public Style theme = DEFAULT_THEME;
         public double renderScale = DEFAULT_RENDER_SCALE;
         public boolean vsync = DEFAULT_VSYNC;
+        public boolean openCl = DEFAULT_OPENCL;
         public int renderEngineQuality = DEFAULT_RENDER_ENGINE_QUALITY;
         public String renderEngine = DEFAULT_RENDER_ENGINE;
         public int windowWidth = DEFAULT_WINDOW_WIDTH;

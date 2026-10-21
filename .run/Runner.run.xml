@@ -2,6 +2,7 @@
   <configuration default="false" name="Runner" type="Application" factoryName="Application">
     <option name="MAIN_CLASS_NAME" value="RCJMS" />
     <module name="RCJMS" />
+    <option name="VM_PARAMETERS" value="--enable-native-access=ALL-UNNAMED" />
     <method v="2">
       <option name="Make" enabled="true" />
     </method>

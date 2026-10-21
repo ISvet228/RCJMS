@@ -4,11 +4,10 @@ import GameViewComponents.*;
 import Helpers.*;
 import java.awt.*;
 import java.util.function.IntConsumer;
+import OpenCL.*;
 
 public final class DDAEngine implements RenderEngine {
-    //region Shared helpers (kept inside this engine)
-
-    //region Engine settings (copied from the RenderFrame before every render)
+    //region Engine settings
     static volatile int cfgQuality = 1, cfgOutW = 960, cfgOutH = 540;
     static volatile MazeGenerator.GeometryMode cfgGeometry = MazeGenerator.GeometryMode.EUCLIDEAN;
     static volatile double cfgCurvature = HyperbolicMath.DEFAULT_CURVATURE;
@@ -244,10 +243,10 @@ public final class DDAEngine implements RenderEngine {
     //endregion
 
     //region Textures and shading
-    private static int tintColor(int color, int tint, double amount) {
+    private static int tintColor(int color, int tint) {
         int r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
         int tr = (tint >> 16) & 255, tg = (tint >> 8) & 255, tb = tint & 255;
-        r = (int)(r * (1 - amount) + tr * amount); g = (int)(g * (1 - amount) + tg * amount); b = (int)(b * (1 - amount) + tb * amount);
+        r = (int)(r * (1 - 0.45) + tr * 0.45); g = (int)(g * (1 - 0.45) + tg * 0.45); b = (int)(b * (1 - 0.45) + tb * 0.45);
         return (r << 16) | (g << 8) | b;
     }
     static int applyBrightness(int color, double brightness) {
@@ -289,8 +288,8 @@ public final class DDAEngine implements RenderEngine {
         int fx = (int) Math.floor(worldX), fy = (int) Math.floor(worldY);
         if (fx < 0 || fy < 0 || fy >= floorMap.length || fx >= floorMap[0].length) return color;
         int cell = floorMap[fy][fx];
-        if (cell == 3) return tintColor(color, 0x3399FF, 0.45);
-        if (cell == 4) return tintColor(color, 0xFFAA33, 0.45);
+        if (cell == 3) return tintColor(color, 0x3399FF);
+        if (cell == 4) return tintColor(color, 0xFFAA33);
         return color;
     }
     //endregion
@@ -309,10 +308,9 @@ public final class DDAEngine implements RenderEngine {
             g2d.dispose();
         }
     }
-    static void parallelRange(RenderFrame fr, int start, int end, IntConsumer task) {
-        int range = end - start;
-        if (range <= 0) return;
-        fr.renderWorkers.execute(start, end, task);
+    static void parallelRange(RenderFrame fr, int end, IntConsumer task) {
+        if (end <= 0) return;
+        fr.renderWorkers.execute(0, end, task);
     }
     //endregion
 
@@ -335,19 +333,27 @@ public final class DDAEngine implements RenderEngine {
         double nrmX, nrmY;
     }
     //endregion
-    //endregion
 
     //region Module
     private RenderFrame fr;
-    @Override public String id() { return "dda"; }
+    static final String ID = "dda";
+    @Override public String id() { return ID; }
     @Override public String displayName() { return "DDA"; }
     @Override public int order() { return 0; }
     @Override public String hintKey() { return "mm.engine_dda"; }
     @Override public String qualityHintKey() { return "mm.quality_dda"; }
     @Override public boolean hasHyperbolicGeometry() { return true; }
-    @Override public void render(RenderFrame frame) { fr = frame; syncConfig(frame); renderRayCasting(); }
+    @Override public boolean hasOpenCL() { return true; }
+    @Override public void render(RenderFrame frame) {
+        fr = frame;
+        syncConfig(frame);
+        if (hasOpenCL() && cfgGeometry != MazeGenerator.GeometryMode.WRONG && Gpu.tryRender(frame)) {
+            copyRenderBuffer(frame);
+            return;
+        }
+        renderRayCasting();
+    }
     //endregion
-    public static final double NO_EDGE = 1e9;
 
     private void renderRayCasting() {
         final boolean hyperbolic = cfgGeometry == MazeGenerator.GeometryMode.WRONG;
@@ -362,10 +368,9 @@ public final class DDAEngine implements RenderEngine {
         final int screenWidth = fr.renderWidth, screenHeight = fr.renderHeight;
 
         final int wallWidth = fr.wallTexture.width(), wallHeight = fr.wallTexture.height();
-        final int finishWidth = fr.finishTexture.width(), finishHeight = fr.finishTexture.height();
         final int mapWidth = fr.map[0].length, mapHeight = fr.map.length;
         final int[][] baseMap = fr.map;
-        final int[] wallPixels = fr.wallTexture.pixels(), finishPixels = fr.finishTexture.pixels();
+        final int[] wallPixels = fr.wallTexture.pixels();
         final PortalData basePortals = fr.portals;
 
         ensureRaycastCaches(fr, screenWidth, screenHeight);
@@ -388,9 +393,9 @@ public final class DDAEngine implements RenderEngine {
             return;
         }
 
-        parallelRange(fr, 0, screenWidth, x -> {
+        parallelRange(fr, screenWidth, x -> {
             wallTop[x] = Integer.MAX_VALUE; wallBottom[x] = -1;
-            floorEdge[x] = -NO_EDGE; ceilEdge[x] = NO_EDGE;
+            floorEdge[x] = -1e9; ceilEdge[x] = 1e9;
             double ox = fr.playerX, oy = fr.playerY;
             double rayDirX = dirX + planeX * fr.cameraXCache[x], rayDirY = dirY + planeY * fr.cameraXCache[x];
             double totalDistance = 0, localPerp = 0;
@@ -399,8 +404,6 @@ public final class DDAEngine implements RenderEngine {
             int[][] rayMap = baseMap;
             PortalData rayPortals = basePortals;
             double[] segments5 = null;
-            int[][][] segmentMaps = null;
-            int segmentCount = 0;
 
             segments:
             while (!hit) {
@@ -434,11 +437,10 @@ public final class DDAEngine implements RenderEngine {
                                 rayMap = fr.map3D[portal.linkedFloor];
                                 rayPortals = fr.floorPortalsAll[portal.linkedFloor];
                             }
-                            if (segments5 == null) { segments5 = new double[8 * 5]; segmentMaps = new int[8][][]; }
-                            segments5[segmentCount * 5] = totalDistance;
-                            segments5[segmentCount * 5 + 1] = ox; segments5[segmentCount * 5 + 2] = oy;
-                            segments5[segmentCount * 5 + 3] = rayDirX; segments5[segmentCount * 5 + 4] = rayDirY;
-                            segmentMaps[segmentCount++] = rayMap;
+                            if (segments5 == null) segments5 = new double[8 * 5];
+                            segments5[0] = totalDistance;
+                            segments5[1] = ox; segments5[2] = oy;
+                            segments5[3] = rayDirX; segments5[4] = rayDirY;
                             hops++;
                             continue segments;
                         }
@@ -465,35 +467,24 @@ public final class DDAEngine implements RenderEngine {
             double perp = Math.max(totalDistance + localPerp, 0.0001);
             double projected = hyperbolic ? HyperbolicMath.hyperbolicDistance(perp, cfgCurvature) : perp;
             double wallTopZ = wallHeightForType(hitType) - fr.cameraHeight;
-            boolean exactFace = !hyperbolic && segmentCount == 0;
+            boolean exactFace = !hyperbolic;
             double lateral = fr.cameraXCache[x] * planeLength;
             double faceNf = side == 0 ? dirX : dirY, faceNr = side == 0 ? -dirY : dirX;
             double faceC = side == 0 ? ((rayDirX > 0 ? hitCellX : hitCellX + 1) - fr.playerX) : ((rayDirY > 0 ? hitCellY : hitCellY + 1) - fr.playerY);
             int drawStart, drawEnd;
             if (hyperbolic) {
                 int wallHeightPx = (int) (focal / projected);
-                drawStart = Math.max(hitType == 2 ? (int) horizon : (int) (horizon - wallHeightPx / 2.0), 0);
+                drawStart = Math.max((int) (horizon - wallHeightPx / 2.0), 0);
                 drawEnd = Math.min((int) (horizon + wallHeightPx / 2.0), screenHeight - 1);
             }
             else {
                 double top, bottom;
-                if (exactFace) {
-                    top = solveWallEdge(faceC, faceNf, faceNr, lateral, wallTopZ, focal, halfHeight, pitchSin, pitchCos, perp);
-                    bottom = solveWallEdge(faceC, faceNf, faceNr, lateral, (-fr.cameraHeight), focal, halfHeight, pitchSin, pitchCos, perp);
-                }
-                else {
-                    top = projectY(perp, wallTopZ, focal, halfHeight, pitchSin, pitchCos);
-                    bottom = projectY(perp, (-fr.cameraHeight), focal, halfHeight, pitchSin, pitchCos);
-                }
+                top = solveWallEdge(faceC, faceNf, faceNr, lateral, wallTopZ, focal, halfHeight, pitchSin, pitchCos, perp);
+                bottom = solveWallEdge(faceC, faceNf, faceNr, lateral, (-fr.cameraHeight), focal, halfHeight, pitchSin, pitchCos, perp);
                 drawStart = (int) Math.max(0, Math.ceil(Math.max(top, -1) - 0.5));
                 drawEnd = (int) Math.min(screenHeight - 1, Math.floor(Math.min(bottom, screenHeight + 1) - 0.5));
             }
 
-            if (segmentCount > 0) {
-                shadeExactColumn(x, dirX, dirY, planeLength, pitchSin, pitchCos, halfHeight, focal);
-                wallTop[x] = 0; wallBottom[x] = screenHeight - 1;
-                return;
-            }
             if (drawStart > drawEnd) return;
             wallTop[x] = drawStart; wallBottom[x] = drawEnd;
 
@@ -504,8 +495,7 @@ public final class DDAEngine implements RenderEngine {
 
             double brightness = Math.clamp(1.0 - projected / lightDistance, 0.03, 1.0);
             if (side == 1) brightness *= 0.85;
-            int texWidth = hitType == 2 ? finishWidth : wallWidth;
-            int texX = Math.min((int) (wallX * texWidth), texWidth - 1);
+            int texX = Math.min((int) (wallX * wallWidth), wallWidth - 1);
             if (texX < 0) texX = 0;
             int offset = drawStart * screenWidth + x;
             int wallHeightPx = hyperbolic ? (int) (focal / projected) : 0;
@@ -514,9 +504,9 @@ public final class DDAEngine implements RenderEngine {
             for (int y = drawStart; y <= drawEnd; y++) {
                 double fraction;
                 double rowWallX = wallX;
-                double rowT = perp, rowNorm = 1.0; // hit depth along this row's ray, and ray length per unit depth
-                if (hyperbolic) fraction = hitType == 2 ? (y - horizon) / Math.max(wallHeightPx / 2.0, 1.0) : (y - (horizon - wallHeightPx / 2.0)) / wallHeightOld;
-                else if (exactFace) {
+                double rowT = perp, rowNorm = 1.0;
+                if (hyperbolic) fraction = (y - (horizon - wallHeightPx / 2.0)) / wallHeightOld;
+                else {
                     double lateralRow = lateral * rowInvA[y];
                     double faceDen = faceNf + lateralRow * faceNr;
                     double depth = Math.abs(faceDen) > 1e-9 ? faceC / faceDen : perp;
@@ -536,27 +526,21 @@ public final class DDAEngine implements RenderEngine {
                             fraction = (rowTopZ - (rowHit[0] * rowZA[y])) / (rowTopZ + fr.cameraHeight);
                             rowWallX = rowHit[2];
                             rowT = rowHit[0];
-                        } else {
+                        }
+                        else {
                             fraction = (wallTopZ - (depth * rowZA[y])) / (wallTopZ + fr.cameraHeight);
                             rowWallX = wallX;
                         }
                     }
                 }
-                else {
-                    double v = (halfHeight - (y + 0.5)) / focal;
-                    double den = pitchCos - v * pitchSin;
-                    if (Math.abs(den) < 1e-6) den = 1e-6;
-                    fraction = (wallTopZ - (perp * (pitchSin + v * pitchCos) / den)) / (wallTopZ + fr.cameraHeight);
-                }
                 if (exactFace) {
-                    texX = Math.min((int) (rowWallX * texWidth), texWidth - 1);
+                    texX = Math.min((int) (rowWallX * wallWidth), wallWidth - 1);
                     if (texX < 0) texX = 0;
                 }
-                int texY = (int) (Math.clamp(fraction, 0.0, 0.999999) * (hitType == 2 ? finishHeight : wallHeight));
+                int texY = (int) (Math.clamp(fraction, 0.0, 0.999999) * wallHeight);
                 int color;
-                if (hitType == 2 && finishWidth > 0 && finishHeight > 0) color = finishPixels[texY * finishWidth + texX];
-                else if (hitType != 2 && wallWidth > 0 && wallHeight > 0) color = wallPixels[texY * wallWidth + texX];
-                else color = hitType == 2 ? finishBaseColor : wallBaseColor;
+                if (wallWidth > 0 && wallHeight > 0) color = wallPixels[texY * wallWidth + texX];
+                else color = wallBaseColor;
                 double rowBrightness = exactFace ? wallBrightness(rowT * rowNorm, lightDistance, side) : brightness;
                 fr.renderPixels[offset] = applyBrightness(color, rowBrightness);
                 offset += screenWidth;
@@ -567,12 +551,8 @@ public final class DDAEngine implements RenderEngine {
         copyRenderBuffer(fr);
     }
 
-    private int surfacePlaneColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
-        return surfaceColor(texture, worldX, worldY, baseColor, cfgQuality);
-    }
-    private int shadeTraceHit(TraceHit hit, double lightDistance) {
-        return shadeTraceHit(fr, hit, lightDistance, this::surfacePlaneColor);
-    }
+    private int surfacePlaneColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) { return surfaceColor(texture, worldX, worldY, baseColor, cfgQuality); }
+    private int shadeTraceHit(TraceHit hit, double lightDistance) { return shadeTraceHit(fr, hit, lightDistance, this::surfacePlaneColor); }
     private static double wallBrightness(double dist, double lightDistance, int side) {
         double b = Math.clamp(1.0 - dist / lightDistance, 0.03, 1.0);
         return side == 1 ? b * 0.85 : b;
@@ -614,7 +594,7 @@ public final class DDAEngine implements RenderEngine {
         double sideX = (rx < 0 ? ox - mapX : mapX + 1.0 - ox) * deltaX;
         double sideY = (ry < 0 ? oy - mapY : mapY + 1.0 - oy) * deltaY;
         int stepX = rx < 0 ? -1 : 1, stepY = ry < 0 ? -1 : 1;
-        int side = 0;
+        int side;
         for (int guard = 0; guard < 4096; guard++) {
             if (sideX < sideY) { sideX += deltaX; mapX += stepX; side = 0; }
             else { sideY += deltaY; mapY += stepY; side = 1; }
@@ -686,7 +666,7 @@ public final class DDAEngine implements RenderEngine {
         final int finishWidth = fr.finishTexture.width(), finishHeight = fr.finishTexture.height();
         final int[] wallPixels = fr.wallTexture.pixels(), finishPixels = fr.finishTexture.pixels();
 
-        parallelRange(fr, 0, height, y -> {
+        parallelRange(fr, height, y -> {
             final double rowZ = rowZA[y];
             final double rowScale = rowInvA[y];
             final boolean floorPlane = rowZ < 0;
@@ -699,7 +679,7 @@ public final class DDAEngine implements RenderEngine {
                 double lateralRow = fr.cameraXCache[x] * planeLength * rowScale;
                 double rx = dirX - lateralRow * dirY, ry = dirY + lateralRow * dirX;
                 int offset = y * width + x;
-                final double norm = Math.sqrt(rx * rx + ry * ry + rowZ * rowZ); // metres per unit of t
+                final double norm = Math.sqrt(rx * rx + ry * ry + rowZ * rowZ);
 
                 int mapX = (int) Math.floor(baseX), mapY = (int) Math.floor(baseY);
                 double deltaX = rx == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / rx);
@@ -709,7 +689,7 @@ public final class DDAEngine implements RenderEngine {
                 int stepX = rx < 0 ? -1 : 1, stepY = ry < 0 ? -1 : 1;
 
                 boolean wallFound = false, exactPortal = false;
-                int wType = 0, wSide = 0;
+                int wType = 0, wSide;
                 double wT = 0;
                 while (true) {
                     double tNext;
@@ -762,9 +742,7 @@ public final class DDAEngine implements RenderEngine {
                     double brightness = Math.clamp(1.0 - tPlane * norm / lightDistance, 0.05, 1.0);
                     fr.renderPixels[offset] = applyBrightness(color, brightness);
                 }
-                else {
-                    fr.renderPixels[offset] = ceilingBaseColor;
-                }
+                else fr.renderPixels[offset] = ceilingBaseColor;
             }
         });
     }
@@ -779,7 +757,7 @@ public final class DDAEngine implements RenderEngine {
         final double[] rowInvA = fr.rowInvACache, rowZA = fr.rowZACache;
         final double planeLength2 = planeX * planeX + planeY * planeY;
 
-        parallelRange(fr, 0, fr.renderHeight, y -> {
+        parallelRange(fr, fr.renderHeight, y -> {
             double depth = rowDepth(y, horizon, focal, halfHeight, sinP, cosP, (-fr.cameraHeight), hyperbolic);
             boolean floor = depth > 0;
             if (!floor) {
@@ -802,7 +780,6 @@ public final class DDAEngine implements RenderEngine {
                 if (!covered) {
                     int color = floor ? surfaceColor(fr.floorTexture, worldX, worldY, floorBaseColor, quality) : surfaceColor(fr.ceilingTexture, worldX, worldY, ceilingBaseColor, quality);
                     if (floor && tinted) color = tintStairs(color, worldX, worldY, fr.map);
-                    // Same law as every other path: distance = depth * |ray|, where |ray| includes the lateral angle.
                     double pixelBrightness = brightness;
                     if (!hyperbolic) {
                         double c = fr.cameraXCache[x];
@@ -814,4 +791,165 @@ public final class DDAEngine implements RenderEngine {
             }
         });
     }
+
+    //region OpenCL plug-in
+    static final class Gpu {
+        private final String source = OpenCL.KernelSource.load(DDAEngine.class);
+
+
+        private static Gpu instance;
+        private static boolean disabled;
+        private static final int DP_COUNT = 11, IP_COUNT = 13;
+
+        private final GpuProgram program = new GpuProgram(source, "dda_render");
+        private GpuProgram.Buffer maps, grid, meta, portals, camX, dp, ip, out, wall, finish, floor, ceil;
+        private int[] wallSrc, finishSrc, floorSrc, ceilSrc;
+
+        static boolean tryRender(RenderFrame fr) { synchronized (GpuRuntime.LOCK) { return tryRenderLocked(fr); } }
+        private static boolean tryRenderLocked(RenderFrame fr) {
+            if (disabled || GpuRuntime.session() == null) return false;
+            try {
+                if (instance == null) instance = new Gpu();
+                instance.render(fr);
+                return true;
+            }
+            catch (RuntimeException | Error e) {
+                disabled = true;
+                OpenCL.GpuRuntime.reportFailure(ID, String.valueOf(e));
+                return false;
+            }
+        }
+        private GpuProgram.Buffer ensure(GpuProgram.Buffer current, long bytes) {
+            long size = Math.max(4L, bytes);
+            if (current != null && current.bytes() == size) return current;
+            if (current != null) program.release(current);
+            return program.buffer(size);
+        }
+        private void render(RenderFrame fr) {
+            final int width = fr.renderWidth, height = fr.renderHeight;
+            if (width <= 0 || height <= 0) return;
+            if (fr.renderPixels == null || fr.renderPixels.length < width * height) throw new IllegalStateException("render buffer too small");
+            if (fr.cameraXCache == null || fr.cameraXCache.length < width) throw new IllegalStateException("camera cache too small");
+
+            Scene scene = Scene.of(fr);
+            maps = ensure(maps, 4L * scene.maps.length);
+            grid = ensure(grid, 4L * scene.grid.length);
+            meta = ensure(meta, 4L * scene.meta.length);
+            portals = ensure(portals, 4L * scene.portals.length);
+            camX = ensure(camX, 4L * width);
+            dp = ensure(dp, 4L * DP_COUNT);
+            ip = ensure(ip, 4L * IP_COUNT);
+            out = ensure(out, 4L * width * height);
+
+            program.write(maps, scene.maps, scene.maps.length);
+            program.write(grid, scene.grid, scene.grid.length);
+            program.write(meta, scene.meta, scene.meta.length);
+            program.write(portals, scene.portals, scene.portals.length);
+            program.write(camX, java.util.Arrays.copyOf(fr.cameraXCache, width), width);
+            program.write(dp, cameraParams(fr, width, height), DP_COUNT);
+            program.write(ip, ipValues(fr, scene, width, height), IP_COUNT);
+
+            GpuProgram.Buffer before = wall;
+            wall = ensure(wall, 4L * fr.wallTexture.pixels().length);
+            if (wall != before || fr.wallTexture.pixels() != wallSrc) { wallSrc = fr.wallTexture.pixels(); program.write(wall, wallSrc, wallSrc.length); }
+            before = finish;
+            finish = ensure(finish, 4L * fr.finishTexture.pixels().length);
+            if (finish != before || fr.finishTexture.pixels() != finishSrc) { finishSrc = fr.finishTexture.pixels(); program.write(finish, finishSrc, finishSrc.length); }
+            before = floor;
+            floor = ensure(floor, 4L * fr.floorTexture.pixels().length);
+            if (floor != before || fr.floorTexture.pixels() != floorSrc) { floorSrc = fr.floorTexture.pixels(); program.write(floor, floorSrc, floorSrc.length); }
+            before = ceil;
+            ceil = ensure(ceil, 4L * fr.ceilingTexture.pixels().length);
+            if (ceil != before || fr.ceilingTexture.pixels() != ceilSrc) { ceilSrc = fr.ceilingTexture.pixels(); program.write(ceil, ceilSrc, ceilSrc.length); }
+
+            program.run(width, height, maps, grid, meta, portals, wall, finish, floor, ceil, camX, dp, ip, out);
+            program.read(out, fr.renderPixels, width * height);
+        }
+        static int[] ipValues(RenderFrame fr, Scene scene, int width, int height) {
+            return new int[]{
+                    width, height, fr.quality, scene.floors, scene.tinted ? 1 : 0,
+                    fr.wallTexture.width(), fr.wallTexture.height(),
+                    fr.finishTexture.width(), fr.finishTexture.height(),
+                    fr.floorTexture.width(), fr.floorTexture.height(),
+                    fr.ceilingTexture.width(), fr.ceilingTexture.height()
+            };
+        }
+        static double[] cameraParams(RenderFrame fr, int width, int height) {
+            double dirX = Math.cos(fr.cameraAngle), dirY = Math.sin(fr.cameraAngle);
+            double planeLength = Math.tan((Math.PI / 3.0) / 2.0);
+            double focal = width / (2.0 * planeLength);
+            double halfHeight = height / 2.0;
+            double pitchSin = Math.sin(fr.cameraPitch), pitchCos = Math.cos(fr.cameraPitch);
+            double lightDistance = 2.0; // same as effectiveFlashlightDistance(false)
+            return new double[]{
+                    fr.playerX, fr.playerY, fr.cameraHeight,
+                    dirX, dirY, planeLength,
+                    pitchSin, pitchCos, halfHeight, focal, lightDistance
+            };
+        }
+        static final class Scene {
+            int[] maps, grid, meta, portals;
+            int floors;
+            boolean tinted;
+
+            static Scene of(RenderFrame fr) {
+                int floors = fr.map3D == null ? 0 : fr.map3D.length;
+                int layerCount = 1 + floors;
+
+                java.util.List<int[][]> layerMaps = new java.util.ArrayList<>(layerCount);
+                java.util.List<PortalData> layerPortals = new java.util.ArrayList<>(layerCount);
+                layerMaps.add(fr.map);
+                layerPortals.add(fr.portals == null ? new PortalData() : fr.portals);
+                for (int f = 0; f < floors; f++) {
+                    layerMaps.add(fr.map3D[f]);
+                    PortalData pd = fr.floorPortalsAll == null || f >= fr.floorPortalsAll.length ? null : fr.floorPortalsAll[f];
+                    layerPortals.add(pd == null ? new PortalData() : pd);
+                }
+
+                int cells = 0, portalCount = 0;
+                for (int l = 0; l < layerCount; l++) {
+                    int[][] m = layerMaps.get(l);
+                    cells += m.length == 0 ? 0 : m.length * m[0].length;
+                    portalCount += layerPortals.get(l).values().size();
+                }
+
+                Scene s = new Scene();
+                s.floors = floors;
+                s.tinted = fr.map3D != null && fr.map3D.length > 1;
+                s.maps = new int[cells];
+                s.grid = new int[cells];
+                s.meta = new int[3 * layerCount];
+                s.portals = new int[Math.max(1, 9 * portalCount)];
+                java.util.Arrays.fill(s.grid, -1);
+
+                int offset = 0, portalIndex = 0;
+                for (int l = 0; l < layerCount; l++) {
+                    int[][] m = layerMaps.get(l);
+                    int h = m.length, w = h == 0 ? 0 : m[0].length;
+                    s.meta[3 * l] = offset;
+                    s.meta[3 * l + 1] = w;
+                    s.meta[3 * l + 2] = h;
+                    for (int y = 0; y < h; y++) System.arraycopy(m[y], 0, s.maps, offset + y * w, w);
+                    for (PortalData.Portal p : layerPortals.get(l).values()) {
+                        if (p.x < 0 || p.y < 0 || p.x >= w || p.y >= h) continue;
+                        s.grid[offset + p.y * w + p.x] = portalIndex;
+                        int base = 9 * portalIndex;
+                        s.portals[base] = p.x;
+                        s.portals[base + 1] = p.y;
+                        s.portals[base + 2] = p.dirX;
+                        s.portals[base + 3] = p.dirY;
+                        s.portals[base + 4] = p.linkedX;
+                        s.portals[base + 5] = p.linkedY;
+                        s.portals[base + 6] = p.linkedDirX;
+                        s.portals[base + 7] = p.linkedDirY;
+                        s.portals[base + 8] = p.linkedFloor;
+                        portalIndex++;
+                    }
+                    offset += w * h;
+                }
+                return s;
+            }
+        }
+    }
+    //endregion
 }

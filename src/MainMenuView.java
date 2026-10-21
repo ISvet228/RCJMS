@@ -204,6 +204,8 @@ public class MainMenuView extends JPanel implements MainMenuHost {
     @Override public void setRenderScale(double scale) { GameView.setRenderScale(scale); }
     @Override public boolean isVSyncEnabled() { return GameView.isVSyncEnabled(); }
     @Override public void setVSyncEnabled(boolean enabled) { GameView.setVSyncEnabled(enabled); }
+    @Override public boolean isOpenClAcceleration() { return GameView.isOpenClAcceleration(); }
+    @Override public void setOpenClAcceleration(boolean enabled) { GameView.setOpenClAcceleration(enabled); }
     @Override public int getRenderEngine() { return GameView.getRenderEngine(); }
     @Override public void setRenderEngine(int engine) { GameView.setRenderEngine(engine); syncGeometryWithEngine(); }
     private void syncGeometryWithEngine() {
@@ -270,13 +272,14 @@ public class MainMenuView extends JPanel implements MainMenuHost {
         frame.repaint();
     }
     private void saveSettings(String language, Style style) {
-        try { SaveData.saveSettings(language, style, GameView.getRenderScale(), GameView.isVSyncEnabled(), GameView.getRenderEngineId(), GameView.getRenderEngineQuality(), windowWidth, windowHeight, fullscreen); }
+        try { SaveData.saveSettings(language, style, GameView.getRenderScale(), GameView.isVSyncEnabled(), GameView.getRenderEngineId(), GameView.getRenderEngineQuality(), windowWidth, windowHeight, fullscreen, GameView.isOpenClAcceleration()); }
         catch (IOException ex) { ex.printStackTrace(); }
     }
     private void applySavedSettings() {
         SaveData.Data savedData = SaveData.load();
         GameView.setRenderScale(savedData.renderScale);
         GameView.setVSyncEnabled(savedData.vsync);
+        GameView.setOpenClAcceleration(savedData.openCl);
         GameView.setRenderEngineId(savedData.renderEngine);
         GameView.setRenderEngineQuality(savedData.renderEngineQuality);
         NSLocalizedString.setLanguage(savedData.language);
