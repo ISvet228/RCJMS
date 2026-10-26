@@ -629,15 +629,15 @@
 "ec.n.xor" = "Exclusive or";
 "ec.n.xor.help" = "True when exactly one of the two conditions is true.";
 "ec.n.luma" = "Luminance";
-"ec.n.luma.help" = "Brightness of a colour (0.299 R + 0.587 G + 0.114 B) as a number from 0 to 1.";
-"ec.n.invertColor" = "Invert colour";
-"ec.n.invertColor.help" = "Negative of a colour: each channel becomes 1 minus its value.";
+"ec.n.luma.help" = "Brightness of a color (0.299 R + 0.587 G + 0.114 B) as a number from 0 to 1.";
+"ec.n.invertColor" = "Invert color";
+"ec.n.invertColor.help" = "Negative of a color: each channel becomes 1 minus its value.";
 "ec.n.grayscale" = "Grayscale";
-"ec.n.grayscale.help" = "Removes colour and keeps the brightness.";
-"ec.n.addColor" = "Add colours";
-"ec.n.addColor.help" = "Adds the channels of two colours, clamped to the valid range.";
-"ec.n.multiplyColor" = "Multiply colours";
-"ec.n.multiplyColor.help" = "Multiplies the channels of two colours: a light tints a surface.";
+"ec.n.grayscale.help" = "Removes color and keeps the brightness.";
+"ec.n.addColor" = "Add colors";
+"ec.n.addColor.help" = "Adds the channels of two colors, clamped to the valid range.";
+"ec.n.multiplyColor" = "Multiply colors";
+"ec.n.multiplyColor.help" = "Multiplies the channels of two colors: a light tints a surface.";
 "ec.n.constBool" = "Constant (yes/no)";
 "ec.n.constBool.help" = "A fixed true or false value.";
 "ec.n.radius" = "Radius";
@@ -660,8 +660,8 @@
 "ec.n.marchRounded.help" = "Sphere tracing over the map against walls with rounded convex corners (outer radius) and filleted concave corners (inner radius). Stops at the first wall. Portal cells are empty here, so rays pass them.";
 "ec.n.gameLight" = "Game light";
 "ec.n.gameLight.help" = "The game's shading light in one node: attenuation, flashlight, fill and ambient per channel. Inputs: distance, ambient occlusion, light angle, fill angle, finish flag.";
-"ec.n.litColour" = "Lit colour";
-"ec.n.litColour.help" = "Colour times the light per channel, then the game's tone curve. Output is a colour.";
+"ec.n.litColor" = "Lit color";
+"ec.n.litColor.help" = "Color times the light per channel, then the game's tone curve. Output is a color.";
 
 // ---------- RENDER ENGINE CREATOR — NODE PARAMETERS (ec.p.) ----------
 "ec.p.color" = "Color";

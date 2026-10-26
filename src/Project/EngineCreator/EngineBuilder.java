@@ -125,10 +125,10 @@ public final class EngineBuilder {
             RenderEngine engine = (RenderEngine) type.getDeclaredConstructor().newInstance();
             RenderFrame frame = testFrame();
             engine.render(frame);
-            Set<Integer> colours = new HashSet<>();
-            for (int c : frame.renderPixels) colours.add(c);
-            if (colours.size() <= 1) r.add(new Issue(false, -1, L.t("ec.b.flat")));
-            else r.add(new Issue(false, -1, L.f("ec.b.smokeOk", colours.size())));
+            Set<Integer> colors = new HashSet<>();
+            for (int c : frame.renderPixels) colors.add(c);
+            if (colors.size() <= 1) r.add(new Issue(false, -1, L.t("ec.b.flat")));
+            else r.add(new Issue(false, -1, L.f("ec.b.smokeOk", colors.size())));
         } catch (Throwable t) { r.add(err(-1, L.f("ec.b.smokeError", t.toString()))); }
         return r;
     }

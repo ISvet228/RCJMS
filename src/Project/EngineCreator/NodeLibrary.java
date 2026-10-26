@@ -189,7 +189,7 @@ final class Nodes {
         pure("toFloat", CAT_CONV, List.of(p("a", I)), F, e -> "((" + e.ft() + ")" + e.in(0) + ")");
         pure("toInt", CAT_CONV, List.of(p("a", F)), I, e -> "((int)rf_floor(" + e.in(0) + "))");
 
-        // ---- colour ----
+        // ---- color ----
         pure("makeColor", CAT_COLOR, List.of(p("r", F), p("g", F), p("b", F)), C, e -> "rf_rgb(" + e.in(0) + ", " + e.in(1) + ", " + e.in(2) + ")");
         custom("splitColor", CAT_COLOR, List.of(p("c", C)), List.of(p("r", F), p("g", F), p("b", F)), e -> {
             e.decl(0, "rf_chR(" + e.in(0) + ")");
@@ -256,7 +256,7 @@ final class Nodes {
         op2("equalInt", CAT_LOGIC, I, B, "==");
         op2("xor", CAT_LOGIC, B, B, "!=");
 
-        // ---- extra colour ----
+        // ---- extra color ----
         pure("luma", CAT_COLOR, List.of(p("c", C)), F,
                 e -> "(0.299f * rf_chR(" + e.in(0) + ") + 0.587f * rf_chG(" + e.in(0) + ") + 0.114f * rf_chB(" + e.in(0) + "))");
         pure("invertColor", CAT_COLOR, List.of(p("c", C)), C,
@@ -337,10 +337,10 @@ final class Nodes {
                 Param.num("innerRadius", 0, 0, 0.5),
                 Param.whole("q0Steps", 0, 0, 1000), Param.whole("q1Steps", 0, 0, 1000), Param.whole("q2Steps", 0, 0, 1000));
 
-        // ---- game shading: one node for the whole light, one for the lit colour ----
+        // ---- game shading: one node for the whole light, one for the lit color ----
         custom("gameLight", CAT_FX, List.of(p("dist", F), p("ao", F), p("ndl", F), p("ndf", F), p("finish", B)),
                 List.of(p("r", F), p("g", F), p("b", F), p("level", F)), Nodes::emitGameLight);
-        custom("litColour", CAT_COLOR, List.of(p("c", C), p("r", F), p("g", F), p("b", F)),
+        custom("litColor", CAT_COLOR, List.of(p("c", C), p("r", F), p("g", F), p("b", F)),
                 List.of(p("out", C)), Nodes::emitLitColor);
 
         // ---- output ----

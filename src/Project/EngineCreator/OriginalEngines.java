@@ -236,10 +236,10 @@ public final class OriginalEngines {
         return tex;
     }
 
-    private static int fogAlways(B b, int colour, int dist) {
-        return with(b, "fog", colour, "out", "c", b.col(), "out", "fogColor", dist, "out", "distance", b.c(0.12), "out", "density");
+    private static int fogAlways(B b, int color, int dist) {
+        return with(b, "fog", color, "out", "c", b.col(), "out", "fogColor", dist, "out", "distance", b.c(0.12), "out", "density");
     }
-    private static int fogWhenQuality(B b, Scene s, int colour, int dist) { return sel(b, qualityAtLeast(b, s.qualityF(), 1), fogAlways(b, colour, dist), colour); }
+    private static int fogWhenQuality(B b, Scene s, int color, int dist) { return sel(b, qualityAtLeast(b, s.qualityF(), 1), fogAlways(b, color, dist), color); }
 
     private static int falloff(B b, int dist) {
         int q = bin(b, "div", dist, "out", b.c(3), "out");
@@ -331,7 +331,7 @@ public final class OriginalEngines {
     }
     private static int clampLevel(B b, Lit lit) { return with(b, "clamp", lit.node(), "level", "x", b.c(0.15), "out", "lo", b.c(1), "out", "hi"); }
     private static int litColor(B b, int tex, Lit l) {
-        int x = b.n("litColour");
+        int x = b.n("litColor");
         b.note(x, "Texture x light per channel, then the tone curve.");
         b.link(tex, "out", x, "c");
         b.link(l.node(), "r", x, "r");
@@ -348,7 +348,7 @@ public final class OriginalEngines {
         return bin(b, "max", dot, "out", b.c(0), "out");
     }
 
-    private record Reflected(int colour, int visible, int dist) {}
+    private record Reflected(int color, int visible, int dist) {}
     private static Reflected reflectedSurface(B b, Scene s, int ray, int Pr, int z0, int slope, int ox, int oy, int dxN, String dxP, int dyN, String dyP, int pathD) {
         int zW = bin(b, "add", z0, "out", bin(b, "mul", slope, "out", Pr, "out"), "out");
         int top = sel(b, bin(b, "equalInt", ray, "cell", b.ci(2), "out"), b.c(0.5), b.c(1));
@@ -378,9 +378,9 @@ public final class OriginalEngines {
         int tex = sel(b, wallVis, wallTex, sel(b, goesDown, floorTex, ceilTex));
         int dist = sel(b, wallVis, bin(b, "add", pathD, "out", Pr, "out"), bin(b, "add", pathD, "out", planeD, "out"));
         Lit lit = gameLight(b, dist, b.c(1), b.c(0.8), b.c(0.4), noFinish(b));
-        int colour = litColor(b, tex, lit);
+        int color = litColor(b, tex, lit);
         int visible = bin(b, "or", wallVis, "out", planeValid, "out");
-        return new Reflected(colour, visible, sel(b, wallVis, Pr, planeD));
+        return new Reflected(color, visible, sel(b, wallVis, Pr, planeD));
     }
     private static int wallReflectionGame(B b, Scene s, int base, Lit lit) {
         if (b.pass != 0) return base;
@@ -413,7 +413,7 @@ public final class OriginalEngines {
         Reflected r = reflectedSurface(b, s, ray, Pr, s.hgt(), s.r(), ox, oy, refl, "rx", refl, "ry", s.P());
         int selfFade = with(b, "clamp", bin(b, "sub", Pr, "out", b.c(0.6), "out"), "out", "x", b.c(0), "out", "lo", b.c(1), "out", "hi");
         int strength = bin(b, "mul", bin(b, "mul", bin(b, "mul", clampLevel(b, lit), "out", b.c(0.75 * 0.24), "out"), "out", selfFade, "out"), "out", facingFade, "out");
-        int mixed = with(b, "mixColor", base, "out", "a", r.colour(), "out", "b", strength, "out", "t");
+        int mixed = with(b, "mixColor", base, "out", "a", r.color(), "out", "b", strength, "out", "t");
         return sel(b, r.visible(), mixed, base);
     }
 
@@ -432,7 +432,7 @@ public final class OriginalEngines {
         int fade = with(b, "clamp", bin(b, "sub", b.c(1), "out", bin(b, "div", r.dist(), "out", b.c(6), "out"), "out"), "out",
                 "x", b.c(0), "out", "lo", b.c(1), "out", "hi");
         int strength = bin(b, "mul", bin(b, "mul", clampLevel(b, lit), "out", b.c(0.75 * 0.12), "out"), "out", fade, "out");
-        int mixed = with(b, "mixColor", base, "out", "a", r.colour(), "out", "b", strength, "out", "t");
+        int mixed = with(b, "mixColor", base, "out", "a", r.color(), "out", "b", strength, "out", "t");
         return sel(b, r.visible(), mixed, base);
     }
     private static int raytrace(B b, Scene s) {
