@@ -1,8 +1,7 @@
 package Engines;
-
-import GameViewComponents.*;
-import Helpers.*;
-import OpenCL.*;
+import Project.Game.*;
+import Project.Helpers.*;
+import Project.OpenCl.*;
 import java.awt.*;
 import java.util.function.IntConsumer;
 
@@ -598,7 +597,7 @@ public final class SRCEngine implements RenderEngine {
 
     //region OpenCL plug-in
     static final class Gpu {
-        private final String source = OpenCL.KernelSource.load(SRCEngine.class);
+        private final String source = Project.OpenCl.KernelSource.load(SRCEngine.class);
 
 
         private static final int DP_COUNT = 12, IP_COUNT = 13;
@@ -622,7 +621,8 @@ public final class SRCEngine implements RenderEngine {
             }
             catch (RuntimeException | Error e) {
                 disabled = true;
-                OpenCL.GpuRuntime.reportFailure(ID, String.valueOf(e));
+                e.printStackTrace(System.err);
+                Project.OpenCl.GpuRuntime.reportFailure(ID, String.valueOf(e));
                 return false;
             }
         }

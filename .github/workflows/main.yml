@@ -53,7 +53,7 @@ jobs:
         run: |
           jar --create \
             --file RCJMS.jar \
-            --main-class RCJMS \
+            --main-class Project.RCJMS \
             -C build .
 
       - name: Test JAR
@@ -81,7 +81,7 @@ jobs:
             --input package \
             --name RCJMS \
             --main-jar RCJMS.jar \
-            --main-class RCJMS \
+            --main-class Project.RCJMS \
             --add-modules java.desktop,jdk.compiler \
             --java-options "--enable-native-access=ALL-UNNAMED" \
             --dest dist
@@ -104,14 +104,6 @@ jobs:
             exit 1
           fi
           echo "jdk.compiler is in the runtime."
-
-      - name: Add engine mods folder
-        shell: bash
-        run: |
-          # Mods are read from ExternalEngines next to RCJMS.exe.
-          if [ -d ExternalEngines ]; then
-            cp -r ExternalEngines dist/RCJMS/
-          fi
 
       - name: Create Windows archive
         shell: bash

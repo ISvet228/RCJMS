@@ -1,10 +1,9 @@
 package Engines;
-
-import GameViewComponents.*;
-import Helpers.*;
+import Project.Game.*;
+import Project.Helpers.*;
 import java.awt.*;
 import java.util.function.IntConsumer;
-import OpenCL.*;
+import Project.OpenCl.*;
 
 public final class DDAEngine implements RenderEngine {
     //region Engine settings
@@ -340,8 +339,8 @@ public final class DDAEngine implements RenderEngine {
     @Override public String id() { return ID; }
     @Override public String displayName() { return "DDA"; }
     @Override public int order() { return 0; }
-    @Override public String hintKey() { return "mm.engine_dda"; }
-    @Override public String qualityHintKey() { return "mm.quality_dda"; }
+    @Override public String hintKey() { return "engine_dda"; }
+    @Override public String qualityHintKey() { return "quality_dda"; }
     @Override public boolean hasHyperbolicGeometry() { return true; }
     @Override public boolean hasOpenCL() { return true; }
     @Override public void render(RenderFrame frame) {
@@ -794,7 +793,7 @@ public final class DDAEngine implements RenderEngine {
 
     //region OpenCL plug-in
     static final class Gpu {
-        private final String source = OpenCL.KernelSource.load(DDAEngine.class);
+        private final String source = Project.OpenCl.KernelSource.load(DDAEngine.class);
 
 
         private static Gpu instance;
@@ -815,7 +814,8 @@ public final class DDAEngine implements RenderEngine {
             }
             catch (RuntimeException | Error e) {
                 disabled = true;
-                OpenCL.GpuRuntime.reportFailure(ID, String.valueOf(e));
+                e.printStackTrace(System.err);
+                Project.OpenCl.GpuRuntime.reportFailure(ID, String.valueOf(e));
                 return false;
             }
         }

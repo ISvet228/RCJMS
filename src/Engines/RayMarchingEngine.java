@@ -1,8 +1,7 @@
 package Engines;
-
-import GameViewComponents.*;
-import Helpers.*;
-import OpenCL.*;
+import Project.Game.*;
+import Project.Helpers.*;
+import Project.OpenCl.*;
 import java.awt.*;
 import java.util.Arrays;
 import java.util.function.IntConsumer;
@@ -962,7 +961,7 @@ public final class RayMarchingEngine  implements RenderEngine {
 
     //region OpenCL plug-in
     static final class Gpu {
-        private final String source = OpenCL.KernelSource.load(RayMarchingEngine.class);
+        private final String source = Project.OpenCl.KernelSource.load(RayMarchingEngine.class);
 
         private static final int DP_COUNT = 12, IP_COUNT = 14;
         private static Gpu instance;
@@ -987,7 +986,8 @@ public final class RayMarchingEngine  implements RenderEngine {
             }
             catch (RuntimeException | Error e) {
                 disabled = true;
-                OpenCL.GpuRuntime.reportFailure(ID, String.valueOf(e));
+                e.printStackTrace(System.err);
+                Project.OpenCl.GpuRuntime.reportFailure(ID, String.valueOf(e));
                 return false;
             }
         }
@@ -1058,8 +1058,7 @@ public final class RayMarchingEngine  implements RenderEngine {
             int floors = fr.map3D == null ? 0 : fr.map3D.length;
             int[][][] layers = new int[1 + floors][][];
             layers[0] = fr.map;
-            assert fr.map3D != null;
-            System.arraycopy(fr.map3D, 0, layers, 1, floors);
+            if (floors > 0) System.arraycopy(fr.map3D, 0, layers, 1, floors);
             return layers;
         }
         private void buildFields(int[][][] layers) {

@@ -1,8 +1,7 @@
 package Engines;
-
-import GameViewComponents.*;
-import OpenCL.*;
-import Helpers.*;
+import Project.Game.*;
+import Project.OpenCl.*;
+import Project.Helpers.*;
 import java.awt.*;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
@@ -884,10 +883,10 @@ public final class MoriartyEngine implements RenderEngine {
             for (int[][] floor : fr.map3D)
                 if (!todo.contains(floor)) todo.add(floor);
         for (int k = 0; k < todo.size(); k++) {
-            Progress.report("load.render", k / (double) todo.size());
+            Progress.report("render", k / (double) todo.size());
             mapDataFor(todo.get(k));
         }
-        Progress.report("load.render", 1.0);
+        Progress.report("render", 1.0);
     }
     private MapData mapDataFor(int[][] m) {
         MapData d = mapCache.get(m);
@@ -1337,7 +1336,7 @@ public final class MoriartyEngine implements RenderEngine {
 
     //region OpenCL plug-in
     static final class Gpu {
-        private final String source = OpenCL.KernelSource.load(MoriartyEngine.class);
+        private final String source = Project.OpenCl.KernelSource.load(MoriartyEngine.class);
         private static final int DP_COUNT = 9, IP_COUNT = 18, COL_FLOATS = 35;
         private static Gpu instance;
         private static boolean disabled;
@@ -1363,7 +1362,8 @@ public final class MoriartyEngine implements RenderEngine {
             }
             catch (RuntimeException | Error e) {
                 disabled = true;
-                OpenCL.GpuRuntime.reportFailure(ID, String.valueOf(e));
+                e.printStackTrace(System.err);
+                Project.OpenCl.GpuRuntime.reportFailure(ID, String.valueOf(e));
                 return false;
             }
         }
@@ -1507,8 +1507,7 @@ public final class MoriartyEngine implements RenderEngine {
             int floors = fr.map3D == null ? 0 : fr.map3D.length;
             int[][][] layers = new int[1 + floors][][];
             layers[0] = fr.map;
-            assert fr.map3D != null;
-            System.arraycopy(fr.map3D, 0, layers, 1, floors);
+            if (floors > 0) System.arraycopy(fr.map3D, 0, layers, 1, floors);
             return layers;
         }
         static double[] cameraParams(RenderFrame fr, int width, int height) {

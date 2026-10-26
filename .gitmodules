@@ -1,3 +1,3 @@
-[submodule "src/StyleUI"]
-	path = src/StyleUI
+[submodule "src/Project/StyleUI"]
+	path = src/Project/StyleUI
 	url = https://github.com/ISvet228/StyleUI

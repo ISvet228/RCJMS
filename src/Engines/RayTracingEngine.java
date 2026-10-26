@@ -1,10 +1,9 @@
 package Engines;
-
-import GameViewComponents.*;
-import Helpers.*;
+import Project.Game.*;
+import Project.Helpers.*;
 import java.awt.*;
 import java.util.function.IntConsumer;
-import OpenCL.*;
+import Project.OpenCl.*;
 import java.util.Arrays;
 
 public final class RayTracingEngine implements RenderEngine {
@@ -678,7 +677,8 @@ public final class RayTracingEngine implements RenderEngine {
         }
         catch (RuntimeException | Error e) {
             disabled = true;
-            OpenCL.GpuRuntime.reportFailure(ID, String.valueOf(e));
+            e.printStackTrace(System.err);
+                Project.OpenCl.GpuRuntime.reportFailure(ID, String.valueOf(e));
             return false;
         }
     }
@@ -688,7 +688,7 @@ public final class RayTracingEngine implements RenderEngine {
         if (fr.renderPixels == null || fr.renderPixels.length < width * height) throw new IllegalStateException("render buffer too small");
 
         prepareSdfFields(fr);
-        if (program == null) program = new GpuProgram(OpenCL.KernelSource.load(RayTracingEngine.class), "rt_render");
+        if (program == null) program = new GpuProgram(Project.OpenCl.KernelSource.load(RayTracingEngine.class), "rt_render");
 
         Scene scene = Scene.of(fr);
         int layers = 1 + scene.floors;

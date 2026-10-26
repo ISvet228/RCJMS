@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Runner" type="Application" factoryName="Application">
-    <option name="MAIN_CLASS_NAME" value="RCJMS" />
+    <option name="MAIN_CLASS_NAME" value="Project.RCJMS" />
     <module name="RCJMS" />
     <option name="VM_PARAMETERS" value="--enable-native-access=ALL-UNNAMED" />
     <method v="2">
