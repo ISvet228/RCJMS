@@ -1,4 +1,7 @@
 package Project.OpenCl;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import java.lang.foreign.*;
 import java.util.concurrent.*;
@@ -6,20 +9,25 @@ import java.util.concurrent.*;
 import static java.lang.foreign.ValueLayout.*;
 
 public final class OpenCLSession implements AutoCloseable {
+    //region Variables
+    //region Self Test
     static final String SELFTEST_SOURCE = """ 
             __kernel void rcjms_selftest(__global int* out) { size_t i = get_global_id(0); out[i] = (int)(i * 3 + 7); }""";
     static final int SELFTEST_COUNT = 64;
-
-    public static final class Unavailable extends RuntimeException { public Unavailable(String message) { super(message); }}
-
+    //endregion
+    //region Device Handles
     static final int DEVICE_EXTENSIONS = 0x1030;
-
     private final CL.Api api;
     private final MemorySegment device, context, queue;
     public final String platformName, deviceName;
     final boolean needsFp64Pragma;
+    //endregion
+    //region Lifecycle State
     private boolean closed;
+    //endregion
+    //endregion
 
+    //region Constructors
     private OpenCLSession(CL.Api api, MemorySegment device, MemorySegment context, MemorySegment queue, String platformName, String deviceName, boolean needsFp64Pragma) {
         this.api = api;
         this.device = device;
@@ -29,8 +37,9 @@ public final class OpenCLSession implements AutoCloseable {
         this.deviceName = deviceName;
         this.needsFp64Pragma = needsFp64Pragma;
     }
-    public record Outcome(OpenCLSession session, String reason) { public boolean available() { return session != null; } }
+    //endregion
 
+    //region Opening
     public static Outcome tryOpen(long timeoutMillis) {
         ExecutorService exec = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "OpenCL-init");
@@ -41,23 +50,17 @@ public final class OpenCLSession implements AutoCloseable {
             Future<OpenCLSession> future = exec.submit(OpenCLSession::open);
             return new Outcome(future.get(timeoutMillis, TimeUnit.MILLISECONDS), null);
         }
-        catch (TimeoutException e) { return new Outcome(null, "OpenCL initialisation timed out after " + timeoutMillis + " ms"); }
-        catch (ExecutionException e) {
-            Throwable cause = e.getCause() == null ? e : e.getCause();
+        catch (TimeoutException exception) { return new Outcome(null, "OpenCL initialisation timed out after " + timeoutMillis + " ms"); }
+        catch (ExecutionException exception) {
+            Throwable cause = exception.getCause() == null ? exception : exception.getCause();
             return new Outcome(null, reasonOf(cause));
         }
-        catch (InterruptedException e) {
+        catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             return new Outcome(null, "OpenCL initialisation interrupted");
         }
-        catch (Throwable t) { return new Outcome(null, reasonOf(t)); }
+        catch (Throwable exception) { return new Outcome(null, reasonOf(exception)); }
         finally { exec.shutdownNow(); }
-    }
-    private static String reasonOf(Throwable t) {
-        if (t instanceof UnsatisfiedLinkError) return "OpenCL driver not installed: " + t.getMessage();
-        if (t instanceof Unavailable || t instanceof CL.CLException) return t.getMessage();
-        if (t instanceof IllegalCallerException) return "native access not enabled: " + t.getMessage();
-        return "OpenCL unavailable: " + t;
     }
     static OpenCLSession open() {
         CL.Api api = new CL.Api(CL.loadLibrary());
@@ -111,12 +114,26 @@ public final class OpenCLSession implements AutoCloseable {
 
             return new OpenCLSession(api, device, context, queue, platformName, deviceName, fp64Extension);
         }
-        catch (RuntimeException | Error e) {
+        catch (RuntimeException | Error exception) {
             releaseQuietly(api, queue, context);
-            throw e;
+            throw exception;
         }
     }
+    private static String reasonOf(Throwable t) {
+        if (t instanceof UnsatisfiedLinkError) return "OpenCL driver not installed: " + t.getMessage();
+        if (t instanceof Unavailable || t instanceof CL.CLException) return t.getMessage();
+        if (t instanceof IllegalCallerException) return "native access not enabled: " + t.getMessage();
+        return "OpenCL unavailable: " + t;
+    }
+    public static final class Unavailable extends RuntimeException {
+public Unavailable(String message) { super(message); }
+}
+    public record Outcome(OpenCLSession session, String reason) {
+    public boolean available() { return session != null; }
+ }
+    //endregion
 
+    //region Self Test Runs
     private static void selfTest(CL.Api api, Arena arena, MemorySegment context, MemorySegment device, MemorySegment queue, MemorySegment deviceArray) {
         MemorySegment err = arena.allocate(JAVA_INT);
         MemorySegment sourceArray = arena.allocate(ADDRESS.byteSize());
@@ -163,13 +180,18 @@ public final class OpenCLSession implements AutoCloseable {
         if (queue != null && queue.address() != 0) api.releaseQueue(queue);
         if (context != null && context.address() != 0) api.releaseContext(context);
     }
-    public String describe() { return "OpenCL GPU: " + deviceName + " (" + platformName + ")"; }
+    //endregion
 
+    //region Accessors
+    public String describe() { return "OpenCL GPU: " + deviceName + " (" + platformName + ")"; }
     CL.Api api() { return api; }
     MemorySegment device() { return device; }
     MemorySegment context() { return context; }
     MemorySegment queue() { return queue; }
     boolean isClosed() { return closed; }
+    //endregion
+
+    //region Lifecycle
     @Override public void close() {
         synchronized (GpuRuntime.LOCK) {
             if (closed) return;
@@ -177,4 +199,5 @@ public final class OpenCLSession implements AutoCloseable {
             releaseQuietly(api, queue, context);
         }
     }
+    //endregion
 }

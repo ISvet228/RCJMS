@@ -1,4 +1,7 @@
 package Project.Game;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import java.io.IOException;
 import java.lang.reflect.Modifier;
@@ -10,14 +13,21 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public final class ExternalEngines {
+    //region Variables
+    //region Folders and Names
     static final String FOLDER = "Mods/ExternalEngines";
     static final String PREFIX = "_External_";
     private static final String ERROR_FILE = "errors.txt";
     private static final String BUILD_DIR = ".build";
     private static final Pattern PACKAGE = Pattern.compile("^\\s*package\\s+([\\w.]+)\\s*;", Pattern.MULTILINE);
+    //endregion
+    //endregion
 
+    //region Constructors
     private ExternalEngines() {}
+    //endregion
 
+    //region Loading
     static List<RenderEngine> load() {
         List<RenderEngine> result = new ArrayList<>();
         for (Path folder : folders()) {
@@ -28,8 +38,6 @@ public final class ExternalEngines {
         }
         return result;
     }
-
-    //region Locations
     static List<Path> folders() {
         Set<Path> bases = new LinkedHashSet<>();
         String app = System.getProperty("jpackage.app-path");
@@ -53,20 +61,17 @@ public final class ExternalEngines {
             if (source == null) return null;
             Path location = Paths.get(source.getLocation().toURI());
             return Files.isRegularFile(location) ? location.toAbsolutePath() : null;
-        } catch (URISyntaxException | RuntimeException e) { return null; }
+        } catch (URISyntaxException | RuntimeException exception) { return null; }
     }
     private static List<Path> javaSources(Path folder, List<String> problems) {
         try (Stream<Path> files = Files.list(folder)) {
-            return files.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().endsWith(".java"))
+            return files.filter(path -> Files.isRegularFile(path) && path.getFileName().toString().endsWith(".java"))
                     .sorted().toList();
-        } catch (IOException e) {
-            problems.add("cannot read folder: " + e.getMessage());
+        } catch (IOException exception) {
+            problems.add("cannot read folder: " + exception.getMessage());
             return List.of();
         }
     }
-    //endregion
-
-    //region Compile and load
     private static void loadFolder(Path folder, List<Path> sources, List<RenderEngine> out, List<String> problems) {
         if (!compilerPresent()) {
             problems.add("this runtime has no Java compiler (include the jdk.compiler module); " + sources.size() + " script(s) skipped");
@@ -79,26 +84,7 @@ public final class ExternalEngines {
         try {
             URLClassLoader loader = new URLClassLoader(new URL[]{build.toUri().toURL()}, ExternalEngines.class.getClassLoader());
             for (Path source : compiled) register(loader, qualifiedName(source), out, problems);
-        } catch (IOException e) { problems.add("cannot load compiled scripts: " + e.getMessage()); }
-    }
-    private static void copyKernelSources(Path folder, List<Path> sources, Path build, List<String> problems) {
-        for (Path source : sources) {
-            String simple = source.getFileName().toString();
-            simple = simple.substring(0, simple.length() - ".java".length());
-            Path kernel = folder.resolve(simple + ".cl");
-            if (!Files.isRegularFile(kernel)) continue;
-            try {
-                String qualified = qualifiedName(source);
-                int dot = qualified.lastIndexOf('.');
-                Path dir = dot > 0 ? build.resolve(qualified.substring(0, dot).replace('.', '/')) : build;
-                Files.createDirectories(dir);
-                Files.copy(kernel, dir.resolve(simple + ".cl"), StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) { problems.add(simple + ".cl: cannot copy the kernel: " + e.getMessage()); }
-        }
-    }
-    private static boolean compilerPresent() {
-        try { return ScriptCompiler.available(); }
-        catch (LinkageError e) { return false; }
+        } catch (IOException exception) { problems.add("cannot load compiled scripts: " + exception.getMessage()); }
     }
     private static void register(ClassLoader loader, String className, List<RenderEngine> out, List<String> problems) {
         try {
@@ -113,15 +99,18 @@ public final class ExternalEngines {
             }
             RenderEngine engine = (RenderEngine) type.getDeclaredConstructor().newInstance();
             out.add(new Prefixed(engine));
-        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) { problems.add(className + ": " + e); }
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException exception) { problems.add(className + ": " + exception); }
     }
+    //endregion
+
+    //region Build Directory
     private static Path prepareBuildDir(Path folder, List<String> problems) {
         try {
             Path build = folder.resolve(BUILD_DIR);
             deleteTree(build);
             Files.createDirectories(build);
             return build;
-        } catch (IOException e) {
+        } catch (IOException exception) {
             try {
                 Path temp = Files.createTempDirectory("rcjms-external-engines");
                 temp.toFile().deleteOnExit();
@@ -132,11 +121,30 @@ public final class ExternalEngines {
             }
         }
     }
+    private static void copyKernelSources(Path folder, List<Path> sources, Path build, List<String> problems) {
+        for (Path source : sources) {
+            String simple = source.getFileName().toString();
+            simple = simple.substring(0, simple.length() - ".java".length());
+            Path kernel = folder.resolve(simple + ".cl");
+            if (!Files.isRegularFile(kernel)) continue;
+            try {
+                String qualified = qualifiedName(source);
+                int dot = qualified.lastIndexOf('.');
+                Path dir = dot > 0 ? build.resolve(qualified.substring(0, dot).replace('.', '/')) : build;
+                Files.createDirectories(dir);
+                Files.copy(kernel, dir.resolve(simple + ".cl"), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException exception) { problems.add(simple + ".cl: cannot copy the kernel: " + exception.getMessage()); }
+        }
+    }
     private static String absoluteClasspath() {
         StringJoiner joiner = new StringJoiner(java.io.File.pathSeparator);
         for (String entry : System.getProperty("java.class.path", "").split(java.io.File.pathSeparator))
             if (!entry.isBlank()) joiner.add(Paths.get(entry).toAbsolutePath().toString());
         return joiner.toString();
+    }
+    private static boolean compilerPresent() {
+        try { return ScriptCompiler.available(); }
+        catch (LinkageError exception) { return false; }
     }
     private static String qualifiedName(Path source) {
         String simple = source.getFileName().toString();
@@ -144,38 +152,44 @@ public final class ExternalEngines {
         try {
             var matcher = PACKAGE.matcher(Files.readString(source, StandardCharsets.UTF_8));
             return matcher.find() ? matcher.group(1) + "." + simple : simple;
-        } catch (IOException e) { return simple; }
+        } catch (IOException exception) { return simple; }
+    }
+    private static void deleteTree(Path dir) throws IOException {
+        if (!Files.exists(dir)) return;
+        try (Stream<Path> walk = Files.walk(dir)) { for (Path path : walk.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path); }
     }
     //endregion
 
-    //region Reporting
+    //region Problems
     private static void reportProblems(Path folder, List<String> problems) {
         Path file = folder.resolve(ERROR_FILE);
         try {
             if (problems.isEmpty()) { Files.deleteIfExists(file); return; }
             for (String problem : problems) System.err.println("External engine: " + problem);
             Files.write(file, problems, StandardCharsets.UTF_8);
-        } catch (IOException e) { for (String problem : problems) System.err.println("External engine: " + problem); }
-    }
-    private static void deleteTree(Path dir) throws IOException {
-        if (!Files.exists(dir)) return;
-        try (Stream<Path> walk = Files.walk(dir)) { for (Path p : walk.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p); }
+        } catch (IOException exception) { for (String problem : problems) System.err.println("External engine: " + problem); }
     }
     //endregion
 
+    //region Types
     static final class Prefixed implements RenderEngine {
         private final RenderEngine inner;
+
         Prefixed(RenderEngine inner) { this.inner = inner; }
+
         @Override public String id() { return PREFIX + inner.id(); }
         @Override public String displayName() { return PREFIX + inner.displayName(); }
         @Override public int order() { return 1000 + inner.order(); }
         @Override public String hintKey() { return inner.hintKey(); }
         @Override public String qualityHintKey() { return inner.qualityHintKey(); }
+
         @Override public boolean hasHyperbolicGeometry() { return inner.hasHyperbolicGeometry(); }
         @Override public boolean hasOpenCL() { return inner.hasOpenCL(); }
         @Override public String openClKey() { return inner.openClKey(); }
         @Override public boolean supportsMapSize(int width, int height) { return inner.supportsMapSize(width, height); }
+
         @Override public void prepare(RenderFrame frame) { inner.prepare(frame); }
         @Override public void render(RenderFrame frame) { inner.render(frame); }
     }
+    //endregion
 }

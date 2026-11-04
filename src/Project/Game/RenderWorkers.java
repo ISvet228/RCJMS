@@ -1,18 +1,28 @@
 package Project.Game;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import java.util.function.IntConsumer;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class RenderWorkers {
+    //region Variables
+    //region Pool State
     private final Object lock = new Object();
     private final Worker[] workers;
+    private boolean stopping;
+    private Throwable failure;
+    //endregion
+    //region Task State
     private IntConsumer task;
     private int start, end, remaining;
     private long generation;
-    private boolean stopping;
-    private Throwable failure;
     private final AtomicInteger nextIndex = new AtomicInteger();
+    //endregion
+    //endregion
 
+    //region Constructors
     public RenderWorkers(int count) {
         workers = new Worker[count];
         for (int i = 0; i < count; i++) {
@@ -20,6 +30,9 @@ public final class RenderWorkers {
             workers[i].start();
         }
     }
+    //endregion
+
+    //region Task Execution
     public void execute(int start, int end, IntConsumer task) {
         Throwable error;
         boolean interrupted = false;
@@ -34,7 +47,7 @@ public final class RenderWorkers {
             lock.notifyAll();
             while (remaining > 0 && !stopping) {
                 try { lock.wait(); }
-                catch (InterruptedException e) { interrupted = true; }
+                catch (InterruptedException exception) { interrupted = true; }
             }
             error = failure;
             failure = null;
@@ -42,21 +55,29 @@ public final class RenderWorkers {
         if (interrupted) Thread.currentThread().interrupt();
         if (error != null) throw new IllegalStateException("Render worker task failed", error);
     }
+    private void recordFailure(Throwable t) {
+        synchronized (lock) {
+            if (failure == null) failure = t;
+        }
+    }
+    //endregion
+
+    //region Lifecycle
     public void shutdown() {
         synchronized (lock) {
             stopping = true;
             lock.notifyAll();
         }
     }
-    private void recordFailure(Throwable t) {
-        synchronized (lock) {
-            if (failure == null) failure = t;
-        }
-    }
+    //endregion
+
+    //region Worker Threads
     private final class Worker extends Thread {
         private long seenGeneration;
         private final int index;
+
         Worker(String name, int index) { super(name); this.index = index; setDaemon(true); }
+
         @Override public void run() {
             while (true) {
                 IntConsumer localTask;
@@ -64,7 +85,7 @@ public final class RenderWorkers {
                 synchronized (lock) {
                     while (!stopping && seenGeneration == generation) {
                         try { lock.wait(); }
-                        catch (InterruptedException e) { if (stopping) return; }
+                        catch (InterruptedException exception) { if (stopping) return; }
                     }
                     if (stopping) return;
                     seenGeneration = generation;
@@ -77,7 +98,7 @@ public final class RenderWorkers {
                         int to = Math.min(localEnd, from + localStart);
                         for (int i = from; i < to; i++) {
                             try { localTask.accept(i); }
-                            catch (Throwable t) { recordFailure(t); }
+                            catch (Throwable exception) { recordFailure(exception); }
                         }
                     }
                 }
@@ -87,4 +108,5 @@ public final class RenderWorkers {
             }
         }
     }
+    //endregion
 }

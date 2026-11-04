@@ -1,4 +1,7 @@
 package Project.MainMenu;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import Project.StyleUI.*;
 
@@ -7,11 +10,14 @@ import java.awt.*;
 
 public final class MainMenuControlsScreen extends MainMenuPanel {
     //region Variables
+    //region Content
     private static final String[] LINE_KEYS = {"if.move", "run", "mm.ctrl_mouse", "mm.ctrl_pause", "restart", "mm.ctrl_fullscreen", "mm.ctrl_aspect"};
-
+    //endregion
+    //region Widgets
     private final StyledLabel heading;
     private final StyledLabel[] lines = new StyledLabel[LINE_KEYS.length];
     private final StyledButton backButton;
+    //endregion
     //endregion
 
     //region Constructors
@@ -20,7 +26,7 @@ public final class MainMenuControlsScreen extends MainMenuPanel {
         heading = label("controls", MainMenuCanvas.ACCENT);
         for (int i = 0; i < LINE_KEYS.length; i++) lines[i] = label(LINE_KEYS[i], MainMenuCanvas.TEXT);
         backButton = button("mm.back");
-        backButton.addActionListener(e -> menu.showMain());
+        backButton.addActionListener(actionEvent -> menu.showMain());
 
         add(heading);
         for (StyledLabel line : lines) add(line);

@@ -1,4 +1,7 @@
 package Project.Victory;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 import Project.Game.GameView;
 import Project.MainMenu.MainMenuView;
 import Project.RCJMS;
@@ -17,45 +20,49 @@ import java.util.Random;
 
 public class VictoryView extends JPanel {
     //region Variables
+    //region Showcase State
     private static final double SPIN_SPEED = 0.4;
     private static final double SPIN_WOBBLE = 0.0;
     private static final double EYE_HEIGHT = 0.5;
     private static final double PLAYER_X = 2.5, PLAYER_Y = 2.5;
     private static final int ROOM_SIZE = 5;
-    private static final int FIREWORK_COUNT = 300;
-
     private static final int[] PRESET_SIZES = {15, 25, 40};
+    private final Style currentStyle = loadTheme();
+    private final GameView showcase;
+    //endregion
+    //region Firework State
+    private static final int FIREWORK_COUNT = 300;
+    private final List<Firework> fireworks = new ArrayList<>();
+    private boolean fireworksEnabled;
+    private final Random random = new Random();
+    //endregion
+    //region Visual Effects
     private static final float RAINBOW_STRENGTH = 0.22f;
-
     private static final Color BG_TOP = new Color(3, 5, 22);
     private static final Color BG_BOTTOM = new Color(8, 30, 40);
-
+    private boolean rainbowFilter;
+    //endregion
+    //region Layout State
     private static final int TITLE_X = 150, TITLE_Y = 44, TITLE_W = 660, TITLE_H = 104;
     private static final int CARD_X = 250, CARD_Y = 176, CARD_W = 460, CARD_H = 112;
     private static final int RESTART_X = 330, RESTART_Y = 330, RESTART_W = 300, RESTART_H = 70;
     private static final int EXIT_X = 380, EXIT_Y = 418, EXIT_W = 200, EXIT_H = 48;
-
-    private final Style currentStyle = loadTheme();
-    private final long elapsedSeconds;
-    private final Random random = new Random();
-
-    private final GameView showcase;
-    private boolean rainbowFilter;
-    private boolean fireworksEnabled;
-    private final boolean keysEnabled;
-    private final List<Firework> fireworks = new ArrayList<>();
-    private BufferedImage frame;
-
-    private double timeSec = 0;
-    private long lastNanos = System.nanoTime();
-
+    private int viewportX, viewportY;
+    private double scale = 1.0;
+    //endregion
+    //region Button State
     private final Animated3DText title = new Animated3DText("", Animated3DText.AnimationType.FULL);
     private final StyledButton restartButton = new StyledButton(currentStyle, "vv.restart");
     private final StyledButton exitButton = new StyledButton(currentStyle, "exit");
-
+    private final boolean keysEnabled;
+    //endregion
+    //region Animation State
+    private final long elapsedSeconds;
+    private BufferedImage frame;
+    private double timeSec = 0;
+    private long lastNanos = System.nanoTime();
     private final Timer animationTimer;
-    private int viewportX, viewportY;
-    private double scale = 1.0;
+    //endregion
     //endregion
 
     //region Constructors
@@ -79,12 +86,12 @@ public class VictoryView extends JPanel {
         title.setDepthColor(new Color(90, 255, 214, 90));
         add(title);
 
-        restartButton.addActionListener(e -> RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu"));
+        restartButton.addActionListener(actionEvent -> RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu"));
         add(restartButton);
-        exitButton.addActionListener(e -> System.exit(0));
+        exitButton.addActionListener(actionEvent -> System.exit(0));
         add(exitButton);
 
-        animationTimer = new Timer(16, e -> { tick(); repaint(); });
+        animationTimer = new Timer(16, actionEvent -> { tick(); repaint(); });
         animationTimer.start();
 
         if (keysEnabled) {
@@ -94,42 +101,12 @@ public class VictoryView extends JPanel {
 
         updateLayout();
         addComponentListener(new java.awt.event.ComponentAdapter() {
-            @Override public void componentResized(java.awt.event.ComponentEvent e) { updateLayout(); }
+            @Override public void componentResized(java.awt.event.ComponentEvent componentEvent) { updateLayout(); }
         });
     }
+    //endregion
 
-    private void bindKey(int keyCode, String name, Runnable action) {
-        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(keyCode, 0), name);
-        getActionMap().put(name, new AbstractAction() {
-            @Override public void actionPerformed(ActionEvent e) {
-                action.run();
-                repaint();
-            }
-        });
-    }
-
-    private static int presetIndex(int width, int height) {
-        for (int i = 0; i < PRESET_SIZES.length; i++)
-            if (width == PRESET_SIZES[i] && height == PRESET_SIZES[i]) return i;
-        return -1;
-    }
-
-    private static int[][] buildRoomMap() {
-        int[][] room = new int[ROOM_SIZE][ROOM_SIZE];
-        for (int y = 0; y < ROOM_SIZE; y++)
-            for (int x = 0; x < ROOM_SIZE; x++)
-                room[y][x] = (x == 0 || y == 0 || x == ROOM_SIZE - 1 || y == ROOM_SIZE - 1) ? MazeGenerator.WALL : MazeGenerator.OPEN;
-        return room;
-    }
-
-    private GameView createShowcase() {
-        try { return new GameView(buildRoomMap()); }
-        catch (IOException e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
+    //region Lifecycle
     @Override public void addNotify() {
         super.addNotify();
         if (animationTimer != null && !animationTimer.isRunning()) animationTimer.start();
@@ -139,12 +116,126 @@ public class VictoryView extends JPanel {
         if (showcase != null) showcase.releaseShowcase();
         super.removeNotify();
     }
+    private Style loadTheme() { return SaveData.load().theme; }
     //endregion
 
-    //region Other
-    @Override protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        Graphics2D g2d = (Graphics2D) g.create();
+    //region Input
+    private void bindKey(int keyCode, String name, Runnable action) {
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(keyCode, 0), name);
+        getActionMap().put(name, new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent actionEvent) {
+                action.run();
+                repaint();
+            }
+        });
+    }
+    //endregion
+
+    //region Animation
+    private void tick() {
+        long now = System.nanoTime();
+        double elapsed = (now - lastNanos) / 1e9;
+        lastNanos = now;
+        timeSec += elapsed;
+
+        double yaw = SPIN_SPEED * timeSec + SPIN_WOBBLE * (1.0 - Math.cos(0.5 * timeSec)) / 0.5;
+
+        if (showcase != null) {
+            showcase.setShowcaseCamera(PLAYER_X, PLAYER_Y, yaw, 0.0, EYE_HEIGHT);
+            frame = showcase.renderShowcaseFrame();
+        }
+
+        updateFireworks();
+    }
+    //endregion
+
+    //region Room Showcase
+    private static int presetIndex(int width, int height) {
+        for (int i = 0; i < PRESET_SIZES.length; i++)
+            if (width == PRESET_SIZES[i] && height == PRESET_SIZES[i]) return i;
+        return -1;
+    }
+    private static int[][] buildRoomMap() {
+        int[][] room = new int[ROOM_SIZE][ROOM_SIZE];
+        for (int y = 0; y < ROOM_SIZE; y++)
+            for (int x = 0; x < ROOM_SIZE; x++)
+                room[y][x] = (x == 0 || y == 0 || x == ROOM_SIZE - 1 || y == ROOM_SIZE - 1) ? MazeGenerator.WALL : MazeGenerator.OPEN;
+        return room;
+    }
+    private GameView createShowcase() {
+        try { return new GameView(buildRoomMap()); }
+        catch (IOException exception) {
+            exception.printStackTrace();
+            return null;
+        }
+    }
+    //endregion
+
+    //region Fireworks
+    private void updateFireworks() {
+        for (Firework firework : fireworks) {
+            firework.x += firework.vx;
+            firework.y += firework.vy;
+            firework.life--;
+            firework.vy += 0.03;
+            if (firework.life <= 0 || firework.x < -20 || firework.x > RCJMS.SCREEN_WIDTH + 20 || firework.y < -20 || firework.y > RCJMS.SCREEN_HEIGHT + 20) {
+                respawn(firework);
+            }
+        }
+    }
+    private Firework newFirework() {
+        Color color = randomColor();
+        int avg = (color.getRed() + color.getGreen() + color.getGreen()) / 3;
+        if (avg < 95)
+            color = new Color(
+                    (int)(color.getRed() + (255 - color.getRed()) * 0.8),
+                    (int)(color.getGreen() + (255 - color.getGreen()) * 0.8),
+                    (int)(color.getBlue() + (255 - color.getBlue()) * 0.8)
+            );
+        return new Firework(random.nextInt(RCJMS.SCREEN_WIDTH), random.nextInt(RCJMS.SCREEN_HEIGHT),
+                random.nextDouble() * 6 - 3, random.nextDouble() * 6 - 3,
+                2 + random.nextInt(8), color, 40 + random.nextInt(80));
+    }
+    private void respawn(Firework firework) {
+        firework.x = random.nextInt(RCJMS.SCREEN_WIDTH);
+        firework.y = random.nextInt(RCJMS.SCREEN_HEIGHT);
+        firework.vx = random.nextDouble() * 6 - 3;
+        firework.vy = random.nextDouble() * 6 - 3;
+        firework.size = 2 + random.nextInt(8);
+        firework.life = 40 + random.nextInt(80);
+        Color color = randomColor();
+        int avg = (color.getRed() + color.getGreen() + color.getGreen()) / 3;
+        if (avg < 95)
+            color = new Color(
+                    (int)(color.getRed() + (255 - color.getRed()) * 0.8),
+                    (int)(color.getGreen() + (255 - color.getGreen()) * 0.8),
+                    (int)(color.getBlue() + (255 - color.getBlue()) * 0.8)
+            );
+        firework.color = color;
+    }
+    private Color randomColor() {
+        return new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256));
+    }
+    private void paintFireworks(Graphics2D g2d) {
+        for (Firework firework : fireworks) {
+            g2d.setColor(firework.color);
+            g2d.fillRect((int) firework.x, (int) firework.y, firework.size, firework.size);
+        }
+    }
+    static class Firework {
+        double x, y, vx, vy;
+        int size, life;
+        Color color;
+        Firework(double x, double y, double vx, double vy, int size, Color color, int life) {
+            this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.size = size; this.color = color; this.life = life;
+        }
+    }
+    //endregion
+
+    //region Painting
+    @Override protected void paintComponent(Graphics graphics) {
+        super.paintComponent(graphics);
+        Graphics2D g2d = (Graphics2D) graphics.create();
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
@@ -164,7 +255,6 @@ public class VictoryView extends JPanel {
         paintVignette(g2d);
         g2d.dispose();
     }
-
     private void paintRainbow(Graphics2D g2d) {
         double t = timeSec;
         int stops = 7;
@@ -185,14 +275,6 @@ public class VictoryView extends JPanel {
         g2d.fillRect(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
         g2d.setComposite(old);
     }
-
-    private void paintFireworks(Graphics2D g2d) {
-        for (Firework f : fireworks) {
-            g2d.setColor(f.color);
-            g2d.fillRect((int) f.x, (int) f.y, f.size, f.size);
-        }
-    }
-
     private void paintTimeCard(Graphics2D g2d) {
         RoundRectangle2D pill = new RoundRectangle2D.Double(CARD_X, CARD_Y, CARD_W, CARD_H, CARD_H, CARD_H);
         g2d.setColor(new Color(10, 30, 40, 170));
@@ -211,84 +293,20 @@ public class VictoryView extends JPanel {
         String caption = String.format(NSLocalizedString.value("vv.victory_time"), h, m, s);
         drawCentered(g2d, caption, new Font(Font.SANS_SERIF, Font.PLAIN, 15), new Color(200, 230, 235), CARD_Y + 94);
     }
-
     private void paintVignette(Graphics2D g2d) {
         g2d.setPaint(new RadialGradientPaint(new Point2D.Double(480, 270), 640f,
                 new float[]{0.6f, 1f}, new Color[]{new Color(0, 0, 0, 0), new Color(0, 0, 0, 150)}));
         g2d.fill(new Rectangle2D.Double(0, 0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
     }
-
-    private void drawCentered(Graphics2D g2, String text, Font font, Color color, int baselineY) {
-        g2.setFont(font);
-        FontMetrics fm = g2.getFontMetrics(font);
-        g2.setColor(color);
-        g2.drawString(text, (RCJMS.SCREEN_WIDTH - fm.stringWidth(text)) / 2, baselineY);
+    private void drawCentered(Graphics2D g2d, String text, Font font, Color color, int baselineY) {
+        g2d.setFont(font);
+        FontMetrics fontMetrics = g2d.getFontMetrics(font);
+        g2d.setColor(color);
+        g2d.drawString(text, (RCJMS.SCREEN_WIDTH - fontMetrics.stringWidth(text)) / 2, baselineY);
     }
+    //endregion
 
-    private void tick() {
-        long now = System.nanoTime();
-        double elapsed = (now - lastNanos) / 1e9;
-        lastNanos = now;
-        timeSec += elapsed;
-
-        double yaw = SPIN_SPEED * timeSec + SPIN_WOBBLE * (1.0 - Math.cos(0.5 * timeSec)) / 0.5;
-
-        if (showcase != null) {
-            showcase.setShowcaseCamera(PLAYER_X, PLAYER_Y, yaw, 0.0, EYE_HEIGHT);
-            frame = showcase.renderShowcaseFrame();
-        }
-
-        updateFireworks();
-    }
-
-    private void updateFireworks() {
-        for (Firework f : fireworks) {
-            f.x += f.vx;
-            f.y += f.vy;
-            f.life--;
-            f.vy += 0.03;
-            if (f.life <= 0 || f.x < -20 || f.x > RCJMS.SCREEN_WIDTH + 20 || f.y < -20 || f.y > RCJMS.SCREEN_HEIGHT + 20) {
-                respawn(f);
-            }
-        }
-    }
-
-    private Firework newFirework() {
-        Color c = randomColor();
-        int avg = (c.getRed() + c.getGreen() + c.getGreen()) / 3;
-        if (avg < 95)
-            c = new Color(
-                    (int)(c.getRed() + (255 - c.getRed()) * 0.8),
-                    (int)(c.getGreen() + (255 - c.getGreen()) * 0.8),
-                    (int)(c.getBlue() + (255 - c.getBlue()) * 0.8)
-            );
-        return new Firework(random.nextInt(RCJMS.SCREEN_WIDTH), random.nextInt(RCJMS.SCREEN_HEIGHT),
-                random.nextDouble() * 6 - 3, random.nextDouble() * 6 - 3,
-                2 + random.nextInt(8), c, 40 + random.nextInt(80));
-    }
-
-    private void respawn(Firework f) {
-        f.x = random.nextInt(RCJMS.SCREEN_WIDTH);
-        f.y = random.nextInt(RCJMS.SCREEN_HEIGHT);
-        f.vx = random.nextDouble() * 6 - 3;
-        f.vy = random.nextDouble() * 6 - 3;
-        f.size = 2 + random.nextInt(8);
-        f.life = 40 + random.nextInt(80);
-        Color c = randomColor();
-        int avg = (c.getRed() + c.getGreen() + c.getGreen()) / 3;
-        if (avg < 95)
-            c = new Color(
-                    (int)(c.getRed() + (255 - c.getRed()) * 0.8),
-                    (int)(c.getGreen() + (255 - c.getGreen()) * 0.8),
-                    (int)(c.getBlue() + (255 - c.getBlue()) * 0.8)
-            );
-        f.color = c;
-    }
-
-    private Color randomColor() {
-        return new Color(random.nextInt(256), random.nextInt(256), random.nextInt(256));
-    }
-
+    //region Layout
     private void updateLayout() {
         int width = getWidth(), height = getHeight();
         if (width <= 0 || height <= 0) return;
@@ -306,14 +324,5 @@ public class VictoryView extends JPanel {
     private int toSX(double v) { return viewportX + (int) Math.round(v * scale); }
     private int toSY(double v) { return viewportY + (int) Math.round(v * scale); }
     private int toS(double v) { return (int) Math.round(v * scale); }
-    private Style loadTheme() { return SaveData.load().theme; }
-    static class Firework {
-        double x, y, vx, vy;
-        int size, life;
-        Color color;
-        Firework(double x, double y, double vx, double vy, int size, Color color, int life) {
-            this.x = x; this.y = y; this.vx = vx; this.vy = vy; this.size = size; this.color = color; this.life = life;
-        }
-    }
     //endregion
 }

@@ -1,4 +1,7 @@
 package Project.MainMenu;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 import Project.Game.*;
 import Project.Helpers.*;
 import Project.StyleUI.*;
@@ -14,46 +17,61 @@ import java.util.List;
 
 public final class MainMenuSettingsScreen extends MainMenuPanel {
     //region Variables
+    //region Localization And Themes
     private static final String[] LANGUAGE_CODES = {"en", "ru", "sr"};
     private static final String[] LANGUAGE_NAMES = {"English", "Русский", "Srpski"};
     private static final Style[] THEMES = {Style.FLAT, Style.NEUMORPHIC, Style.GLASS};
-    private static final String[] THEME_KEYS = {"st.flat", "st.neumorphic", "st.glass"};
+    private static final String[] THEME_KEYS = {"mm.settings_flat", "mm.settings_neumorphic", "mm.settings_glass"};
+    //endregion
+    //region Render Options
     private static final String[] RENDER_SCALE_NAMES = {"100%", "75%", "50%", "10%"};
     private static final double[] RENDER_SCALES = {1.0, 0.75, 0.5, 0.1};
     private static final String[] QUALITY_KEYS = {"mm.quality_low", "mm.quality_medium", "mm.quality_high", "mm.quality_auto"};
     private static final String QUALITY_AUTO_HINT_KEY = "mm.quality_auto_hint";
-    private static final int RESOLUTION_STEPS = 4, STEP_WIDTH = 480, STEP_HEIGHT = 270;
-    private final int[][] resolutions = buildResolutions();
-    private final String[] resolutionNames = buildResolutionNames();
     private static final String NO_ENGINE_LABEL = "—";
     private final String[] engineNames = RenderEngines.names().length == 0 ? new String[]{NO_ENGINE_LABEL} : RenderEngines.names();
     private final String[] engineHintKeys = RenderEngines.hintKeys();
     private final String[] qualityHintKeys = RenderEngines.qualityHintKeys();
-
-    // Theme previews fill this design-space area; the grid grows or shrinks with the number of themes.
+    private static final int RESOLUTION_STEPS = 4, STEP_WIDTH = 480, STEP_HEIGHT = 270;
+    private final int[][] resolutions = buildResolutions();
+    private final String[] resolutionNames = buildResolutionNames();
+    //endregion
+    //region Background Previews
     private static final int PREVIEW_AREA_X = 500, PREVIEW_AREA_Y = 162, PREVIEW_AREA_W = 310, PREVIEW_AREA_H = 274;
     private static final int PREVIEW_MIN_GAP = 8, PREVIEW_MAX_GAP_Y = 20, PREVIEW_CAPTION_H = 22, PREVIEW_MAX_W = 160;
-    private enum Page { INTERFACE, DISPLAY }
-
-    private final ButtonGroup pageGroup = new ButtonGroup();
-    private final StyledToggleButton interfaceTab, displayTab;
-    private final ButtonGroup themeGroup = new ButtonGroup();
-    private final StyledToggleButton[] themeButtons = new StyledToggleButton[THEMES.length];
     private final BackgroundPreview[] backgroundPreviews;
     private final StyledLabel[] backgroundCaptions;
+    //endregion
+    //region Page Tabs
+    private final ButtonGroup pageGroup = new ButtonGroup();
+    private final StyledToggleButton interfaceTab, displayTab, gameplayTab;
+    private Page page = Page.DISPLAY;
+    private final List<Component> interfaceControls = new ArrayList<>();
+    private final List<Component> displayControls = new ArrayList<>();
+    private final List<Component> gameplayControls = new ArrayList<>();
+    //endregion
+    //region Theme Buttons
+    private final ButtonGroup themeGroup = new ButtonGroup();
+    private final StyledToggleButton[] themeButtons = new StyledToggleButton[THEMES.length];
+    //endregion
+    //region Option Controls
     private final StyledComboBox languageBox, renderScaleBox, resolutionBox, engineBox, qualityBox;
     private final StyledToggle fullscreenToggle, vsyncToggle, openClToggle;
+    private final StyledToggle doomMovementToggle, noCeilingToggle, textModeToggle;
+    //endregion
+    //region Labels
     private final StyledLabel heading, sectionInterface, languageCaption, themeCaption, sectionBackground;
     private final StyledLabel sectionDisplay, vsyncHint, openClHint, resolutionCaption, resolutionHint, scaleCaption, scaleHint, sectionRender;
     private final StyledLabel engineCaption, engineHint, qualityCaption, qualityHint;
-    private final StyledButton backButton;
+    private final StyledLabel sectionGameplay, doomMovementHint, noCeilingHint, textModeHint, soonLabel;
+    //endregion
+    //region Status And Timers
     private final StatusDot openClDot = new StatusDot();
-    private final javax.swing.Timer probeWatcher = new javax.swing.Timer(400, e -> updateOpenClState());
-    private final javax.swing.Timer previewAnimator = new javax.swing.Timer(40, e -> repaintBackgroundPreviews());
-    private final List<Component> interfaceControls = new ArrayList<>();
-    private final List<Component> displayControls = new ArrayList<>();
-    private Page page = Page.DISPLAY;
+    private final javax.swing.Timer probeWatcher = new javax.swing.Timer(400, actionEvent -> updateOpenClState());
+    private final javax.swing.Timer previewAnimator = new javax.swing.Timer(40, actionEvent -> repaintBackgroundPreviews());
     private boolean syncing;
+    private final StyledButton backButton;
+    //endregion
     //endregion
 
     //region Constructors
@@ -64,21 +82,27 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         heading = label("settings", MainMenuCanvas.ACCENT);
         interfaceTab = new StyledToggleButton(style, "mm.page_interface");
         displayTab = new StyledToggleButton(style, "mm.page_display");
+        gameplayTab = new StyledToggleButton(style, "mm.page_gameplay");
         sectionInterface = label("mm.section_interface", MainMenuCanvas.ACCENT);
         sectionBackground = label("mm.section_background", MainMenuCanvas.ACCENT);
         sectionDisplay = label("mm.section_display", MainMenuCanvas.ACCENT);
         sectionRender = label("mm.section_render", MainMenuCanvas.ACCENT);
-        languageCaption = label("st.language", MainMenuCanvas.TEXT);
-        themeCaption = label("st.themes", MainMenuCanvas.TEXT);
+        sectionGameplay = label("mm.section_gameplay", MainMenuCanvas.ACCENT);
+        doomMovementHint = label("mm.doom_movement_hint", MainMenuCanvas.MUTED);
+        noCeilingHint = label("mm.no_ceiling_hint", MainMenuCanvas.MUTED);
+        textModeHint = label("mm.text_mode_hint", MainMenuCanvas.MUTED);
+        soonLabel = label("SOON...", MainMenuCanvas.MUTED);
+        languageCaption = label("mm.settings_language", MainMenuCanvas.TEXT);
+        themeCaption = label("mm.settings_themes", MainMenuCanvas.TEXT);
         vsyncHint = label("mm.vsync_hint", MainMenuCanvas.MUTED);
         openClHint = label("mm.opencl_hint", MainMenuCanvas.MUTED);
-        resolutionCaption = label("st.resolution", MainMenuCanvas.TEXT);
+        resolutionCaption = label("mm.settings_resolution", MainMenuCanvas.TEXT);
         resolutionHint = label("mm.resolution_hint", MainMenuCanvas.MUTED);
-        scaleCaption = label("st.render_scale", MainMenuCanvas.TEXT);
+        scaleCaption = label("mm.settings_render_scale", MainMenuCanvas.TEXT);
         scaleHint = label("mm.render_scale_hint", MainMenuCanvas.MUTED);
-        engineCaption = label("st.render_engine", MainMenuCanvas.TEXT);
+        engineCaption = label("mm.settings_render_engine", MainMenuCanvas.TEXT);
         engineHint = label("engine_dda", MainMenuCanvas.MUTED);
-        qualityCaption = label("st.render_quality", MainMenuCanvas.TEXT);
+        qualityCaption = label("mm.settings_render_quality", MainMenuCanvas.TEXT);
         qualityHint = label("quality_dda", MainMenuCanvas.MUTED);
 
         languageBox = new StyledComboBox(style, LANGUAGE_NAMES);
@@ -86,9 +110,12 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         resolutionBox = new StyledComboBox(style, resolutionNames);
         engineBox = new StyledComboBox(style, engineNames);
         qualityBox = new StyledComboBox(style, QUALITY_KEYS);
-        fullscreenToggle = new StyledToggle(style, "st.fullscreen");
+        fullscreenToggle = new StyledToggle(style, "mm.settings_fullscreen");
         vsyncToggle = new StyledToggle(style, "mm.vsync");
         openClToggle = new StyledToggle(style, "mm.opencl");
+        doomMovementToggle = new StyledToggle(style, "mm.doom_movement");
+        noCeilingToggle = new StyledToggle(style, "mm.no_ceiling");
+        textModeToggle = new StyledToggle(style, "mm.text_mode");
         backButton = button("mm.back");
         for (int i = 0; i < THEMES.length; i++) {
             themeButtons[i] = new StyledToggleButton(style, THEME_KEYS[i]);
@@ -106,12 +133,15 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         }
         interfaceTab.setFocusable(false);
         displayTab.setFocusable(false);
+        gameplayTab.setFocusable(false);
         pageGroup.add(interfaceTab);
         pageGroup.add(displayTab);
+        pageGroup.add(gameplayTab);
 
         add(heading);
         add(displayTab);
         add(interfaceTab);
+        add(gameplayTab);
         add(backButton);
 
         interfaceControls.add(sectionInterface);
@@ -144,8 +174,18 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         displayControls.add(resolutionBox);
         displayControls.add(resolutionHint);
 
+        gameplayControls.add(sectionGameplay);
+        gameplayControls.add(doomMovementToggle);
+        gameplayControls.add(doomMovementHint);
+        gameplayControls.add(noCeilingToggle);
+        gameplayControls.add(noCeilingHint);
+        gameplayControls.add(textModeToggle);
+        gameplayControls.add(textModeHint);
+        gameplayControls.add(soonLabel);
+
         for (Component component : interfaceControls) add(component);
         for (Component component : displayControls) add(component);
+        for (Component component : gameplayControls) add(component);
 
         attachListeners();
         showPage(Page.DISPLAY);
@@ -153,51 +193,14 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     }
     //endregion
 
-    //region Lifecycle=
-    @Override public void addNotify() {
-        super.addNotify();
-        if (!previewAnimator.isRunning()) previewAnimator.start();
-    }
-    @Override public void removeNotify() {
-        previewAnimator.stop();
-        probeWatcher.stop();
-        super.removeNotify();
-    }
-    //endregion
-
-    //region Public API
-    public void refresh() {
-        syncing = true;
-        try {
-            languageBox.setSelectedIndex(languageIndexFor(NSLocalizedString.getLanguage()));
-            for (int i = 0; i < THEMES.length; i++)
-                if (THEMES[i] == menu.style()) themeButtons[i].setSelected(true);
-            fullscreenToggle.setSelected(menu.isFullscreen());
-            resolutionBox.setSelectedIndex(resolutionIndexFor(menu.windowWidth()));
-            renderScaleBox.setSelectedIndex(renderScaleIndex(menu.getRenderScale()));
-            vsyncToggle.setSelected(menu.isVSyncEnabled());
-            int engine = Math.clamp(menu.getRenderEngine(), 0, Math.max(0, engineNames.length - 1));
-            engineBox.setSelectedIndex(engine);
-            engineBox.setEnabled(!RenderEngines.all().isEmpty());
-            qualityBox.setSelectedIndex(menu.getRenderEngineQuality());
-            updateEngineHints(engine);
-            updateOpenClState();
-            syncBackgroundSelection();
-        } finally { syncing = false; }
-    }
-    public void syncFullscreen(boolean value) {
-        fullscreenToggle.setSelected(value);
-    }
-    //endregion
-
     //region Layout
     @Override protected void layoutDesign() {
         setCard(120, 22, 720, 496);
         canvas.text(heading, 26, 120, 40, 720, 40);
-        canvas.place(displayTab, 327, 88, 150, 32);
-        canvas.place(interfaceTab, 483, 88, 150, 32);
+        canvas.place(displayTab, 249, 88, 150, 32);
+        canvas.place(interfaceTab, 405, 88, 150, 32);
+        canvas.place(gameplayTab, 561, 88, 150, 32);
 
-        // Interface page: language and themes on the left, menu backgrounds on the right.
         canvas.text(sectionInterface, 13, 150, 134, 310, 20);
         canvas.text(languageCaption, 13, 150, 162, 310, 18);
         canvas.combo(languageBox, 150, 182, 310, 36);
@@ -210,7 +213,6 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         canvas.text(sectionBackground, 13, 500, 134, 310, 20);
         layoutBackgroundPreviews();
 
-        // Display page: render engine, quality and scale on the left, window and display options on the right.
         canvas.text(sectionRender, 13, 150, 134, 310, 20);
         canvas.text(engineCaption, 13, 150, 162, 310, 18);
         canvas.combo(engineBox, 150, 182, 310, 36);
@@ -233,9 +235,24 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         canvas.combo(resolutionBox, 500, 344, 310, 36);
         canvas.text(resolutionHint, 12, 500, 382, 310, 18);
 
+        canvas.text(sectionGameplay, 13, 150, 134, 310, 20);
+        canvas.place(doomMovementToggle, 150, 162, 310, 34);
+        canvas.text(doomMovementHint, 12, 150, 200, 310, 18);
+        canvas.place(noCeilingToggle, 150, 226, 310, 34);
+        canvas.text(noCeilingHint, 12, 150, 264, 310, 18);
+        canvas.place(textModeToggle, 150, 290, 310, 34);
+        canvas.text(textModeHint, 12, 150, 328, 310, 18);
+        canvas.text(soonLabel, 26, 500, 240, 310, 40);
+
         canvas.place(backButton, 690, 448, 120, 38);
     }
-
+    @Override protected void paintDecorations(Graphics graphics) {
+        canvas.paintDivider(graphics, menu.style(), 480, 134, 428);
+        StyledToggleButton active = page == Page.INTERFACE ? interfaceTab : page == Page.GAMEPLAY ? gameplayTab : displayTab;
+        graphics.setColor(MainMenuCanvas.ACCENT);
+        graphics.fillRect(active.getX(), active.getY() + active.getHeight() + 3, active.getWidth(), Math.max(2, Math.round(3 * (float) canvas.scale())));
+    }
+    @Override protected Collection<? extends Component> unstyledComponents() { return List.of(themeButtons); }
     private void layoutBackgroundPreviews() {
         int count = backgroundPreviews.length;
         if (count == 0) return;
@@ -260,51 +277,59 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             canvas.text(backgroundCaptions[i], 12, x, y + h + 3, w, PREVIEW_CAPTION_H - 3);
         }
     }
-    @Override protected void paintDecorations(Graphics g) {
-        canvas.paintDivider(g, menu.style(), 480, 134, 428);
-        StyledToggleButton active = page == Page.INTERFACE ? interfaceTab : displayTab;
-        g.setColor(MainMenuCanvas.ACCENT);
-        g.fillRect(active.getX(), active.getY() + active.getHeight() + 3, active.getWidth(), Math.max(2, Math.round(3 * (float) canvas.scale())));
-    }
+    private void setDisplayVisible(Component component, boolean visible) { component.setVisible(visible && page == Page.DISPLAY); }
     //endregion
 
-    //region Helpers
+    //region Listeners
+    @Override public void addNotify() {
+        super.addNotify();
+        if (!previewAnimator.isRunning()) previewAnimator.start();
+    }
+    @Override public void removeNotify() {
+        previewAnimator.stop();
+        probeWatcher.stop();
+        super.removeNotify();
+    }
     private void attachListeners() {
-        interfaceTab.addActionListener(e -> showPage(Page.INTERFACE));
-        displayTab.addActionListener(e -> showPage(Page.DISPLAY));
-        languageBox.addActionListener(e -> {
+        interfaceTab.addActionListener(actionEvent -> showPage(Page.INTERFACE));
+        displayTab.addActionListener(actionEvent -> showPage(Page.DISPLAY));
+        gameplayTab.addActionListener(actionEvent -> showPage(Page.GAMEPLAY));
+        doomMovementToggle.addActionListener(actionEvent -> saveGameplay(() -> GameView.setDoomMovement(doomMovementToggle.isSelected())));
+        noCeilingToggle.addActionListener(actionEvent -> saveGameplay(() -> GameView.setNoCeiling(noCeilingToggle.isSelected())));
+        textModeToggle.addActionListener(actionEvent -> saveGameplay(() -> GameView.setTextMode(textModeToggle.isSelected())));
+        languageBox.addActionListener(actionEvent -> {
             int index = languageBox.getSelectedIndex();
             if (!syncing && index >= 0 && index < LANGUAGE_CODES.length) menu.changeLanguage(LANGUAGE_CODES[index]);
         });
         for (int i = 0; i < THEMES.length; i++) {
             int index = i;
-            themeButtons[i].addActionListener(e -> menu.changeStyle(THEMES[index]));
+            themeButtons[i].addActionListener(actionEvent -> menu.changeStyle(THEMES[index]));
         }
-        fullscreenToggle.addActionListener(e -> {
+        fullscreenToggle.addActionListener(actionEvent -> {
             menu.applyFullscreen(fullscreenToggle.isSelected());
             menu.saveSettings();
         });
-        vsyncToggle.addActionListener(e -> {
+        vsyncToggle.addActionListener(actionEvent -> {
             menu.setVSyncEnabled(vsyncToggle.isSelected());
             menu.saveSettings();
         });
-        openClToggle.addActionListener(e -> {
+        openClToggle.addActionListener(actionEvent -> {
             menu.setOpenClAcceleration(openClToggle.isSelected());
             menu.saveSettings();
             updateOpenClState();
         });
-        resolutionBox.addActionListener(e -> {
+        resolutionBox.addActionListener(actionEvent -> {
             int index = resolutionBox.getSelectedIndex();
             if (!syncing && index >= 0 && index < resolutions.length) menu.setWindowSize(resolutions[index][0], resolutions[index][1]);
         });
-        renderScaleBox.addActionListener(e -> {
+        renderScaleBox.addActionListener(actionEvent -> {
             int index = renderScaleBox.getSelectedIndex();
             if (!syncing && index >= 0 && index < RENDER_SCALES.length) {
                 menu.setRenderScale(RENDER_SCALES[index]);
                 menu.saveSettings();
             }
         });
-        engineBox.addActionListener(e -> {
+        engineBox.addActionListener(actionEvent -> {
             int index = engineBox.getSelectedIndex();
             if (!syncing && index >= 0 && index < engineNames.length && !RenderEngines.all().isEmpty()) {
                 menu.setRenderEngine(index);
@@ -313,7 +338,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
                 menu.saveSettings();
             }
         });
-        qualityBox.addActionListener(e -> {
+        qualityBox.addActionListener(actionEvent -> {
             int index = qualityBox.getSelectedIndex();
             if (!syncing && index >= 0 && index < QUALITY_KEYS.length) {
                 menu.setRenderEngineQuality(index);
@@ -321,17 +346,75 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
                 menu.saveSettings();
             }
         });
-        backButton.addActionListener(e -> menu.showMain());
+        backButton.addActionListener(actionEvent -> menu.showMain());
     }
+    //endregion
+
+    //region Page Navigation
     private void showPage(Page next) {
         page = next;
         for (Component component : interfaceControls) component.setVisible(next == Page.INTERFACE);
         for (Component component : displayControls) component.setVisible(next == Page.DISPLAY);
+        for (Component component : gameplayControls) component.setVisible(next == Page.GAMEPLAY);
         interfaceTab.setSelected(next == Page.INTERFACE);
         displayTab.setSelected(next == Page.DISPLAY);
+        gameplayTab.setSelected(next == Page.GAMEPLAY);
         updateEngineHints(engineBox.getSelectedIndex());
         repaint();
     }
+    //endregion
+
+    //region Settings Sync
+    public void refresh() {
+        syncing = true;
+        try {
+            languageBox.setSelectedIndex(languageIndexFor(NSLocalizedString.getLanguage()));
+            for (int i = 0; i < THEMES.length; i++)
+                if (THEMES[i] == menu.style()) themeButtons[i].setSelected(true);
+            fullscreenToggle.setSelected(menu.isFullscreen());
+            resolutionBox.setSelectedIndex(resolutionIndexFor(menu.windowWidth()));
+            renderScaleBox.setSelectedIndex(renderScaleIndex(menu.getRenderScale()));
+            vsyncToggle.setSelected(menu.isVSyncEnabled());
+            int engine = Math.clamp(menu.getRenderEngine(), 0, Math.max(0, engineNames.length - 1));
+            engineBox.setSelectedIndex(engine);
+            engineBox.setEnabled(!RenderEngines.all().isEmpty());
+            qualityBox.setSelectedIndex(menu.getRenderEngineQuality());
+            updateEngineHints(engine);
+            updateOpenClState();
+            doomMovementToggle.setSelected(GameView.isDoomMovement());
+            noCeilingToggle.setSelected(GameView.isNoCeiling());
+            textModeToggle.setSelected(GameView.isTextMode());
+            syncBackgroundSelection();
+        } finally { syncing = false; }
+    }
+    public void syncFullscreen(boolean value) {
+        fullscreenToggle.setSelected(value);
+    }
+    private void saveGameplay(Runnable apply) {
+        if (syncing) return;
+        apply.run();
+        try {
+            SaveData.saveGameplay(GameView.isDoomMovement(), GameView.isNoCeiling(), GameView.isTextMode());
+        } catch (java.io.IOException exception) {
+            System.err.println("[Settings] gameplay not saved: " + exception.getMessage());
+        }
+    }
+    private void updateEngineHints(int engine) {
+        if (engine >= 0 && engine < engineHintKeys.length && engineHintKeys[engine] != null) {
+            engineHint.setLocalizationKey(engineHintKeys[engine]);
+            setDisplayVisible(engineHint, true);
+        } else setDisplayVisible(engineHint, false);
+        boolean auto = qualityBox.getSelectedIndex() == RenderEngineConfig.QUALITY_AUTO;
+        String qualityKey = auto ? QUALITY_AUTO_HINT_KEY : engine >= 0 && engine < qualityHintKeys.length ? qualityHintKeys[engine] : null;
+        if (qualityKey != null) {
+            qualityHint.setLocalizationKey(qualityKey);
+            setDisplayVisible(qualityHint, true);
+        } else setDisplayVisible(qualityHint, false);
+        renderScaleBox.setEnabled(!auto);
+    }
+    //endregion
+
+    //region Theme Selection
     private void selectTheme(MenuTheme theme) {
         if (syncing) return;
         menu.setMenuTheme(theme);
@@ -342,6 +425,9 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         MenuTheme current = menu.getMenuTheme();
         for (BackgroundPreview preview : backgroundPreviews) preview.setSelected(preview.theme() == current);
     }
+    //endregion
+
+    //region OpenCL Status
     private void updateOpenClState() {
         int index = engineBox.getSelectedIndex();
         List<RenderEngine> engines = RenderEngines.all();
@@ -389,21 +475,22 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         openClHint.setLocalizationFormat("mm.opencl_reason", () -> new Object[]{summary});
         openClHint.setToolTipText(full);
     }
-    private void updateEngineHints(int engine) {
-        if (engine >= 0 && engine < engineHintKeys.length && engineHintKeys[engine] != null) {
-            engineHint.setLocalizationKey(engineHintKeys[engine]);
-            setDisplayVisible(engineHint, true);
-        } else setDisplayVisible(engineHint, false);
-        boolean auto = qualityBox.getSelectedIndex() == RenderEngineConfig.QUALITY_AUTO;
-        String qualityKey = auto ? QUALITY_AUTO_HINT_KEY : engine >= 0 && engine < qualityHintKeys.length ? qualityHintKeys[engine] : null;
-        if (qualityKey != null) {
-            qualityHint.setLocalizationKey(qualityKey);
-            setDisplayVisible(qualityHint, true);
-        } else setDisplayVisible(qualityHint, false);
-        renderScaleBox.setEnabled(!auto);
-    }
+    //endregion
 
-    private void setDisplayVisible(Component component, boolean visible) { component.setVisible(visible && page == Page.DISPLAY); }
+    //region Option Lookups
+    private int[][] buildResolutions() {
+        int[][] options = new int[RESOLUTION_STEPS + 1][2];
+        for (int i = 0; i <= RESOLUTION_STEPS; i++) {
+            options[i][0] = menu.screenWidth() + STEP_WIDTH * i;
+            options[i][1] = menu.screenHeight() + STEP_HEIGHT * i;
+        }
+        return options;
+    }
+    private String[] buildResolutionNames() {
+        String[] names = new String[resolutions.length];
+        for (int i = 0; i < resolutions.length; i++) names[i] = resolutions[i][0] + "x" + resolutions[i][1];
+        return names;
+    }
     private static int languageIndexFor(String code) {
         if (code == null) return 0;
         String normalized = code.trim().toLowerCase(java.util.Locale.ROOT);
@@ -420,26 +507,15 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         return index;
     }
     private static int renderScaleIndex(double scale) { return scale >= 0.99 ? 0 : scale >= 0.74 ? 1 : scale >= 0.49 ? 2 : 3; }
-    private int[][] buildResolutions() {
-        int[][] options = new int[RESOLUTION_STEPS + 1][2];
-        for (int i = 0; i <= RESOLUTION_STEPS; i++) {
-            options[i][0] = menu.screenWidth() + STEP_WIDTH * i;
-            options[i][1] = menu.screenHeight() + STEP_HEIGHT * i;
-        }
-        return options;
-    }
-    private String[] buildResolutionNames() {
-        String[] names = new String[resolutions.length];
-        for (int i = 0; i < resolutions.length; i++) names[i] = resolutions[i][0] + "x" + resolutions[i][1];
-        return names;
-    }
     //endregion
 
-    //region Components
+    //region Nested Types
+    private enum Page { INTERFACE, DISPLAY, GAMEPLAY }
     private static final class BackgroundPreview extends JComponent {
         private final MenuTheme theme;
         private final int designWidth, designHeight;
         private boolean selected;
+
         BackgroundPreview(MenuTheme theme, int designWidth, int designHeight, Runnable onSelect) {
             this.theme = theme;
             this.designWidth = designWidth;
@@ -447,51 +523,50 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             setOpaque(false);
             setFocusable(false);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent e) { onSelect.run(); } });
+            addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent mouseEvent) { onSelect.run(); } });
         }
+
         MenuTheme theme() { return theme; }
         void setSelected(boolean value) {
             if (value != selected) { selected = value; repaint(); }
         }
-        @Override protected void paintComponent(Graphics g) {
+        @Override protected void paintComponent(Graphics graphics) {
             int w = getWidth(), h = getHeight();
             if (w <= 0 || h <= 0) return;
             RoundRectangle2D shape = new RoundRectangle2D.Double(0.5, 0.5, w - 1, h - 1, 8, 8);
-            Graphics2D g2 = (Graphics2D) g.create();
+            Graphics2D g2d = (Graphics2D) graphics.create();
             try {
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.clip(new RoundRectangle2D.Double(0, 0, w, h, 8, 8));
-                g2.scale((double) w / designWidth, (double) h / designHeight);
-                theme.paintBase(g2, designWidth, designHeight, MenuThemeRegistry.clock());
-                theme.paintOverlay(g2, designWidth, designHeight);
-            } finally { g2.dispose(); }
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2d.clip(new RoundRectangle2D.Double(0, 0, w, h, 8, 8));
+                g2d.scale((double) w / designWidth, (double) h / designHeight);
+                theme.paintBase(g2d, designWidth, designHeight, MenuThemeRegistry.clock());
+                theme.paintOverlay(g2d, designWidth, designHeight);
+            } finally { g2d.dispose(); }
 
-            Graphics2D border = (Graphics2D) g.create();
+            Graphics2D borderG2d = (Graphics2D) graphics.create();
             try {
-                border.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                border.setStroke(new BasicStroke(selected ? 2f : 1f));
-                border.setColor(selected ? MainMenuCanvas.ACCENT : new Color(255, 255, 255, 70));
-                border.draw(shape);
-            } finally { border.dispose(); }
+                borderG2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                borderG2d.setStroke(new BasicStroke(selected ? 2f : 1f));
+                borderG2d.setColor(selected ? MainMenuCanvas.ACCENT : new Color(255, 255, 255, 70));
+                borderG2d.draw(shape);
+            } finally { borderG2d.dispose(); }
         }
     }
     private static final class StatusDot extends JComponent {
         private Color color = Color.GRAY;
+
         StatusDot() { setOpaque(false); }
+
         void setColor(Color value) {
             if (!value.equals(color)) { color = value; repaint(); }
         }
-        @Override protected void paintComponent(Graphics g) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(color);
-            g2.fillOval(0, 0, getWidth() - 1, getHeight() - 1);
-            g2.dispose();
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D g2d = (Graphics2D) graphics.create();
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setColor(color);
+            g2d.fillOval(0, 0, getWidth() - 1, getHeight() - 1);
+            g2d.dispose();
         }
     }
-    //endregion
-
-    //region Styling
-    @Override protected Collection<? extends Component> unstyledComponents() { return List.of(themeButtons); }
     //endregion
 }

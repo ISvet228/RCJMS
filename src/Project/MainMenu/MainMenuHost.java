@@ -1,20 +1,34 @@
 package Project.MainMenu;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import Project.StyleUI.Style;
 
 public interface MainMenuHost {
+    //region Window
     int screenWidth();
     int screenHeight();
-    Style style();
     int windowWidth();
+    void setWindowSize(int width, int height);
     boolean isFullscreen();
+    void applyFullscreen(boolean value);
+    //endregion
+
+    //region Navigation
     void showMain();
     void startGame();
+    //endregion
+
+    //region Style and Language
+    Style style();
     void changeStyle(Style style);
+    MenuTheme getMenuTheme();
+    void setMenuTheme(MenuTheme theme);
     void changeLanguage(String code);
-    void applyFullscreen(boolean value);
-    void setWindowSize(int width, int height);
-    void saveSettings();
+    //endregion
+
+    //region Render Settings
     double getRenderScale();
     void setRenderScale(double scale);
     boolean isVSyncEnabled();
@@ -25,6 +39,9 @@ public interface MainMenuHost {
     void setRenderEngine(int engine);
     int getRenderEngineQuality();
     void setRenderEngineQuality(int quality);
-    MenuTheme getMenuTheme();
-    void setMenuTheme(MenuTheme theme);
+    //endregion
+
+    //region Saving
+    void saveSettings();
+    //endregion
 }

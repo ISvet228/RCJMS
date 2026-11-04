@@ -15,8 +15,8 @@
 __constant float MO_AO_H[4] = {0.08f, 0.20f, 0.36f, 0.60f};
 
 typedef struct {
-    float playerX, playerY, camZ, dirX, dirY, cosP, sinP, tanHalf, verticalTan;
-    int W, H, floors, tinted, aoN, reflDepth, reflSteps, edgeGrid, columnPath;
+    float playerX, playerY, camZ, dirX, dirY, cosP, sinP, tanHalf, verticalTan, skyTime;
+    int W, H, floors, tinted, aoN, reflDepth, reflSteps, edgeGrid, columnPath, skyOn;
 } Par;
 
 typedef struct {
@@ -42,6 +42,7 @@ static Par makePar(__global const float* dp, __global const int* ip) {
     p.tanHalf = dp[7]; p.verticalTan = dp[8];
     p.W = ip[0]; p.H = ip[1]; p.floors = ip[2]; p.tinted = ip[3];
     p.aoN = ip[13]; p.reflDepth = ip[14]; p.reflSteps = ip[15]; p.edgeGrid = ip[16]; p.columnPath = ip[17];
+    p.skyOn = ip[18]; p.skyTime = dp[9];
     return p;
 }
 
@@ -520,6 +521,7 @@ static void traceRayM(WORLD, float ox, float oy, float oz, float rx, float ry, f
     }
 
     result->layer = L;
+    result->dirX = rx; result->dirY = ry; result->dirZ = rz;
     float planeT = INFINITY;
     int planeType = 0;
     if (rz < -1e-9f) { planeT = -oz / rz; planeType = -1; }
@@ -706,6 +708,7 @@ static int litM(WORLD, TEXARGS, Par* p, TH* h, float pathBefore, LO* lo) {
     return lit;
 }
 static int shadeM(WORLD, TEXARGS, Par* p, TH* h, float pathBefore, int depth, int steps) {
+    if (p->skyOn && (!h->hit || (h->isPlane && h->type != -1))) return skyDirGpu(h->dirX, h->dirY, h->dirZ, p->skyTime);
     if (!h->hit) return MO_CEIL_BASE;
     LO lo;
     int lit = litM(WCALL, TCALL, p, h, pathBefore, &lo);

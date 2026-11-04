@@ -27,7 +27,7 @@ typedef struct {
 } Col;
 typedef struct {
     int hit, isPlane, type, side, layer;
-    float distance, x, y, z, wallU, wallV;
+    float distance, x, y, z, wallU, wallV, dirX, dirY, dirZ;
 } TR;
 static int applyBrightnessRM(int color, float b) {
     int r = (int)fmin(255.0f, ((color >> 16) & 255) * b);
@@ -139,7 +139,7 @@ static void setWallFractionRM(RS* s) {
     float wallH = s->hitType == 2 ? 0.5f : 1.0f;
     s->hitFrac = clamp((wallH - s->z) / wallH, 0.0f, 0.999999f);
 }
-static int shadeMarchRM(RS* s, float light, int tinted, WORLD, TEXARGS) {
+static int shadeMarchRM(RS* s, float light, int tinted, int sky, float skyTime, WORLD, TEXARGS) {
     if (s->hitKind == 1) {
         int finish = s->hitType == 2;
         int tw = finish ? fw : ww, th = finish ? fh : wh;
@@ -155,6 +155,7 @@ static int shadeMarchRM(RS* s, float light, int tinted, WORLD, TEXARGS) {
         return applyBrightnessRM(color, b);
     }
     int isFloor = s->hitKind == 2;
+    if (!isFloor && sky) return skyDirGpu(s->dx, s->dy, s->dz, skyTime);
     int color = isFloor ? sampleNearestRM(floorTex, flw, flh, s->hitX, s->hitY, RM_FLOOR_BASE) : sampleNearestRM(ceilTex, clw, clh, s->hitX, s->hitY, RM_CEIL_BASE);
     if (isFloor && tinted) color = tintStairsRM(color, s->hitX, s->hitY, s->layer, maps, meta);
     float b = clamp(1.0f - s->hitDist / light, 0.05f, 1.0f);
@@ -257,12 +258,14 @@ static TR traceRayRM(float ox, float oy, float oz, float rx, float ry, float rz,
         r.side = 0;
         r.isPlane = 1;
     }
+    r.dirX = rx; r.dirY = ry; r.dirZ = rz;
     return r;
 }
-static int shadeTraceRM(TR h, float light, int tinted, WORLD, TEXARGS) {
-    if (!h.hit) return RM_CEIL_BASE;
+static int shadeTraceRM(TR h, float light, int tinted, int sky, float skyTime, WORLD, TEXARGS) {
+    if (!h.hit) return sky ? skyDirGpu(h.dirX, h.dirY, h.dirZ, skyTime) : RM_CEIL_BASE;
     if (h.isPlane) {
         int isFloor = h.type == -1;
+        if (!isFloor && sky) return skyDirGpu(h.dirX, h.dirY, h.dirZ, skyTime);
         int color = isFloor ? sampleNearestRM(floorTex, flw, flh, h.x, h.y, RM_FLOOR_BASE) : sampleNearestRM(ceilTex, clw, clh, h.x, h.y, RM_CEIL_BASE);
         if (isFloor && tinted) color = tintStairsRM(color, h.x, h.y, h.layer, maps, meta);
         return applyBrightnessRM(color, clamp(1.0f - h.distance / light, 0.05f, 1.0f));
@@ -396,7 +399,7 @@ static void marchColumnRM(Col* c, float px, float py, float ux, float uy, int fl
     }
     if (dist < RM_MAXD && i >= maxSteps) c->exhausted = 1;
 }
-static int columnRowRM(Col* c, RS* rs, float z0, float sigma, float light, int tinted, WORLD, TEXARGS) {
+static int columnRowRM(Col* c, RS* rs, float z0, float sigma, float light, int tinted, int sky, float skyTime, WORLD, TEXARGS) {
     float scale = sqrt(1.0f + sigma * sigma);
     float planeD = sigma < 0 ? z0 / -sigma : (sigma > 0 ? (1.0f - z0) / sigma : INFINITY);
     int floorPlane = sigma < 0;
@@ -409,7 +412,7 @@ static int columnRowRM(Col* c, RS* rs, float z0, float sigma, float light, int t
             rs->hitKind = 1; rs->hitType = 2; rs->hitSide = c->finSide[k]; rs->hitU = c->finU[k];
             rs->hitDist = d * scale;
             rs->hitFrac = clamp((0.5f - z) / 0.5f, 0.0f, 0.999999f);
-            return shadeMarchRM(rs, light, tinted, WORLDCALL, TEXCALL);
+            return shadeMarchRM(rs, light, tinted, sky, skyTime, WORLDCALL, TEXCALL);
         }
     }
     if (c->wallDist < planeD && c->wallDist < c->exitD) {
@@ -417,7 +420,7 @@ static int columnRowRM(Col* c, RS* rs, float z0, float sigma, float light, int t
         rs->hitKind = 1; rs->hitType = 1; rs->hitSide = c->wallSide; rs->hitU = c->wallU;
         rs->hitDist = c->wallDist * scale;
         rs->hitFrac = clamp(1.0f - z, 0.0f, 0.999999f);
-        return shadeMarchRM(rs, light, tinted, WORLDCALL, TEXCALL);
+        return shadeMarchRM(rs, light, tinted, sky, skyTime, WORLDCALL, TEXCALL);
     }
     if (isfinite(planeD) && planeD < c->exitD && planeD < RM_MAXD) {
         int k = 0;
@@ -428,9 +431,10 @@ static int columnRowRM(Col* c, RS* rs, float z0, float sigma, float light, int t
         rs->hitY = c->segStartY[k] + c->segDirY[k] * along;
         rs->hitDist = planeD * scale;
         rs->layer = c->segLayer[k];
-        return shadeMarchRM(rs, light, tinted, WORLDCALL, TEXCALL);
+        rs->dx = c->segDirX[k]; rs->dy = c->segDirY[k]; rs->dz = sigma;
+        return shadeMarchRM(rs, light, tinted, sky, skyTime, WORLDCALL, TEXCALL);
     }
-    return RM_CEIL_BASE;
+    return sky ? skyDirGpu(c->segDirX[max(c->segCount - 1, 0)], c->segDirY[max(c->segCount - 1, 0)], sigma, skyTime) : RM_CEIL_BASE;
 }
 __kernel void rm_render(WORLD, __global const int* wallTex, __global const int* finishTex, __global const int* floorTex, __global const int* ceilTex,
                         __global const float* camX, __global const float* dp, __global const int* ip, __global int* out) {
@@ -438,6 +442,7 @@ __kernel void rm_render(WORLD, __global const int* wallTex, __global const int* 
     int W = ip[0], H = ip[1], floors = ip[2], tinted = ip[3];
     int ww = ip[4], wh = ip[5], fw = ip[6], fh = ip[7], flw = ip[8], flh = ip[9], clw = ip[10], clh = ip[11];
     int mode = ip[12], maxSteps = ip[13];
+    int sky = ip[14]; float skyTime = dp[11];
     if (x >= W) return;
     float playerX = dp[0], playerY = dp[1], camZ = dp[2];
     float dirX = dp[3], dirY = dp[4], planeLength = dp[5];
@@ -457,8 +462,8 @@ __kernel void rm_render(WORLD, __global const int* wallTex, __global const int* 
             if (c.exhausted) {
                 float inv = 1.0f / sqrt(hx * hx + hy * hy + v * v);
                 TR t = traceRayRM(playerX, playerY, camZ, hx * inv, hy * inv, v * inv, 0, floors, WORLDCALL);
-                color = shadeTraceRM(t, light, tinted, WORLDCALL, TEXCALL);
-            } else color = columnRowRM(&c, &rs, camZ, v / hl, light, tinted, WORLDCALL, TEXCALL);
+                color = shadeTraceRM(t, light, tinted, sky, skyTime, WORLDCALL, TEXCALL);
+            } else color = columnRowRM(&c, &rs, camZ, v / hl, light, tinted, sky, skyTime, WORLDCALL, TEXCALL);
             out[y * W + x] = color;
         }
         return;
@@ -483,7 +488,7 @@ __kernel void rm_render(WORLD, __global const int* wallTex, __global const int* 
     if (s.exhausted) {
         float inv = 1.0f / sqrt(rx * rx + ry * ry + rz * rz);
         TR t = traceRayRM(playerX, playerY, camZ, rx * inv, ry * inv, rz * inv, 0, floors, WORLDCALL);
-        color = shadeTraceRM(t, light, tinted, WORLDCALL, TEXCALL);
-    } else color = s.hitKind == 0 ? RM_CEIL_BASE : shadeMarchRM(&s, light, tinted, WORLDCALL, TEXCALL);
+        color = shadeTraceRM(t, light, tinted, sky, skyTime, WORLDCALL, TEXCALL);
+    } else color = s.hitKind == 0 ? (sky ? skyDirGpu(s.dx, s.dy, s.dz, skyTime) : RM_CEIL_BASE) : shadeMarchRM(&s, light, tinted, sky, skyTime, WORLDCALL, TEXCALL);
     out[y * W + x] = color;
 }

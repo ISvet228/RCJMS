@@ -1,29 +1,40 @@
 package Project.Game;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 public final class AutoRenderController {
+    //region Variables
+    //region Scale Limits
     public static final double MIN_SCALE = 0.05, MAX_SCALE = 1.0;
+    private static final double SCALE_STEP = 0.01;
+    //endregion
+    //region Frame Thresholds
     public static final double DROP_BELOW_FPS = 45, FAST_DROP_BELOW_FPS = 30, RAISE_ABOVE_FPS = 150;
+    private static final double DROP_RATE = 0.25, RAISE_RATE = 0.10;
+    //endregion
+    //region Timing Constants
     private static final double WARMUP_SECONDS = 1.5;
     private static final double SMOOTHING_SECONDS = 0.5;
-    private static final double DROP_RATE = 0.25, RAISE_RATE = 0.10;
-    private static final double SCALE_STEP = 0.01;
     private static final double MAX_FRAME_SECONDS = 0.5;
     private static final double HITCH_SECONDS = 0.25;
     private static final int HITCH_STREAK_LIMIT = 4;
-
+    //endregion
+    //region Controller State
     private double level = 1.0;
     private double frameSeconds = 1.0 / 60.0;
     private double elapsed = 0;
     private boolean primed = false;
     private int slowStreak = 0;
+    //endregion
+    //endregion
 
-    public double level() { return level; }
+    //region Frame Timing
     public void reset() {
         elapsed = 0;
         primed = false;
         slowStreak = 0;
     }
-    private double fps() { return 1.0 / Math.max(frameSeconds, 1e-4); }
     public void update(double dt) {
         dt = Math.clamp(dt, 0.0, MAX_FRAME_SECONDS);
         elapsed += dt;
@@ -42,9 +53,15 @@ public final class AutoRenderController {
             level = Math.min(1.0, level + RAISE_RATE * urgency * dt);
         }
     }
+    private double fps() { return 1.0 / Math.max(frameSeconds, 1e-4); }
+    //endregion
+
+    //region Scale Control
+    public double level() { return level; }
     public static int tierFor(double level) { return level >= 2.0 / 3.0 ? 2 : level >= 1.0 / 3.0 ? 1 : 0; }
     public static double scaleFor(double level) {
         double scale = MIN_SCALE + (MAX_SCALE - MIN_SCALE) * level;
         return Math.clamp(Math.round(scale / SCALE_STEP) * SCALE_STEP, MIN_SCALE, MAX_SCALE);
     }
+    //endregion
 }

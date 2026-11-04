@@ -1,4 +1,7 @@
 package Project.MainMenu;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 import Project.Helpers.*;
 import Project.StyleUI.*;
 
@@ -10,6 +13,7 @@ import java.io.IOException;
 
 public final class MainMenuPlayScreen extends MainMenuPanel {
     //region Variables
+    //region Mode Options
     private static final int[] PRESET_SIZES = {15, 25, 40};
     private static final String[] PRESET_KEYS = {"mm.size_small", "mm.size_medium", "mm.size_large"};
     private static final String[] FINISH_MODES = {"opposite_corner", "center", "random_edge"};
@@ -17,20 +21,27 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
     private static final int GEOMETRY_EUCLIDEAN = 0, GEOMETRY_WRONG = 1, GEOMETRY_LOOPED = 2;
     private boolean wrongGeometryAllowed = true;
     private static final int MIN_MAZE_SIZE = 5, MAX_MAZE_SIZE = 200, MAX_MAZE_SIZE_CTRL = 1000, MIN_FLOORS = 2, MAX_FLOORS = 20;
+    //endregion
+    //region Input State
     private boolean wheelHeld;
     private boolean loadingValues;
-
+    private boolean advancedOpen;
+    //endregion
+    //region Presets
     private final ButtonGroup presetGroup = new ButtonGroup();
     private final StyledToggleButton[] presetButtons = new StyledToggleButton[PRESET_SIZES.length];
     private final StyledLabel[] presetSizeLabels = new StyledLabel[PRESET_SIZES.length];
-
-    private final StyledLabel heading, hint, sizeCaption, seedCaption, seedHint, summary;
-    private final StyledLabel finishCaption, geometryCaption, dimensionsCaption, floorsCaption, timesLabel;
+    //endregion
+    //region Form Controls
     private final StyledTextField xField, yField, seedField, floorsField;
     private final StyledComboBox finishBox, geometryBox;
     private final StyledToggle mode3DToggle, advancedToggle, fogToggle;
     private final StyledButton backButton, startButton;
-    private boolean advancedOpen;
+    //endregion
+    //region Labels
+    private final StyledLabel heading, hint, sizeCaption, seedCaption, seedHint, summary;
+    private final StyledLabel finishCaption, geometryCaption, dimensionsCaption, floorsCaption, timesLabel;
+    //endregion
     //endregion
 
     //region Constructors
@@ -109,52 +120,8 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
     }
     //endregion
 
-    //region Public API
-    public void refresh() { syncPresetSelection(); }
-    public void saveMazeSettings() {
-        clampFields(true);
-        SaveData.Data saved = SaveData.load();
-        try {
-            SaveData.saveMazeSettings(parseOr(xField.getText(), saved.mazeWidth), parseOr(yField.getText(), saved.mazeHeight),
-                    finishBox.getSelectedIndex(), geometry(), mode3DToggle.isSelected(), parseOr(floorsField.getText(), saved.mazeFloors),
-                    fogToggle.isSelected());
-        } catch (IOException ex) { ex.printStackTrace(); }
-    }
-    public int mazeWidth() { return Math.clamp(Integer.parseInt(xField.getText()), MIN_MAZE_SIZE, MAX_MAZE_SIZE_CTRL); }
-    public int mazeHeight() { return Math.clamp(Integer.parseInt(yField.getText()), MIN_MAZE_SIZE, MAX_MAZE_SIZE_CTRL); }
-    public int finishMode() { return finishBox.getSelectedIndex(); }
-    public int geometry() { return comboToGeometry(geometryBox.getSelectedIndex()); }
-    public void setHyperbolicGeometryAllowed(boolean allowed) {
-        if (allowed == wrongGeometryAllowed) return;
-        int current = geometry();
-        wrongGeometryAllowed = allowed;
-        if (allowed) geometryBox.addItem(GEOMETRY_WRONG, GEOMETRY_MODES[GEOMETRY_WRONG]);
-        else geometryBox.removeItemAt(GEOMETRY_WRONG);
-        int target = !allowed && current == GEOMETRY_WRONG ? GEOMETRY_EUCLIDEAN : current;
-        geometryBox.setSelectedIndex(geometryToCombo(target));
-    }
-    private int comboToGeometry(int index) {
-        if (wrongGeometryAllowed || index <= GEOMETRY_EUCLIDEAN) return index;
-        return GEOMETRY_LOOPED;
-    }
-    private int geometryToCombo(int geometry) {
-        if (wrongGeometryAllowed) return geometry;
-        return geometry == GEOMETRY_LOOPED ? GEOMETRY_WRONG : GEOMETRY_EUCLIDEAN;
-    }
-    public boolean is3D() { return mode3DToggle.isSelected(); }
-    public String seed() {
-        String seedText = SeedUtil.normalize(seedField.getText());
-        return seedText.isEmpty() ? null : seedText;
-    }
-    public boolean fogMinimap() { return fogToggle.isSelected(); }
-    public int layers() {
-        if (!is3D()) return 3;
-        String text = floorsField.getText().trim();
-        return text.isEmpty() ? 3 : Math.clamp(Integer.parseInt(text), MIN_FLOORS, MAX_FLOORS);
-    }
-    //endregion
-
     //region Layout
+    public void refresh() { syncPresetSelection(); }
     @Override protected void layoutDesign() {
         int height = advancedOpen ? 512 : 358;
         int top = (menu.screenHeight() - height) / 2;
@@ -193,28 +160,133 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
         canvas.place(startButton, 490, footerY, 240, 40);
         canvas.text(summary, 12, 490, footerY + 44, 240, 16);
     }
+    private void setAdvancedOpen(boolean open) {
+        advancedOpen = open;
+        advancedToggle.setSelected(open);
+        applyAdvancedVisibility();
+        revalidate();
+        repaint();
+    }
+    private void applyAdvancedVisibility() {
+        boolean floors = advancedOpen && mode3DToggle.isSelected();
+        finishCaption.setVisible(advancedOpen);
+        geometryCaption.setVisible(advancedOpen);
+        finishBox.setVisible(advancedOpen);
+        geometryBox.setVisible(advancedOpen);
+        dimensionsCaption.setVisible(advancedOpen);
+        xField.setVisible(advancedOpen);
+        timesLabel.setVisible(advancedOpen);
+        yField.setVisible(advancedOpen);
+        mode3DToggle.setVisible(advancedOpen);
+        floorsCaption.setVisible(floors);
+        floorsField.setVisible(floors);
+        fogToggle.setVisible(advancedOpen);
+    }
     //endregion
 
-    //region Helpers
+    //region Maze Settings
+    public void saveMazeSettings() {
+        clampFields(true);
+        SaveData.Data saved = SaveData.load();
+        try {
+            SaveData.saveMazeSettings(parseOr(xField.getText(), saved.mazeWidth), parseOr(yField.getText(), saved.mazeHeight),
+                    finishBox.getSelectedIndex(), geometry(), mode3DToggle.isSelected(), parseOr(floorsField.getText(), saved.mazeFloors),
+                    fogToggle.isSelected());
+        } catch (IOException exception) { exception.printStackTrace(); }
+    }
+    private void loadSavedMazeSettings() {
+        SaveData.Data saved = SaveData.load();
+        setSavedText(xField, saved.mazeWidth);
+        setSavedText(yField, saved.mazeHeight);
+        floorsField.setText(String.valueOf(saved.mazeFloors));
+        finishBox.setSelectedIndex(saved.mazeFinishMode);
+        geometryBox.setSelectedIndex(geometryToCombo(saved.mazeGeometry));
+        mode3DToggle.setSelected(saved.maze3D);
+        fogToggle.setSelected(saved.mazeFog);
+        syncPresetSelection();
+    }
+    public int mazeWidth() { return Math.clamp(Integer.parseInt(xField.getText()), MIN_MAZE_SIZE, MAX_MAZE_SIZE_CTRL); }
+    public int mazeHeight() { return Math.clamp(Integer.parseInt(yField.getText()), MIN_MAZE_SIZE, MAX_MAZE_SIZE_CTRL); }
+    public int finishMode() { return finishBox.getSelectedIndex(); }
+    public int geometry() { return comboToGeometry(geometryBox.getSelectedIndex()); }
+    public boolean is3D() { return mode3DToggle.isSelected(); }
+    public String seed() {
+        String seedText = SeedUtil.normalize(seedField.getText());
+        return seedText.isEmpty() ? null : seedText;
+    }
+    public boolean fogMinimap() { return fogToggle.isSelected(); }
+    public int layers() {
+        if (!is3D()) return 3;
+        String text = floorsField.getText().trim();
+        return text.isEmpty() ? 3 : Math.clamp(Integer.parseInt(text), MIN_FLOORS, MAX_FLOORS);
+    }
+    public void setHyperbolicGeometryAllowed(boolean allowed) {
+        if (allowed == wrongGeometryAllowed) return;
+        int current = geometry();
+        wrongGeometryAllowed = allowed;
+        if (allowed) geometryBox.addItem(GEOMETRY_WRONG, GEOMETRY_MODES[GEOMETRY_WRONG]);
+        else geometryBox.removeItemAt(GEOMETRY_WRONG);
+        int target = !allowed && current == GEOMETRY_WRONG ? GEOMETRY_EUCLIDEAN : current;
+        geometryBox.setSelectedIndex(geometryToCombo(target));
+    }
+    private void updateSummary() {
+        Integer width = parseInteger(xField.getText()), height = parseInteger(yField.getText());
+        if (width == null || height == null) { summary.setText(""); return; }
+        int shownWidth = Math.clamp(width, MIN_MAZE_SIZE, MAX_MAZE_SIZE_CTRL), shownHeight = Math.clamp(height, MIN_MAZE_SIZE, MAX_MAZE_SIZE_CTRL);
+        if (is3D()) {
+            int shownFloors = Math.clamp(parseOr(floorsField.getText(), MIN_FLOORS), MIN_FLOORS, MAX_FLOORS);
+            summary.setLocalizationFormat("mm.size_summary_3d", () -> new Object[]{shownWidth, shownHeight, shownFloors});
+        } else summary.setLocalizationFormat("mm.size_summary", () -> new Object[]{shownWidth, shownHeight});
+    }
+    //endregion
+
+    //region Geometry Choice
+    private int comboToGeometry(int index) {
+        if (wrongGeometryAllowed || index <= GEOMETRY_EUCLIDEAN) return index;
+        return GEOMETRY_LOOPED;
+    }
+    private int geometryToCombo(int geometry) {
+        if (wrongGeometryAllowed) return geometry;
+        return geometry == GEOMETRY_LOOPED ? GEOMETRY_WRONG : GEOMETRY_EUCLIDEAN;
+    }
+    //endregion
+
+    //region Presets
+    private void choosePreset(int index) {
+        String size = String.valueOf(PRESET_SIZES[index]);
+        xField.setText(size);
+        yField.setText(size);
+        syncPresetSelection();
+        saveMazeSettings();
+    }
+    private void syncPresetSelection() {
+        int width = parseOr(xField.getText(), -1), height = parseOr(yField.getText(), -1);
+        presetGroup.clearSelection();
+        for (int i = 0; i < PRESET_SIZES.length; i++)
+            if (width == PRESET_SIZES[i] && height == PRESET_SIZES[i]) presetButtons[i].setSelected(true);
+    }
+    //endregion
+
+    //region Field Limits
     private void attachListeners() {
         for (int i = 0; i < presetButtons.length; i++) {
             int index = i;
-            presetButtons[i].addActionListener(e -> choosePreset(index));
+            presetButtons[i].addActionListener(actionEvent -> choosePreset(index));
         }
-        advancedToggle.addActionListener(e -> setAdvancedOpen(advancedToggle.isSelected()));
-        mode3DToggle.addActionListener(e -> {
+        advancedToggle.addActionListener(actionEvent -> setAdvancedOpen(advancedToggle.isSelected()));
+        mode3DToggle.addActionListener(actionEvent -> {
             applyAdvancedVisibility();
             saveMazeSettings();
             updateSummary();
         });
-        fogToggle.addActionListener(e -> saveMazeSettings());
-        finishBox.addActionListener(e -> saveMazeSettings());
-        geometryBox.addActionListener(e -> saveMazeSettings());
-        seedField.addActionListener(e -> menu.startGame());
-        backButton.addActionListener(e -> menu.showMain());
-        startButton.addActionListener(e -> menu.startGame());
+        fogToggle.addActionListener(actionEvent -> saveMazeSettings());
+        finishBox.addActionListener(actionEvent -> saveMazeSettings());
+        geometryBox.addActionListener(actionEvent -> saveMazeSettings());
+        seedField.addActionListener(actionEvent -> menu.startGame());
+        backButton.addActionListener(actionEvent -> menu.showMain());
+        startButton.addActionListener(actionEvent -> menu.startGame());
         FocusAdapter saveOnLeave = new FocusAdapter() {
-            @Override public void focusLost(FocusEvent e) {
+            @Override public void focusLost(FocusEvent focusEvent) {
                 saveMazeSettings();
                 syncPresetSelection();
             }
@@ -228,25 +300,25 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
         watchSizeField(xField);
         watchSizeField(yField);
         DocumentListener listener = new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent e) { changed(); }
-            @Override public void removeUpdate(DocumentEvent e) { changed(); }
-            @Override public void changedUpdate(DocumentEvent e) { changed(); }
+            @Override public void insertUpdate(DocumentEvent documentEvent) { changed(); }
+            @Override public void removeUpdate(DocumentEvent documentEvent) { changed(); }
+            @Override public void changedUpdate(DocumentEvent documentEvent) { changed(); }
             private void changed() { SwingUtilities.invokeLater(() -> { clampField(floorsField, MIN_FLOORS, MAX_FLOORS, false); updateSummary(); }); }
         };
         floorsField.getDocument().addDocumentListener(listener);
     }
     private void watchSizeField(StyledTextField field) {
         field.addMouseListener(new MouseAdapter() {
-            @Override public void mousePressed(MouseEvent e) { if (SwingUtilities.isMiddleMouseButton(e)) wheelHeld = true; }
-            @Override public void mouseReleased(MouseEvent e) { if (SwingUtilities.isMiddleMouseButton(e)) wheelHeld = false; }
+            @Override public void mousePressed(MouseEvent mouseEvent) { if (SwingUtilities.isMiddleMouseButton(mouseEvent)) wheelHeld = true; }
+            @Override public void mouseReleased(MouseEvent mouseEvent) { if (SwingUtilities.isMiddleMouseButton(mouseEvent)) wheelHeld = false; }
         });
         field.addFocusListener(new FocusAdapter() {
-            @Override public void focusLost(FocusEvent e) { wheelHeld = false; }
+            @Override public void focusLost(FocusEvent focusEvent) { wheelHeld = false; }
         });
         field.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent e) { changed(); }
-            @Override public void removeUpdate(DocumentEvent e) { changed(); }
-            @Override public void changedUpdate(DocumentEvent e) { changed(); }
+            @Override public void insertUpdate(DocumentEvent documentEvent) { changed(); }
+            @Override public void removeUpdate(DocumentEvent documentEvent) { changed(); }
+            @Override public void changedUpdate(DocumentEvent documentEvent) { changed(); }
             private void changed() {
                 boolean programmatic = loadingValues;
                 SwingUtilities.invokeLater(() -> {
@@ -279,68 +351,13 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
         int clamped = value > max ? max : commit && value < min ? min : value;
         if (clamped != value) field.setText(String.valueOf(clamped));
     }
-    private void updateSummary() {
-        Integer width = parseInteger(xField.getText()), height = parseInteger(yField.getText());
-        if (width == null || height == null) { summary.setText(""); return; }
-        int shownWidth = Math.clamp(width, MIN_MAZE_SIZE, MAX_MAZE_SIZE_CTRL), shownHeight = Math.clamp(height, MIN_MAZE_SIZE, MAX_MAZE_SIZE_CTRL);
-        if (is3D()) {
-            int shownFloors = Math.clamp(parseOr(floorsField.getText(), MIN_FLOORS), MIN_FLOORS, MAX_FLOORS);
-            summary.setLocalizationFormat("mm.size_summary_3d", () -> new Object[]{shownWidth, shownHeight, shownFloors});
-        } else summary.setLocalizationFormat("mm.size_summary", () -> new Object[]{shownWidth, shownHeight});
-    }
-    private void loadSavedMazeSettings() {
-        SaveData.Data saved = SaveData.load();
-        setSavedText(xField, saved.mazeWidth);
-        setSavedText(yField, saved.mazeHeight);
-        floorsField.setText(String.valueOf(saved.mazeFloors));
-        finishBox.setSelectedIndex(saved.mazeFinishMode);
-        geometryBox.setSelectedIndex(geometryToCombo(saved.mazeGeometry));
-        mode3DToggle.setSelected(saved.maze3D);
-        fogToggle.setSelected(saved.mazeFog);
-        syncPresetSelection();
-    }
-    private void choosePreset(int index) {
-        String size = String.valueOf(PRESET_SIZES[index]);
-        xField.setText(size);
-        yField.setText(size);
-        syncPresetSelection();
-        saveMazeSettings();
-    }
-    private void syncPresetSelection() {
-        int width = parseOr(xField.getText(), -1), height = parseOr(yField.getText(), -1);
-        presetGroup.clearSelection();
-        for (int i = 0; i < PRESET_SIZES.length; i++)
-            if (width == PRESET_SIZES[i] && height == PRESET_SIZES[i]) presetButtons[i].setSelected(true);
-    }
-    private void setAdvancedOpen(boolean open) {
-        advancedOpen = open;
-        advancedToggle.setSelected(open);
-        applyAdvancedVisibility();
-        revalidate();
-        repaint();
-    }
-    private void applyAdvancedVisibility() {
-        boolean floors = advancedOpen && mode3DToggle.isSelected();
-        finishCaption.setVisible(advancedOpen);
-        geometryCaption.setVisible(advancedOpen);
-        finishBox.setVisible(advancedOpen);
-        geometryBox.setVisible(advancedOpen);
-        dimensionsCaption.setVisible(advancedOpen);
-        xField.setVisible(advancedOpen);
-        timesLabel.setVisible(advancedOpen);
-        yField.setVisible(advancedOpen);
-        mode3DToggle.setVisible(advancedOpen);
-        floorsCaption.setVisible(floors);
-        floorsField.setVisible(floors);
-        fogToggle.setVisible(advancedOpen);
-    }
     private static Integer parseInteger(String text) {
         try { return Integer.parseInt(text.trim()); }
-        catch (NumberFormatException ex) { return null; }
+        catch (NumberFormatException exception) { return null; }
     }
     private static int parseOr(String text, int fallback) {
         try { return Integer.parseInt(text.trim()); }
-        catch (NumberFormatException ex) { return fallback; }
+        catch (NumberFormatException exception) { return fallback; }
     }
     //endregion
 }

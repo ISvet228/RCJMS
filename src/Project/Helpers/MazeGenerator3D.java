@@ -1,20 +1,27 @@
 package Project.Helpers;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import java.util.*;
 
 public class MazeGenerator3D {
     //region Variables
+    //region Cell Codes
     public static final int OPEN = 0, WALL = 1, FINISH = 2, STAIRS_DOWN = 3, STAIRS_UP = 4;
-
+    //endregion
+    //region Dimensions
     private final int width, height, floorCount;
     private final Long seed;
     private final Random random;
     private final MazeGenerator.GeometryMode geometryMode;
-
+    //endregion
+    //region Generated Layout
     private int[][][] floors;
     private PortalData[] floorPortals;
     private int[] entryX, entryY;
     private int finishFloor, finishX, finishY;
+    //endregion
     //endregion
 
     //region Constructors
@@ -28,8 +35,7 @@ public class MazeGenerator3D {
     }
     //endregion
 
-    //region Public API
-    public PortalData getPortals(int floor) { return floorPortals[floor]; }
+    //region Generation
     public int[][][] generate(MazeGenerator.FinishMode mode) {
         floors = new int[floorCount][][];
         floorPortals = new PortalData[floorCount];
@@ -61,9 +67,10 @@ public class MazeGenerator3D {
         if (geometryMode == MazeGenerator.GeometryMode.LOOPED) addFloorPortals();
         return floors;
     }
+    public PortalData getPortals(int floor) { return floorPortals[floor]; }
     //endregion
 
-    //region Portals between floors
+    //region Floor Portals
     private void addFloorPortals() {
         List<List<int[]>> slots = new ArrayList<>();
         for (int f = 0; f < floorCount; f++) {
@@ -111,9 +118,6 @@ public class MazeGenerator3D {
         }
         return null;
     }
-    //endregion
-
-    //region Helpers
     private int[] pickStairPosition(int[][] floorMaze, int[][] nextFloorMaze, int fromX, int fromY, boolean enforceMinDistance) {
         int[][] dist = bfsDistances(floorMaze, fromX, fromY);
         int minDistance = enforceMinDistance ? Math.max(4, Math.min(width, height) / 2) : 1;
@@ -140,6 +144,9 @@ public class MazeGenerator3D {
         if (candidates.isEmpty()) return new int[]{fromX, fromY};
         return candidates.get(random.nextInt(candidates.size()));
     }
+    //endregion
+
+    //region Path Connectivity
     private List<int[]> bfsOpenCells(int[][] maze, int startX, int startY) {
         List<int[]> result = new ArrayList<>();
         int mazeHeight = maze.length, mazeWidth = maze[0].length;
@@ -184,25 +191,6 @@ public class MazeGenerator3D {
             }
         }
         return dist;
-    }
-    private int[][] combinedMinDistance(int[][] floorMaze, List<int[]> avoidPoints) {
-        int mazeHeight = floorMaze.length, mazeWidth = floorMaze[0].length;
-        int[][] result = new int[mazeHeight][mazeWidth];
-        for (int[] row : result) Arrays.fill(row, Integer.MAX_VALUE);
-
-        for (int[] point : avoidPoints) {
-            int[][] dist = bfsDistances(floorMaze, point[0], point[1]);
-            for (int y = 0; y < mazeHeight; y++)
-                for (int x = 0; x < mazeWidth; x++)
-                    if (dist[y][x] >= 0) result[y][x] = Math.min(result[y][x], dist[y][x]);
-        }
-        return result;
-    }
-    private List<int[]> collectAvoidPoints(int finishFloor) {
-        List<int[]> avoid = new ArrayList<>();
-        avoid.add(new int[]{entryX[finishFloor], entryY[finishFloor]});
-        if (finishFloor + 1 < floorCount) avoid.add(new int[]{entryX[finishFloor + 1], entryY[finishFloor + 1]});
-        return avoid;
     }
     private boolean hasPath(int[][] maze, int fromX, int fromY, int toX, int toY) {
         for (int[] cell : bfsOpenCells(maze, fromX, fromY)) if (cell[0] == toX && cell[1] == toY) return true;
@@ -253,7 +241,28 @@ public class MazeGenerator3D {
         while (y != toY) { if (maze[y][x] != MazeGenerator.PORTAL) maze[y][x] = OPEN; y += Integer.compare(toY, y); }
         if (maze[toY][toX] != MazeGenerator.PORTAL) maze[toY][toX] = OPEN;
     }
+    //endregion
 
+    //region Finish Placement
+    private int[][] combinedMinDistance(int[][] floorMaze, List<int[]> avoidPoints) {
+        int mazeHeight = floorMaze.length, mazeWidth = floorMaze[0].length;
+        int[][] result = new int[mazeHeight][mazeWidth];
+        for (int[] row : result) Arrays.fill(row, Integer.MAX_VALUE);
+
+        for (int[] point : avoidPoints) {
+            int[][] dist = bfsDistances(floorMaze, point[0], point[1]);
+            for (int y = 0; y < mazeHeight; y++)
+                for (int x = 0; x < mazeWidth; x++)
+                    if (dist[y][x] >= 0) result[y][x] = Math.min(result[y][x], dist[y][x]);
+        }
+        return result;
+    }
+    private List<int[]> collectAvoidPoints(int finishFloor) {
+        List<int[]> avoid = new ArrayList<>();
+        avoid.add(new int[]{entryX[finishFloor], entryY[finishFloor]});
+        if (finishFloor + 1 < floorCount) avoid.add(new int[]{entryX[finishFloor + 1], entryY[finishFloor + 1]});
+        return avoid;
+    }
     private void placeFinish(MazeGenerator.FinishMode mode) {
         int mazeHeight = floors[0].length, mazeWidth = floors[0][0].length;
 

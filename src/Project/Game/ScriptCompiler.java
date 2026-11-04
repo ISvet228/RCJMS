@@ -1,4 +1,7 @@
 package Project.Game;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import javax.tools.*;
 import java.io.IOException;
@@ -7,12 +10,14 @@ import java.nio.file.Path;
 import java.util.*;
 
 public final class ScriptCompiler {
+    //region Constructors
     private ScriptCompiler() {}
+    //endregion
 
+    //region Compilation
     static boolean available() {
         return ToolProvider.getSystemJavaCompiler() != null;
     }
-
     static List<Path> compile(List<Path> sources, Path build, String classpath, List<String> problems) {
         JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
         List<Path> compiled = new ArrayList<>();
@@ -31,8 +36,9 @@ public final class ScriptCompiler {
                     continue;
                 }
                 compiled.add(source);
-            } catch (IOException e) { problems.add(name + ": " + e.getMessage()); }
+            } catch (IOException exception) { problems.add(name + ": " + exception.getMessage()); }
         }
         return compiled;
     }
+    //endregion
 }

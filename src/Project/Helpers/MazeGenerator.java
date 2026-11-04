@@ -1,25 +1,28 @@
 package Project.Helpers;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import java.util.*;
 
 public class MazeGenerator {
     //region Variables
+    //region Cell Values
     public static final int OPEN = 0, WALL = 1, FINISH = 2, PORTAL = 5;
-
+    //endregion
+    //region Grid State
     private final int width, height;
     private final int[][] maze;
     private final Random random;
     private final GeometryMode geometryMode;
+    private int carvedCells;
+    //endregion
+    //region Portal Data
     private final PortalData portals = new PortalData();
     //endregion
-
     //region Progress
     private double progressBase = 0, progressSpan = 1;
-    private int carvedCells;
-    void setProgressRange(double base, double span) { progressBase = base; progressSpan = span; }
-    private void reportPhase(String stage, double from, double to, double part) {
-        Progress.report(stage, progressBase + progressSpan * (from + (to - from) * Math.clamp(part, 0.0, 1.0)));
-    }
+    //endregion
     //endregion
 
     //region Constructors
@@ -39,8 +42,12 @@ public class MazeGenerator {
     }
     //endregion
 
-    //region Public API
-    public PortalData getPortals() { return portals; }
+    //region Modes
+    public enum FinishMode { OPPOSITE_CORNER, CENTER, RANDOM_EDGE }
+    public enum GeometryMode { EUCLIDEAN, WRONG, LOOPED}
+    //endregion
+
+    //region Generation
     public int[][] generate(FinishMode mode) {
         generateRaw();
         placeFinish(mode);
@@ -53,106 +60,6 @@ public class MazeGenerator {
         generatePortals();
         reportPhase("ld.portals", 0.9, 1.0, 1.0);
         return maze;
-    }
-    //endregion
-
-    //region Portals
-    private void generatePortals() {
-        reportPhase("ld.portals", 0.9, 1.0, 0.0);
-        if (geometryMode != GeometryMode.LOOPED) return;
-
-        List<int[]> deadEnds = findDeadEnds();
-        if (deadEnds.isEmpty()) return;
-        Collections.shuffle(deadEnds, random);
-
-        int used = 0;
-        int maxPairs = Math.max(1, (width * height) / 220);
-
-        int[] doorEnd = deadEnds.removeLast();
-        int roomSize = 5;
-        int[] block = null;
-        while (roomSize >= 3 && block == null) {
-            block = findFreeBlock(roomSize);
-            if (block == null) roomSize--;
-        }
-        if (block != null) {
-            for (int yy = block[1]; yy < block[1] + roomSize; yy++)
-                for (int xx = block[0]; xx < block[0] + roomSize; xx++)
-                    maze[yy][xx] = OPEN;
-
-            int exitX = block[0] + roomSize / 2, exitY = block[1] - 1;
-            int[] roomExit = {exitX, exitY, 0, -1};
-            linkPortalPair(doorEnd, roomExit);
-            used++;
-        }
-
-        for (int i = 0; i + 1 < deadEnds.size() && used < maxPairs; i += 2) {
-            linkPortalPair(deadEnds.get(i), deadEnds.get(i + 1));
-            used++;
-        }
-    }
-    private List<int[]> findDeadEnds() { return findPortalSlots(maze); }
-
-    public static List<int[]> findPortalSlots(int[][] maze) {
-        int height = maze.length, width = maze[0].length;
-        List<int[]> result = new ArrayList<>();
-        int[][] dirs = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
-
-        for (int y = 1; y < height - 1; y++) {
-            for (int x = 1; x < width - 1; x++) {
-                if (maze[y][x] != OPEN) continue;
-                if (x == 1 && y == 1) continue;
-
-                int exits = 0, toNeighborX = 0, toNeighborY = 0;
-                for (int[] dir : dirs) {
-                    int ax = x + dir[0], ay = y + dir[1];
-                    if (ax < 0 || ay < 0 || ax >= width || ay >= height) continue;
-                    if (maze[ay][ax] == OPEN) { exits++; toNeighborX = dir[0]; toNeighborY = dir[1]; }
-                }
-                if (exits != 1) continue;
-
-                int px = x + (-toNeighborX), py = y + (-toNeighborY);
-                if (px <= 0 || py <= 0 || px >= width - 1 || py >= height - 1) continue;
-                if (maze[py][px] != WALL) continue;
-                if (isWallFlanked(maze, x, y, toNeighborY, -toNeighborX) || isWallFlanked(maze, px, py, toNeighborY, -toNeighborX)) continue;
-
-                result.add(new int[]{px, py, -toNeighborX, -toNeighborY});
-            }
-        }
-        return result;
-    }
-    private static boolean isWallFlanked(int[][] maze, int cx, int cy, int tx, int ty) {
-        int height = maze.length, width = maze[0].length;
-        int lx = cx + tx, ly = cy + ty;
-        int rx = cx - tx, ry = cy - ty;
-        if (lx < 0 || ly < 0 || lx >= width || ly >= height || maze[ly][lx] != WALL) return true;
-        if (rx < 0 || ry < 0 || rx >= width || ry >= height || maze[ry][rx] != WALL) return true;
-        return false;
-    }
-    private int[] findFreeBlock(int size) {
-        for (int y = 2; y + size < height - 2; y++) {
-            outer:
-            for (int x = 2; x + size < width - 2; x++) {for (int yy = y - 1; yy <= y + size; yy++)
-                for (int xx = x - 1; xx <= x + size; xx++) if (maze[yy][xx] != WALL)
-                    continue outer;
-                return new int[]{x, y};
-            }
-        }
-        return null;
-    }
-    private void linkPortalPair(int[] a, int[] b) {
-        maze[a[1]][a[0]] = PORTAL;
-        maze[b[1]][b[0]] = PORTAL;
-        portals.link(a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3]);
-    }
-    //endregion
-
-    //region Helpers
-    private static final class CarveFrame {
-        final int x, y;
-        final List<int[]> directions;
-        int next;
-        CarveFrame(int x, int y, List<int[]> directions) { this.x = x; this.y = y; this.directions = directions; }
     }
     private void carve(int startX, int startY) {
         Deque<CarveFrame> stack = new ArrayDeque<>();
@@ -203,6 +110,16 @@ public class MazeGenerator {
             if (openSides >= 2) maze[y][x] = 0;
         }
     }
+    private static final class CarveFrame {
+        final int x, y;
+        final List<int[]> directions;
+        int next;
+
+        CarveFrame(int x, int y, List<int[]> directions) { this.x = x; this.y = y; this.directions = directions; }
+    }
+    //endregion
+
+    //region Finish Placement
     private void placeFinish(FinishMode mode) {
         int fx = width - 2;
         int fy = height - 2;
@@ -296,8 +213,101 @@ public class MazeGenerator {
     }
     //endregion
 
-    //region Enums
-    public enum FinishMode { OPPOSITE_CORNER, CENTER, RANDOM_EDGE }
-    public enum GeometryMode { EUCLIDEAN, WRONG, LOOPED}
+    //region Portals
+    public PortalData getPortals() { return portals; }
+    private void generatePortals() {
+        reportPhase("ld.portals", 0.9, 1.0, 0.0);
+        if (geometryMode != GeometryMode.LOOPED) return;
+
+        List<int[]> deadEnds = findDeadEnds();
+        if (deadEnds.isEmpty()) return;
+        Collections.shuffle(deadEnds, random);
+
+        int used = 0;
+        int maxPairs = Math.max(1, (width * height) / 220);
+
+        int[] doorEnd = deadEnds.removeLast();
+        int roomSize = 5;
+        int[] block = null;
+        while (roomSize >= 3 && block == null) {
+            block = findFreeBlock(roomSize);
+            if (block == null) roomSize--;
+        }
+        if (block != null) {
+            for (int yy = block[1]; yy < block[1] + roomSize; yy++)
+                for (int xx = block[0]; xx < block[0] + roomSize; xx++)
+                    maze[yy][xx] = OPEN;
+
+            int exitX = block[0] + roomSize / 2, exitY = block[1] - 1;
+            int[] roomExit = {exitX, exitY, 0, -1};
+            linkPortalPair(doorEnd, roomExit);
+            used++;
+        }
+
+        for (int i = 0; i + 1 < deadEnds.size() && used < maxPairs; i += 2) {
+            linkPortalPair(deadEnds.get(i), deadEnds.get(i + 1));
+            used++;
+        }
+    }
+    public static List<int[]> findPortalSlots(int[][] maze) {
+        int height = maze.length, width = maze[0].length;
+        List<int[]> result = new ArrayList<>();
+        int[][] dirs = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+
+        for (int y = 1; y < height - 1; y++) {
+            for (int x = 1; x < width - 1; x++) {
+                if (maze[y][x] != OPEN) continue;
+                if (x == 1 && y == 1) continue;
+
+                int exits = 0, toNeighborX = 0, toNeighborY = 0;
+                for (int[] dir : dirs) {
+                    int ax = x + dir[0], ay = y + dir[1];
+                    if (ax < 0 || ay < 0 || ax >= width || ay >= height) continue;
+                    if (maze[ay][ax] == OPEN) { exits++; toNeighborX = dir[0]; toNeighborY = dir[1]; }
+                }
+                if (exits != 1) continue;
+
+                int px = x + (-toNeighborX), py = y + (-toNeighborY);
+                if (px <= 0 || py <= 0 || px >= width - 1 || py >= height - 1) continue;
+                if (maze[py][px] != WALL) continue;
+                if (isWallFlanked(maze, x, y, toNeighborY, -toNeighborX) || isWallFlanked(maze, px, py, toNeighborY, -toNeighborX)) continue;
+
+                result.add(new int[]{px, py, -toNeighborX, -toNeighborY});
+            }
+        }
+        return result;
+    }
+    private List<int[]> findDeadEnds() { return findPortalSlots(maze); }
+    private static boolean isWallFlanked(int[][] maze, int cx, int cy, int tx, int ty) {
+        int height = maze.length, width = maze[0].length;
+        int lx = cx + tx, ly = cy + ty;
+        int rx = cx - tx, ry = cy - ty;
+        if (lx < 0 || ly < 0 || lx >= width || ly >= height || maze[ly][lx] != WALL) return true;
+        if (rx < 0 || ry < 0 || rx >= width || ry >= height || maze[ry][rx] != WALL) return true;
+        return false;
+    }
+    private int[] findFreeBlock(int size) {
+        for (int y = 2; y + size < height - 2; y++) {
+            outer:
+            for (int x = 2; x + size < width - 2; x++) {for (int yy = y - 1; yy <= y + size; yy++)
+                for (int xx = x - 1; xx <= x + size; xx++) if (maze[yy][xx] != WALL)
+                    continue outer;
+                return new int[]{x, y};
+            }
+        }
+        return null;
+    }
+    private void linkPortalPair(int[] a, int[] b) {
+        maze[a[1]][a[0]] = PORTAL;
+        maze[b[1]][b[0]] = PORTAL;
+        portals.link(a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3]);
+    }
+    //endregion
+
+    //region Progress Reporting
+    void setProgressRange(double base, double span) { progressBase = base; progressSpan = span; }
+    private void reportPhase(String stage, double from, double to, double part) {
+        Progress.report(stage, progressBase + progressSpan * (from + (to - from) * Math.clamp(part, 0.0, 1.0)));
+    }
     //endregion
 }

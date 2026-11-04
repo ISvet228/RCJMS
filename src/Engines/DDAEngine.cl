@@ -102,6 +102,7 @@
         }
 
         r.layer = rayLayer;
+        r.dirX = rx; r.dirY = ry; r.dirZ = rz;
         float planeT = INFINITY;
         int planeType = 0;
         if (rz < -1e-9f) { planeT = -oz / rz; planeType = -1; }
@@ -186,10 +187,11 @@
     }
     static int shadeHit(Hit h, float lightDistance, int tinted, int quality, __global const int* maps, __global const int* meta,
                         __global const int* wallTex, int ww, int wh, __global const int* finishTex, int fw, int fh,
-                        __global const int* floorTex, int flw, int flh,__global const int* ceilTex, int clw, int clh) {
-        if (!h.hit) return CEILING_BASE;
+                        __global const int* floorTex, int flw, int flh,__global const int* ceilTex, int clw, int clh, int sky, float skyTime) {
+        if (!h.hit) return sky ? skyDirGpu(h.dirX, h.dirY, h.dirZ, skyTime) : CEILING_BASE;
         if (h.isPlane) {
             int isFloor = h.type == -1;
+            if (!isFloor && sky) return skyDirGpu(h.dirX, h.dirY, h.dirZ, skyTime);
             int color = isFloor ? surfaceColorGpu(floorTex, flw, flh, h.x, h.y, FLOOR_BASE, quality) : surfaceColorGpu(ceilTex, clw, clh, h.x, h.y, CEILING_BASE, quality);
             if (isFloor && tinted) color = tintStairsGpu(color, h.x, h.y, h.layer, maps, meta);
             return applyBrightnessGpu(color, clamp(1.0f - h.distance / lightDistance, 0.05f, 1.0f));
@@ -236,5 +238,5 @@
         float inv = 1.0f / sqrt(rx * rx + ry * ry + rz * rz);
 
         Hit h = traceRay(playerX, playerY, cameraHeight, rx * inv, ry * inv, rz * inv, 0, floors, maps, meta, grid, portals, MAX_PRIMARY_STEPS);
-        out[y * W + x] = shadeHit(h, lightDistance, tinted, quality, maps, meta, wallTex, ip[5], ip[6], finishTex, ip[7], ip[8], floorTex, ip[9], ip[10], ceilTex, ip[11], ip[12]);
+        out[y * W + x] = shadeHit(h, lightDistance, tinted, quality, maps, meta, wallTex, ip[5], ip[6], finishTex, ip[7], ip[8], floorTex, ip[9], ip[10], ceilTex, ip[11], ip[12], ip[13], dp[11]);
     }

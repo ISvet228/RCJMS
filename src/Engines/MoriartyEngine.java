@@ -1,5 +1,6 @@
 package Engines;
 import Project.Game.*;
+import Project.Game.SkyCeiling;
 import Project.OpenCl.*;
 import Project.Helpers.*;
 import java.awt.*;
@@ -8,384 +9,29 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.IntConsumer;
 
 public final class MoriartyEngine implements RenderEngine {
-    //region Engine settings
+    //region Variables
+    //region Configuration
     static volatile int cfgQuality = 1, cfgOutW = 960, cfgOutH = 540;
     static volatile MazeGenerator.GeometryMode cfgGeometry = MazeGenerator.GeometryMode.EUCLIDEAN;
     static volatile double cfgCurvature = HyperbolicMath.DEFAULT_CURVATURE;
-    static final SdfCache sdfCache = new SdfCache();
-    static void syncConfig(RenderFrame f) {
-        cfgQuality = f.quality;
-        cfgGeometry = f.geometry;
-        cfgCurvature = f.curvature;
-        cfgOutW = f.outputWidth;
-        cfgOutH = f.outputHeight;
-    }
     //endregion
-
-    //region Constants
-    static final int MAX_PRIMARY_STEPS = 6000;
-    static final int wallBaseColor = 0xECD485;
-    static final int ceilingBaseColor = 0x816E1E;
-    static final int floorBaseColor = 0xD3AF63;
-    static final int finishBaseColor = 0x33FF66;
-    private static final int SDF_SUB = 8, SDF_WINDOW = 4;
-    //endregion
-
-    //region Hyperbolic render
-    private static double hypFloorDistance(double z0, double slope, double L) {
-        if (slope >= 0 || z0 <= 1e-9) return Double.POSITIVE_INFINITY;
-        return L * HyperbolicMath.inverseHyperbolicDistance(z0 / -slope, cfgCurvature);
-    }
-    private static double hypCeilDistance(double z0, double slope, double L) {
-        if (slope <= 0 || z0 >= 1.0 - 1e-9) return Double.POSITIVE_INFINITY;
-        return L * HyperbolicMath.inverseHyperbolicDistance((1.0 - z0) / slope, cfgCurvature);
-    }
-    static void traceHyp(RenderFrame fr, double ox, double oy, double z0, double ux, double uy, double L, double slope, TraceHit result, int maxSteps) {
-        result.reset();
-        final int[][] m = fr.map;
-        final int mapWidth = m[0].length, mapHeight = m.length;
-        final double invL = 1.0 / L;
-        final double floorD = hypFloorDistance(z0, slope, L), ceilD = hypCeilDistance(z0, slope, L);
-        final double planeLimit = Math.min(floorD, ceilD);
-
-        int mapX = (int) Math.floor(ox), mapY = (int) Math.floor(oy);
-        double deltaX = ux == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / ux);
-        double deltaY = uy == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / uy);
-        double sideX = (ux < 0 ? ox - mapX : mapX + 1.0 - ox) * deltaX;
-        double sideY = (uy < 0 ? oy - mapY : mapY + 1.0 - oy) * deltaY;
-        int stepX = ux < 0 ? -1 : 1, stepY = uy < 0 ? -1 : 1;
-
-        double wallD = Double.POSITIVE_INFINITY;
-        int wallType = 0, wallSide = 0;
-        for (int steps = 0; steps < maxSteps; steps++) {
-            double enter;
-            int side;
-            if (sideX < sideY) { enter = sideX; sideX += deltaX; mapX += stepX; side = 0; }
-            else { enter = sideY; sideY += deltaY; mapY += stepY; side = 1; }
-            if (enter >= planeLimit) break;
-            if (mapX < 0 || mapY < 0 || mapX >= mapWidth || mapY >= mapHeight) break;
-            int type = m[mapY][mapX];
-            if (type != 1 && type != 2) continue;
-            double z = z0 + slope * HyperbolicMath.hyperbolicDistance(enter * invL, cfgCurvature);
-            if (z >= 0.0 && z <= wallHeightForType(type)) { wallD = enter; wallType = type; wallSide = side; break; }
-        }
-
-        result.map = m;
-        result.portals = null;
-        result.hyp = true;
-        result.hypSlope = slope;
-        double dzdd;
-        if (wallD < planeLimit) {
-            double z = z0 + slope * HyperbolicMath.hyperbolicDistance(wallD * invL, cfgCurvature);
-            dzdd = slope * Math.cosh(wallD * invL / cfgCurvature) * invL;
-            double len = Math.sqrt(1.0 + dzdd * dzdd);
-            result.hit = true;
-            result.distance = HyperbolicMath.hyperbolicDistance(wallD * invL, cfgCurvature);
-            result.x = ox + ux * wallD; result.y = oy + uy * wallD;
-            result.z = Math.clamp(z, 0.0, wallHeightForType(wallType));
-            result.type = wallType; result.side = wallSide;
-            result.dirX = ux / len; result.dirY = uy / len; result.dirZ = dzdd / len;
-            double wallU = wallSide == 0 ? result.y : result.x;
-            wallU -= Math.floor(wallU);
-            if ((wallSide == 0 && ux < 0) || (wallSide == 1 && uy > 0)) wallU = 1.0 - wallU;
-            result.wallU = Math.clamp(wallU, 0.0, 0.999999);
-            result.wallV = Math.clamp(result.z / wallHeightForType(wallType), 0.0, 0.999999);
-        }
-        else if (Double.isFinite(planeLimit)) {
-            boolean floor = floorD <= ceilD;
-            dzdd = slope * Math.cosh(planeLimit * invL / cfgCurvature) * invL;
-            double len = Math.sqrt(1.0 + dzdd * dzdd);
-            result.hit = true;
-            result.isPlane = true;
-            result.type = floor ? -1 : 1;
-            result.z = floor ? 0.0 : 1.0;
-            result.distance = HyperbolicMath.hyperbolicDistance(planeLimit * invL, cfgCurvature);
-            result.x = ox + ux * planeLimit; result.y = oy + uy * planeLimit;
-            result.dirX = ux / len; result.dirY = uy / len; result.dirZ = dzdd / len;
-        }
-    }
-    //endregion
-
-    //region Tracing
-    static double smooth(double t) { t = Math.clamp(t, 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
-    static double glintPow(double x, int exp) {
-        double x2 = x * x, x4 = x2 * x2, x8 = x4 * x4, x16 = x8 * x8;
-        if (exp == 16) return x16;
-        if (exp == 24) return x16 * x8;
-        return x16 * x8 * x4 * x2;
-    }
-    static double toneCurve(double v) { return v <= 0.7 ? v : 0.7 + 0.3 * (1.0 - Math.exp(-(v - 0.7) / 0.3)); }
-    static double wallOcclusion(double z, double height) {
-        double ao = 1.0 - 0.45 * (1.0 - smooth(z / 0.22));
-        ao *= 1.0 - 0.25 * (1.0 - smooth((height - z) / 0.14));
-        return ao;
-    }
-    static int mixColor(int a, int b, double amount) {
-        amount = Math.clamp(amount, 0, 1);
-        int ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
-        int br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
-        return ((int) (ar * (1 - amount) + br * amount) << 16) | ((int) (ag * (1 - amount) + bg * amount) << 8) | (int) (ab * (1 - amount) + bb * amount);
-    }
-    //endregion
-
-    //region Textures and shading
-    private static int tintColor(int color, int tint) {
-        int r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
-        int tr = (tint >> 16) & 255, tg = (tint >> 8) & 255, tb = tint & 255;
-        r = (int)(r * (1 - 0.45) + tr * 0.45); g = (int)(g * (1 - 0.45) + tg * 0.45); b = (int)(b * (1 - 0.45) + tb * 0.45);
-        return (r << 16) | (g << 8) | b;
-    }
-    static int sampleTexture(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
-        int width = texture.width(), height = texture.height();
-        if (width <= 0 || height <= 0) return baseColor;
-        double fracX = worldX - Math.floor(worldX);
-        double fracY = worldY - Math.floor(worldY);
-        int tx = Math.min((int)(fracX * width), width - 1);
-        int ty = Math.min((int)(fracY * height), height - 1);
-        return texture.pixels()[ty * width + tx];
-    }
-    static int planeColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
-        return sampleTexture(texture, worldX, worldY, baseColor);
-    }
-    static int sampleWallTexture(RuntimeTexture texture, TraceHit hit) {
-        if (texture.width() <= 0 || texture.height() <= 0) return hit.type == 2 ? finishBaseColor : wallBaseColor;
-        int tx = Math.min((int) (hit.wallU * texture.width()), texture.width() - 1);
-        int ty = Math.min((int) ((1.0 - hit.wallV) * texture.height()), texture.height() - 1);
-        return texture.pixels()[ty * texture.width() + Math.max(0, tx)];
-    }
-    static int tintStairs(int color, double worldX, double worldY, int[][] floorMap) {
-        int fx = (int) Math.floor(worldX), fy = (int) Math.floor(worldY);
-        if (fx < 0 || fy < 0 || fy >= floorMap.length || fx >= floorMap[0].length) return color;
-        int cell = floorMap[fy][fx];
-        if (cell == 3) return tintColor(color, 0x3399FF);
-        if (cell == 4) return tintColor(color, 0xFFAA33);
-        return color;
-    }
-    //endregion
-
-    //region Utilities
-    static boolean is3D(RenderFrame fr) { return fr.map3D != null && fr.map3D.length > 1; }
-    static double wallHeightForType(int type) { return type == 2 ? 0.5 : 1.0; }
-    static void copyRenderBuffer(RenderFrame fr) {
-        if (fr.renderWidth == fr.bufferedImage.getWidth() && fr.renderHeight == fr.bufferedImage.getHeight()) {
-            System.arraycopy(fr.renderPixels, 0, fr.pixels, 0, fr.pixels.length);
-        } else {
-            Graphics2D g2d = fr.bufferedImage.createGraphics();
-            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-            g2d.drawImage(fr.renderImage, 0, 0, cfgOutW, cfgOutH, null);
-            g2d.dispose();
-        }
-    }
-    static void parallelRange(RenderFrame fr, int end, IntConsumer task) {
-        if (end <= 0) return;
-        fr.renderWorkers.execute(0, end, task);
-    }
-    //endregion
-
-    //region Nested Types
-    static final int SDF_TILE = 256;
-    public static final class SdfCache {
-        static final long BUDGET_BYTES = 256L << 20;
-        static final int MAX_FIELDS = 32;
-        final java.util.concurrent.ConcurrentHashMap<int[][], SDFField> fields = new java.util.concurrent.ConcurrentHashMap<>();
-        private long bytes;
-
-        SDFField fieldFor(int[][] m) {
-            SDFField field = fields.get(m);
-            if (field != null) return field;
-            synchronized (this) {
-                field = fields.get(m);
-                if (field == null) {
-                    if (fields.size() > MAX_FIELDS) clear();
-                    field = new SDFField(this, m);
-                    fields.put(m, field);
-                }
-                return field;
-            }
-        }
-        synchronized void clear() {
-            for (SDFField f : fields.values()) f.dropTiles();
-            fields.clear();
-            bytes = 0;
-        }
-        synchronized void charge(long extraBytes) {
-            bytes += extraBytes;
-            if (bytes > BUDGET_BYTES) {
-                for (SDFField f : fields.values()) f.dropTiles();
-                bytes = 0;
-            }
-        }
-    }
-    public static final class SDFField {
-        private final SdfCache owner;
-        private final int[][] m;
-        private final int mw, mh;
-        final int cols, rows, tilesX, tilesY;
-        final boolean hasPortals, hasFinish;
-        private final java.util.concurrent.atomic.AtomicReferenceArray<double[]> wallTiles, finishTiles;
-
-        SDFField(SdfCache owner, int[][] m) {
-            this.owner = owner;
-            this.m = m;
-            mh = m.length;
-            mw = m[0].length;
-            cols = mw * SDF_SUB + 1;
-            rows = mh * SDF_SUB + 1;
-            tilesX = (cols + SDF_TILE - 1) / SDF_TILE;
-            tilesY = (rows + SDF_TILE - 1) / SDF_TILE;
-            wallTiles = new java.util.concurrent.atomic.AtomicReferenceArray<>(tilesX * tilesY);
-            finishTiles = new java.util.concurrent.atomic.AtomicReferenceArray<>(tilesX * tilesY);
-            boolean portals = false, finish = false;
-            for (int y = 0; y < mh; y++)
-                for (int x = 0; x < mw; x++) {
-                    int t = m[y][x];
-                    if (t == 2) finish = true;
-                    else if (t == MazeGenerator.PORTAL) portals = true;
-                }
-            hasPortals = portals;
-            hasFinish = finish;
-        }
-        double[] wallGrid() { return fullGrid(false); }
-        double[] finishGrid() { return hasFinish ? fullGrid(true) : new double[cols * rows]; }
-
-        private double[] fullGrid(boolean finish) {
-            double[] grid = new double[cols * rows];
-            for (int j = 0; j < rows; j++)
-                for (int i = 0; i < cols; i++) grid[j * cols + i] = value(finish, i, j);
-            return grid;
-        }
-        double value(boolean finish, int i, int j) {
-            int tx = i / SDF_TILE, ty = j / SDF_TILE;
-            int index = ty * tilesX + tx;
-            double[] tile = (finish ? finishTiles : wallTiles).get(index);
-            if (tile == null) tile = buildTile(finish, tx, ty);
-            return tile[(j - ty * SDF_TILE) * SDF_TILE + (i - tx * SDF_TILE)];
-        }
-
-        private double[] buildTile(boolean finish, int tx, int ty) {
-            java.util.concurrent.atomic.AtomicReferenceArray<double[]> tiles = finish ? finishTiles : wallTiles;
-            int index = ty * tilesX + tx;
-            synchronized (owner) {
-                double[] tile = tiles.get(index);
-                if (tile != null) return tile;
-                tile = computeTile(finish, tx * SDF_TILE, ty * SDF_TILE);
-                tiles.set(index, tile);
-                owner.charge(8L * tile.length);
-                return tile;
-            }
-        }
-
-        void dropTiles() {
-            for (int k = 0; k < tilesX * tilesY; k++) {
-                wallTiles.set(k, null);
-                finishTiles.set(k, null);
-            }
-        }
-        private boolean isSolid(boolean finish, int y, int x) {
-            int t = m[y][x];
-            return finish ? t == 2 : t == 1;
-        }
-        private double[] computeTile(boolean finish, int i0, int j0) {
-            final double none = Double.POSITIVE_INFINITY;
-            final int iEnd = Math.min(cols, i0 + SDF_TILE), jEnd = Math.min(rows, j0 + SDF_TILE);
-            final int yLo = Math.max(0, (int) Math.floor(j0 / (double) SDF_SUB) - SDF_WINDOW);
-            final int yHi = Math.min(mh - 1, (int) Math.floor((jEnd - 1) / (double) SDF_SUB) + SDF_WINDOW);
-            final int width = iEnd - i0;
-            double[] gaps = new double[(yHi - yLo + 1) * width];
-            for (int i = i0; i < iEnd; i++) {
-                double px = i / (double) SDF_SUB;
-                int cx = (int) Math.floor(px);
-                int x0 = Math.max(0, cx - SDF_WINDOW), x1 = Math.min(mw - 1, cx + SDF_WINDOW);
-                for (int yy = yLo; yy <= yHi; yy++) {
-                    double best = none;
-                    for (int xx = x0; xx <= x1; xx++) {
-                        if (!isSolid(finish, yy, xx)) continue;
-                        double dx = Math.max(Math.max(xx - px, px - (xx + 1)), 0);
-                        double sq = dx * dx;
-                        if (sq < best) best = sq;
-                    }
-                    gaps[(yy - yLo) * width + (i - i0)] = best;
-                }
-            }
-            double[] tile = new double[SDF_TILE * SDF_TILE];
-            for (int j = j0; j < jEnd; j++) {
-                double py = j / (double) SDF_SUB;
-                int cy = (int) Math.floor(py);
-                int y0 = Math.max(0, cy - SDF_WINDOW), y1 = Math.min(mh - 1, cy + SDF_WINDOW);
-                for (int i = i0; i < iEnd; i++) {
-                    double best = none;
-                    for (int yy = y0; yy <= y1; yy++) {
-                        double gap = gaps[(yy - yLo) * width + (i - i0)];
-                        if (gap == none) continue;
-                        double dy = Math.max(Math.max(yy - py, py - (yy + 1)), 0);
-                        double sq = dy * dy + gap;
-                        if (sq < best) best = sq;
-                    }
-                    tile[(j - j0) * SDF_TILE + (i - i0)] = best == none ? SDF_WINDOW : Math.sqrt(best);
-                }
-            }
-            return tile;
-        }
-    }
-    static SDFField sdfFieldFor(int[][] m) { return sdfCache.fieldFor(m); }
-    public static final class TraceHit {
-        void reset() {
-            x = y = z = distance = wallU = wallV = dirX = dirY = dirZ = hypSlope = 0; type = side = 0;
-            hit = isPlane = hyp = false; map = null; portals = null;
-            curved = false; nrmX = nrmY = 0;
-        }
-        double x, y, z, distance;
-        int type, side;
-        double wallU, wallV;
-        double dirX, dirY, dirZ;
-        boolean hit, isPlane, hyp;
-        double hypSlope;
-        int[][] map;
-        PortalData portals;
-        boolean curved;
-        double nrmX, nrmY;
-    }
-    //endregion
-
-    //region Module
-    private RenderFrame fr;
-    static final String ID = "moriarty";
-    @Override public String id() { return ID; }
-    @Override public String displayName() { return "Moriarty Engine"; }
-    @Override public int order() { return 4; }
-    @Override public String hintKey() { return "mm.engine_moriarty"; }
-    @Override public String qualityHintKey() { return "mm.quality_moriarty"; }
-    @Override public boolean hasHyperbolicGeometry() { return false; }
-    @Override public boolean hasOpenCL() { return true; }
-    @Override public void render(RenderFrame frame) {
-        fr = frame; syncConfig(frame);
-        if (hasOpenCL() && cfgGeometry != MazeGenerator.GeometryMode.WRONG && Gpu.tryRender(frame)) {
-            copyRenderBuffer(frame);
-            return;
-        }
-        renderMoriarty();
-    }
-    private static final int MAX_MAP_CELLS = 201 * 201;
-    private static final int MAX_CACHED_MAPS = 64;
-    @Override public boolean supportsMapSize(int width, int height) { return (long) width * height <= MAX_MAP_CELLS; }
-    @Override public void prepare(RenderFrame frame) {
-        fr = frame; syncConfig(frame);
-        prepareMaps();
-    }
-    //endregion
-
-    //region Tuning
+    //region Quality Presets
     private static final int[] AO_SAMPLES = {2, 3, 4};
     private static final int[] REFLECTION_DEPTH = {0, 1, 1};
     private static final int[] REFLECTION_STEPS = {12, 32, 64};
     private static final int[] EDGE_GRID = {1, 2, 3};
     private static final int MAX_EDGE_GRID = 3;
+    private int quality, aoSamples, reflectionDepth, reflectionSteps, edgeGrid;
+    //endregion
+    //region Shading Constants
+    static final int wallBaseColor = 0xECD485;
+    static final int ceilingBaseColor = 0x816E1E;
+    static final int floorBaseColor = 0xD3AF63;
+    static final int finishBaseColor = 0x33FF66;
     private static final double[] AO_HEIGHTS = {0.08, 0.20, 0.36, 0.60};
     private static final double AO_STRENGTH = 1.1, AO_FLOOR = 0.25;
     private static final double EDGE_RATIO = 0.25;
     private static final double CORNER_RADIUS = Math.min(0.2, 1.0 / 3.0);
-    private static final int RASTER_PER_SDF_STEP = 8;
-    private static final double SDF_WINDOW_CELLS = 4.0;
     private static final double GLOSSINESS = 0.75;
     private static final double FLASH_RANGE = 3.0;
     private static final double[] AMBIENT_LIGHT = {0.10, 0.115, 0.17};
@@ -397,19 +43,30 @@ public final class MoriartyEngine implements RenderEngine {
     private static final int TONE_STEPS = 2048;
     private static final double TONE_MAX = 3.0;
     private static final double[] TONE_LUT = buildToneLut();
-    private static final double INF = Double.POSITIVE_INFINITY;
+    //endregion
+    //region Ray Constants
+    static final int MAX_PRIMARY_STEPS = 6000;
     private static final double MAX_COLUMN_DISTANCE = 48;
     private static final double HYP_PLANE_LENGTH = Math.tan(Math.toRadians(140.0) / 2.0);
     private static final int MAX_FIN = 4;
     private static final int KIND_NONE = 0, KIND_FLOOR = 1, KIND_CEIL = 2, KIND_WALL = 3, KIND_FINISH = 4;
+    private static final double INF = Double.POSITIVE_INFINITY;
+    private static final int SDF_SUB = 8, SDF_WINDOW = 4;
+    static final int SDF_TILE = 256;
+    private static final double SDF_WINDOW_CELLS = 4.0;
+    private static final int RASTER_PER_SDF_STEP = 8;
     //endregion
-
-    //region Per-frame state
-    private int quality, aoSamples, reflectionDepth, reflectionSteps, edgeGrid;
+    //region Map Cache
+    static final SdfCache sdfCache = new SdfCache();
+    private final ConcurrentHashMap<int[][], MapData> mapCache = new ConcurrentHashMap<>();
     private int[][] baseMap;
     private PortalData basePortals;
     private MapData baseData;
-    private final ConcurrentHashMap<int[][], MapData> mapCache = new ConcurrentHashMap<>();
+    private static final int MAX_MAP_CELLS = 201 * 201;
+    private static final int MAX_CACHED_MAPS = 64;
+    //endregion
+    //region Render State
+    private RenderFrame fr;
     private double tanHalfFov, verticalTan, dirX, dirY, cosP, sinP, horizonH;
     private boolean hyperbolic, columnPath;
     private Column[] columns = new Column[0];
@@ -419,7 +76,43 @@ public final class MoriartyEngine implements RenderEngine {
     private double[] gDist = new double[0];
     private boolean[] gEdge = new boolean[0];
     //endregion
+    //endregion
 
+    //region Engine Identity
+    static final String ID = "moriarty";
+    @Override public String id() { return ID; }
+    @Override public String displayName() { return "Moriarty Engine"; }
+    @Override public int order() { return 4; }
+    @Override public String hintKey() { return "mm.engine_moriarty"; }
+    @Override public String qualityHintKey() { return "mm.quality_moriarty"; }
+    @Override public boolean hasHyperbolicGeometry() { return false; }
+    @Override public boolean hasOpenCL() { return true; }
+    //endregion
+
+    //region Lifecycle
+    @Override public boolean supportsMapSize(int width, int height) { return (long) width * height <= MAX_MAP_CELLS; }
+    @Override public void prepare(RenderFrame frame) {
+        fr = frame; syncConfig(frame);
+        prepareMaps();
+    }
+    static void syncConfig(RenderFrame renderFrame) {
+        cfgQuality = renderFrame.quality;
+        cfgGeometry = renderFrame.geometry;
+        cfgCurvature = renderFrame.curvature;
+        cfgOutW = renderFrame.outputWidth;
+        cfgOutH = renderFrame.outputHeight;
+    }
+    @Override public void render(RenderFrame frame) {
+        fr = frame; syncConfig(frame);
+        if (hasOpenCL() && cfgGeometry != MazeGenerator.GeometryMode.WRONG && Gpu.tryRender(frame)) {
+            copyRenderBuffer(frame);
+            return;
+        }
+        renderMoriarty();
+    }
+    //endregion
+
+    //region Frame Rendering
     private void renderMoriarty() {
         final int width = fr.renderWidth, height = fr.renderHeight;
         quality = Math.clamp(cfgQuality, 0, 2);
@@ -482,8 +175,6 @@ public final class MoriartyEngine implements RenderEngine {
         });
         copyRenderBuffer(fr);
     }
-
-    //region Buffers
     private void ensureBuffers(int width, int height) {
         int count = width * height;
         if (gKind.length != count) { gKind = new int[count]; gDist = new double[count]; gEdge = new boolean[count]; }
@@ -497,40 +188,137 @@ public final class MoriartyEngine implements RenderEngine {
         }
         if (rowV.length != height) rowV = new double[height];
     }
+    static void copyRenderBuffer(RenderFrame renderFrame) {
+        if (renderFrame.renderWidth == renderFrame.bufferedImage.getWidth() && renderFrame.renderHeight == renderFrame.bufferedImage.getHeight()) {
+            System.arraycopy(renderFrame.renderPixels, 0, renderFrame.pixels, 0, renderFrame.pixels.length);
+        } else {
+            Graphics2D g2d = renderFrame.bufferedImage.createGraphics();
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            g2d.drawImage(renderFrame.renderImage, 0, 0, cfgOutW, cfgOutH, null);
+            g2d.dispose();
+        }
+    }
+    static void parallelRange(RenderFrame renderFrame, int end, IntConsumer task) {
+        if (end <= 0) return;
+        renderFrame.renderWorkers.execute(0, end, task);
+    }
+    static boolean is3D(RenderFrame renderFrame) { return renderFrame.map3D != null && renderFrame.map3D.length > 1; }
+    //region Primary Rays
+    private void primaryPixel(int x, int y, TraceHit out) {
+        if (columnPath && !columns[x].fallback) columnHitAt(columns[x], rowV[y], out);
+        else cameraTrace(x + 0.5, y + 0.5, out);
+    }
+    private void cameraTrace(double fx, double fy, TraceHit out) {
+        int width = fr.renderWidth, height = fr.renderHeight;
+        if (hyperbolic) {
+            double cx = fx / width * 2.0 - 1.0;
+            double rdX = dirX - dirY * HYP_PLANE_LENGTH * cx, rdY = dirY + dirX * HYP_PLANE_LENGTH * cx;
+            double L = Math.sqrt(rdX * rdX + rdY * rdY);
+            traceHyp(fr, fr.playerX, fr.playerY, fr.cameraHeight, rdX / L, rdY / L, L, -(fy - horizonH) / height, out, MAX_PRIMARY_STEPS);
+            return;
+        }
+        double sx = (fx / width * 2.0 - 1.0) * tanHalfFov;
+        double sy = (1.0 - fy / height * 2.0) * verticalTan;
+        double rx = dirX * cosP - dirY * sx - dirX * sinP * sy;
+        double ry = dirY * cosP + dirX * sx - dirY * sinP * sy;
+        double rz = sinP + cosP * sy;
+        double inv = 1.0 / Math.sqrt(rx * rx + ry * ry + rz * rz);
+        traceRayM(fr.playerX, fr.playerY, fr.cameraHeight, rx * inv, ry * inv, rz * inv, baseMap, basePortals, out, MAX_PRIMARY_STEPS);
+    }
+    private static int kindOf(TraceHit traceHit) {
+        if (!traceHit.hit) return KIND_NONE;
+        if (traceHit.isPlane) return traceHit.type == -1 ? KIND_FLOOR : KIND_CEIL;
+        return traceHit.type == 2 ? KIND_FINISH : KIND_WALL;
+    }
+    private void fill(TraceHit out, double horizontal, double hf, double ux, double uy, double rzUnit, double z, boolean plane) {
+        out.hit = true;
+        out.hyp = false;
+        out.isPlane = plane;
+        out.distance = horizontal / hf;
+        out.x = fr.playerX + ux * horizontal;
+        out.y = fr.playerY + uy * horizontal;
+        out.z = z;
+        out.dirX = ux * hf; out.dirY = uy * hf; out.dirZ = rzUnit;
+        out.map = baseMap; out.portals = basePortals;
+    }
+    private static void setNormal(TraceHit out, boolean curved, double nx, double ny) {
+        out.curved = curved;
+        out.nrmX = nx;
+        out.nrmY = ny;
+    }
+    private void markEdges(int y, int width, int height) {
+        for (int x = 0; x < width; x++) {
+            int i = y * width + x;
+            int kind = gKind[i];
+            double d = gDist[i];
+            boolean edge = false;
+            for (int n = 0; n < 4 && !edge; n++) {
+                int nx = x + (n == 0 ? -1 : n == 1 ? 1 : 0), ny = y + (n == 2 ? -1 : n == 3 ? 1 : 0);
+                if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+                int j = ny * width + nx;
+                if (gKind[j] != kind) edge = true;
+                else if (kind != KIND_NONE && Math.abs(gDist[j] - d) > EDGE_RATIO * Math.max(d, gDist[j])) edge = true;
+            }
+            gEdge[i] = edge;
+        }
+    }
+    private int shadeSupersampled(int x, int y, TraceHit sub, TraceHit[] scratch) {
+        final int n = edgeGrid * edgeGrid;
+        int r = 0, g = 0, b = 0;
+        for (int j = 0; j < edgeGrid; j++) {
+            for (int k = 0; k < edgeGrid; k++) {
+                subSampleHit(x, y, j, k, sub);
+                int c = shadeHit(sub, 0.0, reflectionDepth, reflectionSteps, scratch);
+                r += (c >> 16) & 255; g += (c >> 8) & 255; b += c & 255;
+            }
+        }
+        return ((r / n) << 16) | ((g / n) << 8) | (b / n);
+    }
+    private void subSampleHit(int x, int y, int j, int k, TraceHit out) {
+        if (columnPath) {
+            Column column = subColumns[x * edgeGrid + k];
+            if (!column.fallback) {
+                double fy = y + (j + 0.5) / edgeGrid;
+                columnHitAt(column, (1.0 - fy / fr.renderHeight * 2.0) * verticalTan, out);
+                return;
+            }
+        }
+        cameraTrace(x + (k + 0.5) / edgeGrid, y + (j + 0.5) / edgeGrid, out);
+    }
     //endregion
 
-    //region Primary visibility
-    private void buildColumn(Column c, double fx, int width) {
+    //region Column Rendering
+    private void buildColumn(Column column, double fx, int width) {
         double sx = (fx / width * 2.0 - 1.0) * tanHalfFov;
         double hx = dirX - sx * dirY, hy = dirY + sx * dirX;
         double hl = Math.sqrt(hx * hx + hy * hy);
-        c.ux = hx / hl;
-        c.uy = hy / hl;
-        c.hl = hl;
-        c.fallback = !walkColumn(c, fr.playerX, fr.playerY, c.ux, c.uy, baseMap, baseData.corners);
+        column.ux = hx / hl;
+        column.uy = hy / hl;
+        column.hl = hl;
+        column.fallback = !walkColumn(column, fr.playerX, fr.playerY, column.ux, column.uy, baseMap, baseData.corners);
     }
-    private static boolean walkColumn(Column c, double px, double py, double ux, double uy, int[][] m, byte[] corners) {
-        c.wallDist = INF;
-        c.wallTexU = 0;
-        c.wallSide = 0;
-        c.wallCurved = false;
-        c.wallNx = c.wallNy = 0;
-        c.finCount = 0;
+    private static boolean walkColumn(Column column, double px, double py, double ux, double uy, int[][] m, byte[] corners) {
+        column.wallDist = INF;
+        column.wallTexU = 0;
+        column.wallSide = 0;
+        column.wallCurved = false;
+        column.wallNx = column.wallNy = 0;
+        column.finCount = 0;
         final int mapWidth = m[0].length, mapHeight = m.length;
         double x = px, y = py, dist = 0;
         int cx = (int) Math.floor(x), cy = (int) Math.floor(y);
         if (corners != null && cx >= 0 && cy >= 0 && cx < mapWidth && cy < mapHeight && m[cy][cx] == 0) {
             int fillet = (corners[cy * mapWidth + cx] >> 4) & 15;
             if (fillet != 0) {
-                double sHit = concaveEntry(px, py, ux, uy, cx, cy, fillet, c.scratch);
+                double sHit = concaveEntry(px, py, ux, uy, cx, cy, fillet, column.scratch);
                 if (sHit != INF && sHit <= MoriartyEngine.MAX_COLUMN_DISTANCE) {
-                    int side = Math.abs(c.scratch.nrmX) >= Math.abs(c.scratch.nrmY) ? 0 : 1;
-                    c.wallDist = sHit;
-                    c.wallTexU = faceCoord(side, px + ux * sHit, py + uy * sHit, ux, uy);
-                    c.wallSide = side;
-                    c.wallCurved = c.scratch.curved;
-                    c.wallNx = c.scratch.nrmX;
-                    c.wallNy = c.scratch.nrmY;
+                    int side = Math.abs(column.scratch.nrmX) >= Math.abs(column.scratch.nrmY) ? 0 : 1;
+                    column.wallDist = sHit;
+                    column.wallTexU = faceCoord(side, px + ux * sHit, py + uy * sHit, ux, uy);
+                    column.wallSide = side;
+                    column.wallCurved = column.scratch.curved;
+                    column.wallNx = column.scratch.nrmX;
+                    column.wallNy = column.scratch.nrmY;
                     return true;
                 }
             }
@@ -552,16 +340,16 @@ public final class MoriartyEngine implements RenderEngine {
             if (type == 0) {
                 int fillet = corners == null ? 0 : (corners[cy * mapWidth + cx] >> 4) & 15;
                 if (fillet != 0) {
-                    double sHit = concaveEntry(px, py, ux, uy, cx, cy, fillet, c.scratch);
+                    double sHit = concaveEntry(px, py, ux, uy, cx, cy, fillet, column.scratch);
                     if (sHit != INF) {
                         if (sHit > MoriartyEngine.MAX_COLUMN_DISTANCE) return true;
-                        int side = Math.abs(c.scratch.nrmX) >= Math.abs(c.scratch.nrmY) ? 0 : 1;
-                        c.wallDist = sHit;
-                        c.wallTexU = faceCoord(side, px + ux * sHit, py + uy * sHit, ux, uy);
-                        c.wallSide = side;
-                        c.wallCurved = c.scratch.curved;
-                        c.wallNx = c.scratch.nrmX;
-                        c.wallNy = c.scratch.nrmY;
+                        int side = Math.abs(column.scratch.nrmX) >= Math.abs(column.scratch.nrmY) ? 0 : 1;
+                        column.wallDist = sHit;
+                        column.wallTexU = faceCoord(side, px + ux * sHit, py + uy * sHit, ux, uy);
+                        column.wallSide = side;
+                        column.wallCurved = column.scratch.curved;
+                        column.wallNx = column.scratch.nrmX;
+                        column.wallNy = column.scratch.nrmY;
                         return true;
                     }
                 }
@@ -578,65 +366,61 @@ public final class MoriartyEngine implements RenderEngine {
                 hitDist = dist;
                 side = alongX ? 0 : 1;
             } else {
-                hitDist = roundedEntry(px, py, ux, uy, cx, cy, mask, c.scratch);
+                hitDist = roundedEntry(px, py, ux, uy, cx, cy, mask, column.scratch);
                 if (hitDist == INF) continue;
                 if (hitDist > MoriartyEngine.MAX_COLUMN_DISTANCE) return true;
-                curved = c.scratch.curved;
-                nx = c.scratch.nrmX;
-                ny = c.scratch.nrmY;
+                curved = column.scratch.curved;
+                nx = column.scratch.nrmX;
+                ny = column.scratch.nrmY;
                 side = Math.abs(nx) >= Math.abs(ny) ? 0 : 1;
                 qx = px + ux * hitDist;
                 qy = py + uy * hitDist;
             }
             double u = faceCoord(side, qx, qy, ux, uy);
             if (type == 1) {
-                c.wallDist = hitDist; c.wallTexU = u; c.wallSide = side;
-                c.wallCurved = curved; c.wallNx = nx; c.wallNy = ny;
+                column.wallDist = hitDist; column.wallTexU = u; column.wallSide = side;
+                column.wallCurved = curved; column.wallNx = nx; column.wallNy = ny;
                 return true;
             }
-            if (c.finCount < MAX_FIN) {
-                int k = c.finCount++;
-                c.finDist[k] = hitDist; c.finU[k] = u; c.finSide[k] = side;
-                c.finCurved[k] = curved; c.finNx[k] = nx; c.finNy[k] = ny;
+            if (column.finCount < MAX_FIN) {
+                int k = column.finCount++;
+                column.finDist[k] = hitDist; column.finU[k] = u; column.finSide[k] = side;
+                column.finCurved[k] = curved; column.finNx[k] = nx; column.finNy[k] = ny;
             }
         }
         return true;
     }
-
-    private void primaryPixel(int x, int y, TraceHit out) {
-        if (columnPath && !columns[x].fallback) columnHitAt(columns[x], rowV[y], out);
-        else cameraTrace(x + 0.5, y + 0.5, out);
-    }
-    private void columnHitAt(Column c, double v, TraceHit out) {
+    private void columnHitAt(Column column, double v, TraceHit out) {
         out.reset();
-        double hl = c.hl, ux = c.ux, uy = c.uy;
+        double hl = column.hl, ux = column.ux, uy = column.uy;
         double len = Math.sqrt(hl * hl + v * v);
         double hf = hl / len;
         double rzUnit = v / len;
         double sigma = rzUnit / hf;
+        out.dirX = ux * hf; out.dirY = uy * hf; out.dirZ = rzUnit;
         double z0 = fr.cameraHeight;
         double planeD = sigma < -1e-12 ? -z0 / sigma : sigma > 1e-12 ? (1.0 - z0) / sigma : INF;
-        double wallD = c.wallDist;
+        double wallD = column.wallDist;
         double nearest = Math.min(wallD, planeD);
 
-        for (int k = 0; k < c.finCount; k++) {
-            double d = c.finDist[k];
+        for (int k = 0; k < column.finCount; k++) {
+            double d = column.finDist[k];
             if (d >= nearest) break;
             double z = z0 + sigma * d;
             if (z <= 0.5) {
                 fill(out, d, hf, ux, uy, rzUnit, z, false);
-                out.type = 2; out.side = c.finSide[k]; out.wallU = c.finU[k];
+                out.type = 2; out.side = column.finSide[k]; out.wallU = column.finU[k];
                 out.wallV = Math.clamp(z / 0.5, 0.0, 0.999999); out.z = Math.clamp(z, 0.0, 0.5);
-                setNormal(out, c.finCurved[k], c.finNx[k], c.finNy[k]);
+                setNormal(out, column.finCurved[k], column.finNx[k], column.finNy[k]);
                 return;
             }
         }
         if (wallD < planeD) {
             double z = z0 + sigma * wallD;
             fill(out, wallD, hf, ux, uy, rzUnit, z, false);
-            out.type = 1; out.side = c.wallSide; out.wallU = c.wallTexU;
+            out.type = 1; out.side = column.wallSide; out.wallU = column.wallTexU;
             out.wallV = Math.clamp(z, 0.0, 0.999999); out.z = Math.clamp(z, 0.0, 1.0);
-            setNormal(out, c.wallCurved, c.wallNx, c.wallNy);
+            setNormal(out, column.wallCurved, column.wallNx, column.wallNy);
             return;
         }
         if (planeD < INF) {
@@ -645,93 +429,100 @@ public final class MoriartyEngine implements RenderEngine {
             out.type = floor ? -1 : 1; out.z = floor ? 0.0 : 1.0; out.side = 0;
         }
     }
-
-    private void fill(TraceHit out, double horizontal, double hf, double ux, double uy, double rzUnit, double z, boolean plane) {
-        out.hit = true;
-        out.hyp = false;
-        out.isPlane = plane;
-        out.distance = horizontal / hf;
-        out.x = fr.playerX + ux * horizontal;
-        out.y = fr.playerY + uy * horizontal;
-        out.z = z;
-        out.dirX = ux * hf; out.dirY = uy * hf; out.dirZ = rzUnit;
-        out.map = baseMap; out.portals = basePortals;
+    private static final class Column {
+        double ux, uy, hl;
+        boolean fallback;
+        double wallDist, wallTexU, wallNx, wallNy;
+        int wallSide;
+        boolean wallCurved;
+        int finCount;
+        final double[] finDist = new double[MAX_FIN], finU = new double[MAX_FIN];
+        final double[] finNx = new double[MAX_FIN], finNy = new double[MAX_FIN];
+        final int[] finSide = new int[MAX_FIN];
+        final boolean[] finCurved = new boolean[MAX_FIN];
+        final TraceHit scratch = new TraceHit();
     }
+    //endregion
+    //endregion
 
-    private static void setNormal(TraceHit out, boolean curved, double nx, double ny) {
-        out.curved = curved;
-        out.nrmX = nx;
-        out.nrmY = ny;
-    }
+    //region Hyperbolic Tracing
+    static void traceHyp(RenderFrame renderFrame, double ox, double oy, double z0, double ux, double uy, double L, double slope, TraceHit result, int maxSteps) {
+        result.reset();
+        final int[][] m = renderFrame.map;
+        final int mapWidth = m[0].length, mapHeight = m.length;
+        final double invL = 1.0 / L;
+        final double floorD = hypFloorDistance(z0, slope, L), ceilD = hypCeilDistance(z0, slope, L);
+        final double planeLimit = Math.min(floorD, ceilD);
 
-    private void cameraTrace(double fx, double fy, TraceHit out) {
-        int width = fr.renderWidth, height = fr.renderHeight;
-        if (hyperbolic) {
-            double cx = fx / width * 2.0 - 1.0;
-            double rdX = dirX - dirY * HYP_PLANE_LENGTH * cx, rdY = dirY + dirX * HYP_PLANE_LENGTH * cx;
-            double L = Math.sqrt(rdX * rdX + rdY * rdY);
-            traceHyp(fr, fr.playerX, fr.playerY, fr.cameraHeight, rdX / L, rdY / L, L, -(fy - horizonH) / height, out, MAX_PRIMARY_STEPS);
-            return;
+        int mapX = (int) Math.floor(ox), mapY = (int) Math.floor(oy);
+        double deltaX = ux == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / ux);
+        double deltaY = uy == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / uy);
+        double sideX = (ux < 0 ? ox - mapX : mapX + 1.0 - ox) * deltaX;
+        double sideY = (uy < 0 ? oy - mapY : mapY + 1.0 - oy) * deltaY;
+        int stepX = ux < 0 ? -1 : 1, stepY = uy < 0 ? -1 : 1;
+
+        double wallD = Double.POSITIVE_INFINITY;
+        int wallType = 0, wallSide = 0;
+        for (int steps = 0; steps < maxSteps; steps++) {
+            double enter;
+            int side;
+            if (sideX < sideY) { enter = sideX; sideX += deltaX; mapX += stepX; side = 0; }
+            else { enter = sideY; sideY += deltaY; mapY += stepY; side = 1; }
+            if (enter >= planeLimit) break;
+            if (mapX < 0 || mapY < 0 || mapX >= mapWidth || mapY >= mapHeight) break;
+            int type = m[mapY][mapX];
+            if (type != 1 && type != 2) continue;
+            double z = z0 + slope * HyperbolicMath.hyperbolicDistance(enter * invL, cfgCurvature);
+            if (z >= 0.0 && z <= wallHeightForType(type)) { wallD = enter; wallType = type; wallSide = side; break; }
         }
-        double sx = (fx / width * 2.0 - 1.0) * tanHalfFov;
-        double sy = (1.0 - fy / height * 2.0) * verticalTan;
-        double rx = dirX * cosP - dirY * sx - dirX * sinP * sy;
-        double ry = dirY * cosP + dirX * sx - dirY * sinP * sy;
-        double rz = sinP + cosP * sy;
-        double inv = 1.0 / Math.sqrt(rx * rx + ry * ry + rz * rz);
-        traceRayM(fr.playerX, fr.playerY, fr.cameraHeight, rx * inv, ry * inv, rz * inv, baseMap, basePortals, out, MAX_PRIMARY_STEPS);
-    }
 
-    private static int kindOf(TraceHit h) {
-        if (!h.hit) return KIND_NONE;
-        if (h.isPlane) return h.type == -1 ? KIND_FLOOR : KIND_CEIL;
-        return h.type == 2 ? KIND_FINISH : KIND_WALL;
-    }
-
-    private void markEdges(int y, int width, int height) {
-        for (int x = 0; x < width; x++) {
-            int i = y * width + x;
-            int kind = gKind[i];
-            double d = gDist[i];
-            boolean edge = false;
-            for (int n = 0; n < 4 && !edge; n++) {
-                int nx = x + (n == 0 ? -1 : n == 1 ? 1 : 0), ny = y + (n == 2 ? -1 : n == 3 ? 1 : 0);
-                if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
-                int j = ny * width + nx;
-                if (gKind[j] != kind) edge = true;
-                else if (kind != KIND_NONE && Math.abs(gDist[j] - d) > EDGE_RATIO * Math.max(d, gDist[j])) edge = true;
-            }
-            gEdge[i] = edge;
+        result.map = m;
+        result.portals = null;
+        result.hyp = true;
+        result.hypSlope = slope;
+        double dzdd;
+        if (wallD < planeLimit) {
+            double z = z0 + slope * HyperbolicMath.hyperbolicDistance(wallD * invL, cfgCurvature);
+            dzdd = slope * Math.cosh(wallD * invL / cfgCurvature) * invL;
+            double len = Math.sqrt(1.0 + dzdd * dzdd);
+            result.hit = true;
+            result.distance = HyperbolicMath.hyperbolicDistance(wallD * invL, cfgCurvature);
+            result.x = ox + ux * wallD; result.y = oy + uy * wallD;
+            result.z = Math.clamp(z, 0.0, wallHeightForType(wallType));
+            result.type = wallType; result.side = wallSide;
+            result.dirX = ux / len; result.dirY = uy / len; result.dirZ = dzdd / len;
+            double wallU = wallSide == 0 ? result.y : result.x;
+            wallU -= Math.floor(wallU);
+            if ((wallSide == 0 && ux < 0) || (wallSide == 1 && uy > 0)) wallU = 1.0 - wallU;
+            result.wallU = Math.clamp(wallU, 0.0, 0.999999);
+            result.wallV = Math.clamp(result.z / wallHeightForType(wallType), 0.0, 0.999999);
+        }
+        else if (Double.isFinite(planeLimit)) {
+            boolean floor = floorD <= ceilD;
+            dzdd = slope * Math.cosh(planeLimit * invL / cfgCurvature) * invL;
+            double len = Math.sqrt(1.0 + dzdd * dzdd);
+            result.hit = true;
+            result.isPlane = true;
+            result.type = floor ? -1 : 1;
+            result.z = floor ? 0.0 : 1.0;
+            result.distance = HyperbolicMath.hyperbolicDistance(planeLimit * invL, cfgCurvature);
+            result.x = ox + ux * planeLimit; result.y = oy + uy * planeLimit;
+            result.dirX = ux / len; result.dirY = uy / len; result.dirZ = dzdd / len;
         }
     }
-
-    private int shadeSupersampled(int x, int y, TraceHit sub, TraceHit[] scratch) {
-        final int n = edgeGrid * edgeGrid;
-        int r = 0, g = 0, b = 0;
-        for (int j = 0; j < edgeGrid; j++) {
-            for (int k = 0; k < edgeGrid; k++) {
-                subSampleHit(x, y, j, k, sub);
-                int c = shadeHit(sub, 0.0, reflectionDepth, reflectionSteps, scratch);
-                r += (c >> 16) & 255; g += (c >> 8) & 255; b += c & 255;
-            }
-        }
-        return ((r / n) << 16) | ((g / n) << 8) | (b / n);
+    private static double hypFloorDistance(double z0, double slope, double L) {
+        if (slope >= 0 || z0 <= 1e-9) return Double.POSITIVE_INFINITY;
+        return L * HyperbolicMath.inverseHyperbolicDistance(z0 / -slope, cfgCurvature);
     }
-
-    private void subSampleHit(int x, int y, int j, int k, TraceHit out) {
-        if (columnPath) {
-            Column c = subColumns[x * edgeGrid + k];
-            if (!c.fallback) {
-                double fy = y + (j + 0.5) / edgeGrid;
-                columnHitAt(c, (1.0 - fy / fr.renderHeight * 2.0) * verticalTan, out);
-                return;
-            }
-        }
-        cameraTrace(x + (k + 0.5) / edgeGrid, y + (j + 0.5) / edgeGrid, out);
+    private static double hypCeilDistance(double z0, double slope, double L) {
+        if (slope <= 0 || z0 >= 1.0 - 1e-9) return Double.POSITIVE_INFINITY;
+        return L * HyperbolicMath.inverseHyperbolicDistance((1.0 - z0) / slope, cfgCurvature);
     }
     //endregion
 
-    //region Rounded wall corners
+    //region Map Preparation
+    static SDFField sdfFieldFor(int[][] m) { return sdfCache.fieldFor(m); }
+    static double wallHeightForType(int type) { return type == 2 ? 0.5 : 1.0; }
     private static byte[] buildCorners(int[][] m) {
         if (CORNER_RADIUS <= 0) return null;
         final int w = m[0].length, h = m.length;
@@ -740,7 +531,6 @@ public final class MoriartyEngine implements RenderEngine {
             for (int x = 0; x < w; x++) {
                 int t = m[y][x];
                 int mask = 0;
-                // Finish blocks stay square (their SDF is square), so they get no rounded corners at all.
                 if (t != 2) {
                     for (int k = 0; k < 4; k++) {
                         int nx = x + ((k & 1) == 0 ? -1 : 1), ny = y + ((k & 2) == 0 ? -1 : 1);
@@ -814,7 +604,6 @@ public final class MoriartyEngine implements RenderEngine {
             }
         return out;
     }
-
     private static void squaredDistanceTransform(double[] g, int W, int H) {
         int n = Math.max(W, H);
         double[] f = new double[n], d = new double[n], z = new double[n + 1];
@@ -830,7 +619,6 @@ public final class MoriartyEngine implements RenderEngine {
             for (int y = 0; y < H; y++) g[y * W + x] = d[y];
         }
     }
-
     private static void envelope1D(double[] f, int n, double[] d, int[] v, double[] z) {
         int k = 0;
         v[0] = 0;
@@ -854,29 +642,7 @@ public final class MoriartyEngine implements RenderEngine {
             d[q] = dq * dq + f[v[k]];
         }
     }
-    private static final class MapData {
-        final byte[] corners;
-        final int cols, rows, sub;
-        final boolean hasFinish;
-        final double[] sdf;
-
-        MapData(int[][] m, SDFField f, byte[] corners) {
-            this.corners = corners;
-            cols = f.cols;
-            rows = f.rows;
-            sub = (cols - 1) / m[0].length;
-            hasFinish = f.hasFinish;
-            sdf = new double[cols * rows * 2];
-            double[] wall = corners != null ? roundedWallField(m, corners, sub, cols, rows) : f.wallGrid();
-            double[] finish = f.finishGrid();
-            for (int p = 0; p < cols * rows; p++) {
-                sdf[2 * p] = wall[p];
-                sdf[2 * p + 1] = finish[p];
-            }
-        }
-    }
     private void prepareMaps() {
-        // Prepare every floor up front so switching floors during play never has to build data on demand.
         java.util.ArrayList<int[][]> todo = new java.util.ArrayList<>();
         todo.add(fr.map);
         if (fr.map3D != null)
@@ -889,19 +655,186 @@ public final class MoriartyEngine implements RenderEngine {
         Progress.report("render", 1.0);
     }
     private MapData mapDataFor(int[][] m) {
-        MapData d = mapCache.get(m);
-        if (d != null) return d;
+        MapData mapData = mapCache.get(m);
+        if (mapData != null) return mapData;
         synchronized (mapCache) {
-            d = mapCache.get(m);
-            if (d == null) {
-                d = new MapData(m, sdfFieldFor(m), buildCorners(m));
+            mapData = mapCache.get(m);
+            if (mapData == null) {
+                mapData = new MapData(m, sdfFieldFor(m), buildCorners(m));
                 if (mapCache.size() >= MAX_CACHED_MAPS) mapCache.clear();
-                mapCache.put(m, d);
+                mapCache.put(m, mapData);
             }
         }
-        return d;
+        return mapData;
     }
     private MapData mapDataOf(int[][] m) { return mapDataFor(m); }
+    public static final class SdfCache {
+        static final long BUDGET_BYTES = 256L << 20;
+        static final int MAX_FIELDS = 32;
+        final java.util.concurrent.ConcurrentHashMap<int[][], SDFField> fields = new java.util.concurrent.ConcurrentHashMap<>();
+        private long bytes;
+
+        SDFField fieldFor(int[][] m) {
+            SDFField field = fields.get(m);
+            if (field != null) return field;
+            synchronized (this) {
+                field = fields.get(m);
+                if (field == null) {
+                    if (fields.size() > MAX_FIELDS) clear();
+                    field = new SDFField(this, m);
+                    fields.put(m, field);
+                }
+                return field;
+            }
+        }
+        synchronized void clear() {
+            for (SDFField sdfField : fields.values()) sdfField.dropTiles();
+            fields.clear();
+            bytes = 0;
+        }
+        synchronized void charge(long extraBytes) {
+            bytes += extraBytes;
+            if (bytes > BUDGET_BYTES) {
+                for (SDFField sdfField : fields.values()) sdfField.dropTiles();
+                bytes = 0;
+            }
+        }
+    }
+    public static final class SDFField {
+        private final SdfCache owner;
+        private final int[][] m;
+        private final int mw, mh;
+        final int cols, rows, tilesX, tilesY;
+        final boolean hasPortals, hasFinish;
+        private final java.util.concurrent.atomic.AtomicReferenceArray<double[]> wallTiles, finishTiles;
+
+        SDFField(SdfCache owner, int[][] m) {
+            this.owner = owner;
+            this.m = m;
+            mh = m.length;
+            mw = m[0].length;
+            cols = mw * SDF_SUB + 1;
+            rows = mh * SDF_SUB + 1;
+            tilesX = (cols + SDF_TILE - 1) / SDF_TILE;
+            tilesY = (rows + SDF_TILE - 1) / SDF_TILE;
+            wallTiles = new java.util.concurrent.atomic.AtomicReferenceArray<>(tilesX * tilesY);
+            finishTiles = new java.util.concurrent.atomic.AtomicReferenceArray<>(tilesX * tilesY);
+            boolean portals = false, finish = false;
+            for (int y = 0; y < mh; y++)
+                for (int x = 0; x < mw; x++) {
+                    int t = m[y][x];
+                    if (t == 2) finish = true;
+                    else if (t == MazeGenerator.PORTAL) portals = true;
+                }
+            hasPortals = portals;
+            hasFinish = finish;
+        }
+
+        double[] wallGrid() { return fullGrid(false); }
+        double[] finishGrid() { return hasFinish ? fullGrid(true) : new double[cols * rows]; }
+        double value(boolean finish, int i, int j) {
+            int tx = i / SDF_TILE, ty = j / SDF_TILE;
+            int index = ty * tilesX + tx;
+            double[] tile = (finish ? finishTiles : wallTiles).get(index);
+            if (tile == null) tile = buildTile(finish, tx, ty);
+            return tile[(j - ty * SDF_TILE) * SDF_TILE + (i - tx * SDF_TILE)];
+        }
+
+        void dropTiles() {
+            for (int k = 0; k < tilesX * tilesY; k++) {
+                wallTiles.set(k, null);
+                finishTiles.set(k, null);
+            }
+        }
+        private double[] fullGrid(boolean finish) {
+            double[] grid = new double[cols * rows];
+            for (int j = 0; j < rows; j++)
+                for (int i = 0; i < cols; i++) grid[j * cols + i] = value(finish, i, j);
+            return grid;
+        }
+
+        private double[] buildTile(boolean finish, int tx, int ty) {
+            java.util.concurrent.atomic.AtomicReferenceArray<double[]> tiles = finish ? finishTiles : wallTiles;
+            int index = ty * tilesX + tx;
+            synchronized (owner) {
+                double[] tile = tiles.get(index);
+                if (tile != null) return tile;
+                tile = computeTile(finish, tx * SDF_TILE, ty * SDF_TILE);
+                tiles.set(index, tile);
+                owner.charge(8L * tile.length);
+                return tile;
+            }
+        }
+        private boolean isSolid(boolean finish, int y, int x) {
+            int t = m[y][x];
+            return finish ? t == 2 : t == 1;
+        }
+        private double[] computeTile(boolean finish, int i0, int j0) {
+            final double none = Double.POSITIVE_INFINITY;
+            final int iEnd = Math.min(cols, i0 + SDF_TILE), jEnd = Math.min(rows, j0 + SDF_TILE);
+            final int yLo = Math.max(0, (int) Math.floor(j0 / (double) SDF_SUB) - SDF_WINDOW);
+            final int yHi = Math.min(mh - 1, (int) Math.floor((jEnd - 1) / (double) SDF_SUB) + SDF_WINDOW);
+            final int width = iEnd - i0;
+            double[] gaps = new double[(yHi - yLo + 1) * width];
+            for (int i = i0; i < iEnd; i++) {
+                double px = i / (double) SDF_SUB;
+                int cx = (int) Math.floor(px);
+                int x0 = Math.max(0, cx - SDF_WINDOW), x1 = Math.min(mw - 1, cx + SDF_WINDOW);
+                for (int yy = yLo; yy <= yHi; yy++) {
+                    double best = none;
+                    for (int xx = x0; xx <= x1; xx++) {
+                        if (!isSolid(finish, yy, xx)) continue;
+                        double dx = Math.max(Math.max(xx - px, px - (xx + 1)), 0);
+                        double sq = dx * dx;
+                        if (sq < best) best = sq;
+                    }
+                    gaps[(yy - yLo) * width + (i - i0)] = best;
+                }
+            }
+            double[] tile = new double[SDF_TILE * SDF_TILE];
+            for (int j = j0; j < jEnd; j++) {
+                double py = j / (double) SDF_SUB;
+                int cy = (int) Math.floor(py);
+                int y0 = Math.max(0, cy - SDF_WINDOW), y1 = Math.min(mh - 1, cy + SDF_WINDOW);
+                for (int i = i0; i < iEnd; i++) {
+                    double best = none;
+                    for (int yy = y0; yy <= y1; yy++) {
+                        double gap = gaps[(yy - yLo) * width + (i - i0)];
+                        if (gap == none) continue;
+                        double dy = Math.max(Math.max(yy - py, py - (yy + 1)), 0);
+                        double sq = dy * dy + gap;
+                        if (sq < best) best = sq;
+                    }
+                    tile[(j - j0) * SDF_TILE + (i - i0)] = best == none ? SDF_WINDOW : Math.sqrt(best);
+                }
+            }
+            return tile;
+        }
+    }
+    private static final class MapData {
+        final byte[] corners;
+        final int cols, rows, sub;
+        final boolean hasFinish;
+        final double[] sdf;
+
+        MapData(int[][] m, SDFField sdfField, byte[] corners) {
+            this.corners = corners;
+            cols = sdfField.cols;
+            rows = sdfField.rows;
+            sub = (cols - 1) / m[0].length;
+            hasFinish = sdfField.hasFinish;
+            sdf = new double[cols * rows * 2];
+            double[] wall = corners != null ? roundedWallField(m, corners, sub, cols, rows) : sdfField.wallGrid();
+            double[] finish = sdfField.finishGrid();
+            for (int p = 0; p < cols * rows; p++) {
+                sdf[2 * p] = wall[p];
+                sdf[2 * p + 1] = finish[p];
+            }
+        }
+    }
+    //endregion
+
+    //region Edge Entry
     private static double concaveEntry(double px, double py, double dx, double dy, int cx, int cy, int mask, TraceHit out) {
         final double r = CORNER_RADIUS, hi = 1.0 - r;
         final double lx = px - cx, ly = py - cy;
@@ -970,7 +903,6 @@ public final class MoriartyEngine implements RenderEngine {
         }
         return best;
     }
-
     private static double rectEntry(double lx, double ly, double dx, double dy, double x0, double x1, double y0, double y1, double best, TraceHit out) {
         double tx0 = -INF, tx1 = INF, ty0 = -INF, ty1 = INF;
         if (Math.abs(dx) < 1e-12) { if (lx < x0 || lx > x1) return best; }
@@ -1009,6 +941,9 @@ public final class MoriartyEngine implements RenderEngine {
         if ((side == 0 && dirX < 0) || (side == 1 && dirY > 0)) u = 1.0 - u;
         return Math.clamp(u, 0.0, 0.999999);
     }
+    //endregion
+
+    //region Ray Marching
     private void traceRayM(double ox, double oy, double oz, double rx, double ry, double rz, int[][] startMap, PortalData startPortals, TraceHit result, int maxSteps) {
         result.reset();
         final int mapWidth = startMap[0].length, mapHeight = startMap.length;
@@ -1129,6 +1064,7 @@ public final class MoriartyEngine implements RenderEngine {
 
         result.map = rayMap;
         result.portals = rayPortals;
+        result.dirX = rx; result.dirY = ry; result.dirZ = rz;
 
         double planeT = INF;
         int planeType = 0;
@@ -1162,10 +1098,49 @@ public final class MoriartyEngine implements RenderEngine {
             setNormal(result, false, 0, 0);
         }
     }
+    private static double solidDistanceAt(double dw, double df, boolean hasFinish, double z) {
+        double dz = Math.max(0.0, z - 1.0);
+        double d = Math.sqrt(dw * dw + dz * dz);
+        if (hasFinish) {
+            double ddz = Math.max(0.0, z - 0.5);
+            d = Math.min(d, Math.sqrt(df * df + ddz * ddz));
+        }
+        return d;
+    }
+    private static double gridValue(MapData mapData, int channel, double x, double y) {
+        final int cols = mapData.cols, rows = mapData.rows;
+        final double[] g = mapData.sdf;
+        double gx = Math.clamp(x * mapData.sub, 0, cols - 1.000001), gy = Math.clamp(y * mapData.sub, 0, rows - 1.000001);
+        int i0 = (int) gx, j0 = (int) gy;
+        int i1 = Math.min(i0 + 1, cols - 1), j1 = Math.min(j0 + 1, rows - 1);
+        double fx = gx - i0, fy = gy - j0;
+        double a = g[(j0 * cols + i0) * 2 + channel], b = g[(j0 * cols + i1) * 2 + channel];
+        double c = g[(j1 * cols + i0) * 2 + channel], d = g[(j1 * cols + i1) * 2 + channel];
+        return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
+    }
+    public static final class TraceHit {
+        double x, y, z, distance;
+        int type, side;
+        double wallU, wallV;
+        double dirX, dirY, dirZ;
+        boolean hit, isPlane, hyp;
+        double hypSlope;
+        int[][] map;
+        PortalData portals;
+        boolean curved;
+        double nrmX, nrmY;
+
+        void reset() {
+            x = y = z = distance = wallU = wallV = dirX = dirY = dirZ = hypSlope = 0; type = side = 0;
+            hit = isPlane = hyp = false; map = null; portals = null;
+            curved = false; nrmX = nrmY = 0;
+        }
+    }
     //endregion
 
-    //region Shading (raymarch occlusion + ray-traced reflections)
+    //region Shading
     private int shadeHit(TraceHit hit, double pathBefore, int depth, int steps, TraceHit[] scratch) {
+        if (fr.skyCeiling && (!hit.hit || (hit.isPlane && hit.type != -1))) return SkyCeiling.colorDir(hit.dirX, hit.dirY, hit.dirZ, fr.skyTime);
         if (!hit.hit) return ceilingBaseColor;
         double lx = -hit.dirX, ly = -hit.dirY, lz = -hit.dirZ + 0.18;
         double llen = Math.sqrt(lx * lx + ly * ly + lz * lz);
@@ -1248,24 +1223,23 @@ public final class MoriartyEngine implements RenderEngine {
         int reflectedColor = shadeHit(reflected, dist, depth - 1, steps, scratch);
         return mixColor(lit, reflectedColor, reflectivity);
     }
-
-    private double occlusionMarch(MapData md, double px, double py, double pz, double nx, double ny, double nz) {
+    private double occlusionMarch(MapData mapData, double px, double py, double pz, double nx, double ny, double nz) {
         double occ = 0, weight = 1.0;
         if (nx == 0 && ny == 0) {
-            double dw = gridValue(md, 0, px, py);
-            double df = md.hasFinish ? gridValue(md, 1, px, py) : 0.0;
+            double dw = gridValue(mapData, 0, px, py);
+            double df = mapData.hasFinish ? gridValue(mapData, 1, px, py) : 0.0;
             for (int i = 0; i < aoSamples; i++) {
                 double h = AO_HEIGHTS[i];
-                double d = solidDistanceAt(dw, df, md.hasFinish, pz + nz * h);
+                double d = solidDistanceAt(dw, df, mapData.hasFinish, pz + nz * h);
                 occ += Math.max(0.0, h - d) * weight;
                 weight *= 0.6;
             }
         }
         else {
-            final int cols = md.cols, rows = md.rows;
-            final double[] g = md.sdf;
-            final double sub = md.sub;
-            final boolean hasFinish = md.hasFinish;
+            final int cols = mapData.cols, rows = mapData.rows;
+            final double[] g = mapData.sdf;
+            final double sub = mapData.sub;
+            final boolean hasFinish = mapData.hasFinish;
             for (int i = 0; i < aoSamples; i++) {
                 double h = AO_HEIGHTS[i];
                 double x = px + nx * h, y = py + ny * h;
@@ -1283,29 +1257,63 @@ public final class MoriartyEngine implements RenderEngine {
         }
         return Math.clamp(1.0 - AO_STRENGTH * occ, AO_FLOOR, 1.0);
     }
-    private static double solidDistanceAt(double dw, double df, boolean hasFinish, double z) {
-        double dz = Math.max(0.0, z - 1.0);
-        double d = Math.sqrt(dw * dw + dz * dz);
-        if (hasFinish) {
-            double ddz = Math.max(0.0, z - 0.5);
-            d = Math.min(d, Math.sqrt(df * df + ddz * ddz));
-        }
-        return d;
+    static double smooth(double t) { t = Math.clamp(t, 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
+    static double glintPow(double x, int exp) {
+        double x2 = x * x, x4 = x2 * x2, x8 = x4 * x4, x16 = x8 * x8;
+        if (exp == 16) return x16;
+        if (exp == 24) return x16 * x8;
+        return x16 * x8 * x4 * x2;
     }
-    private static double gridValue(MapData md, int channel, double x, double y) {
-        final int cols = md.cols, rows = md.rows;
-        final double[] g = md.sdf;
-        double gx = Math.clamp(x * md.sub, 0, cols - 1.000001), gy = Math.clamp(y * md.sub, 0, rows - 1.000001);
-        int i0 = (int) gx, j0 = (int) gy;
-        int i1 = Math.min(i0 + 1, cols - 1), j1 = Math.min(j0 + 1, rows - 1);
-        double fx = gx - i0, fy = gy - j0;
-        double a = g[(j0 * cols + i0) * 2 + channel], b = g[(j0 * cols + i1) * 2 + channel];
-        double c = g[(j1 * cols + i0) * 2 + channel], d = g[(j1 * cols + i1) * 2 + channel];
-        return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
+    static double wallOcclusion(double z, double height) {
+        double ao = 1.0 - 0.45 * (1.0 - smooth(z / 0.22));
+        ao *= 1.0 - 0.25 * (1.0 - smooth((height - z) / 0.14));
+        return ao;
+    }
+    static int mixColor(int a, int b, double amount) {
+        amount = Math.clamp(amount, 0, 1);
+        int ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
+        int br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
+        return ((int) (ar * (1 - amount) + br * amount) << 16) | ((int) (ag * (1 - amount) + bg * amount) << 8) | (int) (ab * (1 - amount) + bb * amount);
     }
     //endregion
 
-    //region Light helpers
+    //region Textures
+    static int sampleTexture(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
+        int width = texture.width(), height = texture.height();
+        if (width <= 0 || height <= 0) return baseColor;
+        double fracX = worldX - Math.floor(worldX);
+        double fracY = worldY - Math.floor(worldY);
+        int tx = Math.min((int)(fracX * width), width - 1);
+        int ty = Math.min((int)(fracY * height), height - 1);
+        return texture.pixels()[ty * width + tx];
+    }
+    static int planeColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
+        return sampleTexture(texture, worldX, worldY, baseColor);
+    }
+    static int sampleWallTexture(RuntimeTexture texture, TraceHit hit) {
+        if (texture.width() <= 0 || texture.height() <= 0) return hit.type == 2 ? finishBaseColor : wallBaseColor;
+        int tx = Math.min((int) (hit.wallU * texture.width()), texture.width() - 1);
+        int ty = Math.min((int) ((1.0 - hit.wallV) * texture.height()), texture.height() - 1);
+        return texture.pixels()[ty * texture.width() + Math.max(0, tx)];
+    }
+    static int tintStairs(int color, double worldX, double worldY, int[][] floorMap) {
+        int fx = (int) Math.floor(worldX), fy = (int) Math.floor(worldY);
+        if (fx < 0 || fy < 0 || fy >= floorMap.length || fx >= floorMap[0].length) return color;
+        int cell = floorMap[fy][fx];
+        if (cell == 3) return tintColor(color, 0x3399FF);
+        if (cell == 4) return tintColor(color, 0xFFAA33);
+        return color;
+    }
+    private static int tintColor(int color, int tint) {
+        int r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
+        int tr = (tint >> 16) & 255, tg = (tint >> 8) & 255, tb = tint & 255;
+        r = (int)(r * (1 - 0.45) + tr * 0.45); g = (int)(g * (1 - 0.45) + tg * 0.45); b = (int)(b * (1 - 0.45) + tb * 0.45);
+        return (r << 16) | (g << 8) | b;
+    }
+    //endregion
+
+    //region Tone Mapping
+    static double toneCurve(double v) { return v <= 0.7 ? v : 0.7 + 0.3 * (1.0 - Math.exp(-(v - 0.7) / 0.3)); }
     private static double[] buildToneLut() {
         double[] lut = new double[TONE_STEPS + 1];
         for (int i = 0; i <= TONE_STEPS; i++) lut[i] = toneCurve(i * TONE_MAX / TONE_STEPS);
@@ -1318,71 +1326,67 @@ public final class MoriartyEngine implements RenderEngine {
     }
     //endregion
 
-    //region Nested Types
-    private static final class Column {
-        double ux, uy, hl;
-        boolean fallback;
-        double wallDist, wallTexU, wallNx, wallNy;
-        int wallSide;
-        boolean wallCurved;
-        int finCount;
-        final double[] finDist = new double[MAX_FIN], finU = new double[MAX_FIN];
-        final double[] finNx = new double[MAX_FIN], finNy = new double[MAX_FIN];
-        final int[] finSide = new int[MAX_FIN];
-        final boolean[] finCurved = new boolean[MAX_FIN];
-        final TraceHit scratch = new TraceHit();
-    }
-    //endregion
-
-    //region OpenCL plug-in
+    //region GPU Acceleration
     static final class Gpu {
-        private final String source = Project.OpenCl.KernelSource.load(MoriartyEngine.class);
-        private static final int DP_COUNT = 9, IP_COUNT = 18, COL_FLOATS = 35;
-        private static Gpu instance;
-        private static boolean disabled;
-        private static final java.util.IdentityHashMap<int[][], MapData> mapDataCache = new java.util.IdentityHashMap<>();
-
+        private final String source = Project.OpenCl.KernelSource.load(MoriartyEngine.class, SkyCeiling.GPU_SOURCE);
         private final GpuProgram primary = new GpuProgram(source, "mo_primary");
         private final GpuProgram shade = new GpuProgram(source, "mo_shade");
         private final GpuProgram columns = new GpuProgram(source, "mo_columns");
         private GpuProgram.Buffer maps, grid, meta, corners, sdf, portals, colBuf, kind, dist, wall, finish, floor, ceil, dp, ip, out;
         private int[] wallSrc, finishSrc, floorSrc, ceilSrc;
+        private static final int DP_COUNT = 10, IP_COUNT = 19, COL_FLOATS = 35;
+        private static Gpu instance;
+        private static boolean disabled;
+        private static final java.util.IdentityHashMap<int[][], MapData> mapDataCache = new java.util.IdentityHashMap<>();
         private Object[] worldKey = new Object[0];
 
-        static boolean tryRender(RenderFrame fr) {
-            synchronized (GpuRuntime.LOCK) { return tryRenderLocked(fr); }
+        static boolean tryRender(RenderFrame renderFrame) {
+            synchronized (GpuRuntime.LOCK) { return tryRenderLocked(renderFrame); }
         }
-
-        private static boolean tryRenderLocked(RenderFrame fr) {
+        static double[] cameraParams(RenderFrame renderFrame, int width, int height) {
+            double dirX = Math.cos(renderFrame.cameraAngle), dirY = Math.sin(renderFrame.cameraAngle);
+            double tanHalfFov = Math.tan(Math.toRadians(60.0) * 0.5);
+            double verticalTan = tanHalfFov / ((double) width / height);
+            return new double[]{
+                    renderFrame.playerX, renderFrame.playerY, renderFrame.cameraHeight,
+                    dirX, dirY, Math.cos(renderFrame.cameraPitch), Math.sin(renderFrame.cameraPitch),
+                    tanHalfFov, verticalTan, renderFrame.skyTime
+            };
+        }
+        static int[] ipValues(RenderFrame renderFrame, int width, int height, int floors, boolean tinted) {
+            int q = Math.clamp(cfgQuality, 0, 2);
+            return new int[]{
+                    width, height, floors, tinted ? 1 : 0,
+                    renderFrame.wallTexture.width(), renderFrame.wallTexture.height(),
+                    renderFrame.finishTexture.width(), renderFrame.finishTexture.height(),
+                    renderFrame.floorTexture.width(), renderFrame.floorTexture.height(),
+                    renderFrame.ceilingTexture.width(), renderFrame.ceilingTexture.height(),
+                    q, AO_SAMPLES[q], REFLECTION_DEPTH[q], REFLECTION_STEPS[q], EDGE_GRID[q],
+                    renderFrame.cameraPitch == 0 ? 1 : 0, renderFrame.skyCeiling ? 1 : 0
+            };
+        }
+        private static boolean tryRenderLocked(RenderFrame renderFrame) {
             if (disabled || GpuRuntime.session() == null) return false;
             try {
                 if (instance == null) instance = new Gpu();
-                instance.render(fr);
+                instance.render(renderFrame);
                 return true;
             }
-            catch (RuntimeException | Error e) {
+            catch (RuntimeException | Error exception) {
                 disabled = true;
-                e.printStackTrace(System.err);
-                Project.OpenCl.GpuRuntime.reportFailure(ID, String.valueOf(e));
+                exception.printStackTrace(System.err);
+                Project.OpenCl.GpuRuntime.reportFailure(ID, String.valueOf(exception));
                 return false;
             }
         }
-
-        private GpuProgram.Buffer ensure(GpuProgram.Buffer current, long bytes) {
-            long size = Math.max(4L, bytes);
-            if (current != null && current.bytes() == size) return current;
-            if (current != null) shade.release(current);
-            return shade.buffer(size);
-        }
-
-        private void render(RenderFrame fr) {
-            final int width = fr.renderWidth, height = fr.renderHeight;
+        private void render(RenderFrame renderFrame) {
+            final int width = renderFrame.renderWidth, height = renderFrame.renderHeight;
             if (width <= 0 || height <= 0) return;
-            if (fr.renderPixels == null || fr.renderPixels.length < width * height) throw new IllegalStateException("render buffer too small");
+            if (renderFrame.renderPixels == null || renderFrame.renderPixels.length < width * height) throw new IllegalStateException("render buffer too small");
 
-            Object[] key = worldKey(fr);
+            Object[] key = worldKey(renderFrame);
             if (!java.util.Arrays.equals(key, worldKey)) {
-                uploadWorld(fr);
+                uploadWorld(renderFrame);
                 worldKey = key;
             }
 
@@ -1392,38 +1396,39 @@ public final class MoriartyEngine implements RenderEngine {
             dp = ensure(dp, 4L * DP_COUNT);
             ip = ensure(ip, 4L * IP_COUNT);
             out = ensure(out, 4L * count);
-            int[][][] layers = layersOf(fr);
-            shade.write(dp, cameraParams(fr, width, height), DP_COUNT);
-            shade.write(ip, ipValues(fr, width, height, layers.length - 1, is3D(fr)), IP_COUNT);
+            int[][][] layers = layersOf(renderFrame);
+            shade.write(dp, cameraParams(renderFrame, width, height), DP_COUNT);
+            shade.write(ip, ipValues(renderFrame, width, height, layers.length - 1, is3D(renderFrame)), IP_COUNT);
 
             GpuProgram.Buffer before = wall;
-            wall = ensure(wall, 4L * fr.wallTexture.pixels().length);
-            if (wall != before || fr.wallTexture.pixels() != wallSrc) { wallSrc = fr.wallTexture.pixels(); shade.write(wall, wallSrc, wallSrc.length); }
+            wall = ensure(wall, 4L * renderFrame.wallTexture.pixels().length);
+            if (wall != before || renderFrame.wallTexture.pixels() != wallSrc) { wallSrc = renderFrame.wallTexture.pixels(); shade.write(wall, wallSrc, wallSrc.length); }
             before = finish;
-            finish = ensure(finish, 4L * fr.finishTexture.pixels().length);
-            if (finish != before || fr.finishTexture.pixels() != finishSrc) { finishSrc = fr.finishTexture.pixels(); shade.write(finish, finishSrc, finishSrc.length); }
+            finish = ensure(finish, 4L * renderFrame.finishTexture.pixels().length);
+            if (finish != before || renderFrame.finishTexture.pixels() != finishSrc) { finishSrc = renderFrame.finishTexture.pixels(); shade.write(finish, finishSrc, finishSrc.length); }
             before = floor;
-            floor = ensure(floor, 4L * fr.floorTexture.pixels().length);
-            if (floor != before || fr.floorTexture.pixels() != floorSrc) { floorSrc = fr.floorTexture.pixels(); shade.write(floor, floorSrc, floorSrc.length); }
+            floor = ensure(floor, 4L * renderFrame.floorTexture.pixels().length);
+            if (floor != before || renderFrame.floorTexture.pixels() != floorSrc) { floorSrc = renderFrame.floorTexture.pixels(); shade.write(floor, floorSrc, floorSrc.length); }
             before = ceil;
-            ceil = ensure(ceil, 4L * fr.ceilingTexture.pixels().length);
-            if (ceil != before || fr.ceilingTexture.pixels() != ceilSrc) { ceilSrc = fr.ceilingTexture.pixels(); shade.write(ceil, ceilSrc, ceilSrc.length); }
+            ceil = ensure(ceil, 4L * renderFrame.ceilingTexture.pixels().length);
+            if (ceil != before || renderFrame.ceilingTexture.pixels() != ceilSrc) { ceilSrc = renderFrame.ceilingTexture.pixels(); shade.write(ceil, ceilSrc, ceilSrc.length); }
 
             int edgeGrid = EDGE_GRID[Math.clamp(cfgQuality, 0, 2)];
             colBuf = ensure(colBuf, 4L * width * (1 + edgeGrid) * COL_FLOATS);
-            if (fr.cameraPitch == 0) columns.run(width * (1 + edgeGrid), 1, maps, grid, meta, corners, sdf, portals, colBuf, dp, ip);
+            if (renderFrame.cameraPitch == 0) columns.run(width * (1 + edgeGrid), 1, maps, grid, meta, corners, sdf, portals, colBuf, dp, ip);
             if (edgeGrid > 1) primary.run(width, height, maps, grid, meta, corners, sdf, portals, colBuf, kind, dist, dp, ip);
             shade.run(width, height, maps, grid, meta, corners, sdf, portals, wall, finish, floor, ceil, colBuf, kind, dist, out, dp, ip);
-            shade.read(out, fr.renderPixels, count);
+            shade.read(out, renderFrame.renderPixels, count);
         }
-        private static Object[] worldKey(RenderFrame fr) {
-            java.util.ArrayList<Object> key = new java.util.ArrayList<>(Arrays.asList(layersOf(fr)));
-            key.add(fr.portals);
-            if (fr.floorPortalsAll != null) key.addAll(Arrays.asList(fr.floorPortalsAll));
+
+        private static Object[] worldKey(RenderFrame renderFrame) {
+            java.util.ArrayList<Object> key = new java.util.ArrayList<>(Arrays.asList(layersOf(renderFrame)));
+            key.add(renderFrame.portals);
+            if (renderFrame.floorPortalsAll != null) key.addAll(Arrays.asList(renderFrame.floorPortalsAll));
             return key.toArray();
         }
-        private void uploadWorld(RenderFrame fr) {
-            int[][][] layers = layersOf(fr);
+        private void uploadWorld(RenderFrame renderFrame) {
+            int[][][] layers = layersOf(renderFrame);
             final int n = layers.length;
             MapData[] data = new MapData[n];
             PortalData[] layerPortals = new PortalData[n];
@@ -1432,8 +1437,8 @@ public final class MoriartyEngine implements RenderEngine {
                 data[l] = mapDataFor(layers[l]);
                 cells += layers[l].length * layers[l][0].length;
                 points += data[l].cols * data[l].rows;
-                PortalData pd = l == 0 ? fr.portals : (fr.floorPortalsAll == null || l - 1 >= fr.floorPortalsAll.length ? null : fr.floorPortalsAll[l - 1]);
-                layerPortals[l] = pd == null ? new PortalData() : pd;
+                PortalData portalData = l == 0 ? renderFrame.portals : (renderFrame.floorPortalsAll == null || l - 1 >= renderFrame.floorPortalsAll.length ? null : renderFrame.floorPortalsAll[l - 1]);
+                layerPortals[l] = portalData == null ? new PortalData() : portalData;
                 portalCount += layerPortals[l].values().size();
             }
 
@@ -1447,36 +1452,36 @@ public final class MoriartyEngine implements RenderEngine {
             for (int l = 0; l < n; l++) {
                 int[][] m = layers[l];
                 int h = m.length, w = m[0].length;
-                MapData md = data[l];
+                MapData mapData = data[l];
                 metaA[8 * l] = offset;
                 metaA[8 * l + 1] = w;
                 metaA[8 * l + 2] = h;
                 metaA[8 * l + 3] = pointOffset;
-                metaA[8 * l + 4] = md.cols;
-                metaA[8 * l + 5] = md.rows;
-                metaA[8 * l + 6] = md.hasFinish ? 1 : 0;
-                metaA[8 * l + 7] = md.sub;
+                metaA[8 * l + 4] = mapData.cols;
+                metaA[8 * l + 5] = mapData.rows;
+                metaA[8 * l + 6] = mapData.hasFinish ? 1 : 0;
+                metaA[8 * l + 7] = mapData.sub;
                 for (int y = 0; y < h; y++) {
                     System.arraycopy(m[y], 0, mapsA, offset + y * w, w);
-                    for (int x = 0; x < w; x++) cornersA[offset + y * w + x] = md.corners[y * w + x];
+                    for (int x = 0; x < w; x++) cornersA[offset + y * w + x] = mapData.corners[y * w + x];
                 }
-                for (PortalData.Portal p : layerPortals[l].values()) {
-                    if (p.x < 0 || p.y < 0 || p.x >= w || p.y >= h) continue;
-                    gridA[offset + p.y * w + p.x] = portalIndex;
+                for (PortalData.Portal portal : layerPortals[l].values()) {
+                    if (portal.x < 0 || portal.y < 0 || portal.x >= w || portal.y >= h) continue;
+                    gridA[offset + portal.y * w + portal.x] = portalIndex;
                     int base = 9 * portalIndex;
-                    portalsA[base] = p.x;
-                    portalsA[base + 1] = p.y;
-                    portalsA[base + 2] = p.dirX;
-                    portalsA[base + 3] = p.dirY;
-                    portalsA[base + 4] = p.linkedX;
-                    portalsA[base + 5] = p.linkedY;
-                    portalsA[base + 6] = p.linkedDirX;
-                    portalsA[base + 7] = p.linkedDirY;
-                    portalsA[base + 8] = p.linkedFloor;
+                    portalsA[base] = portal.x;
+                    portalsA[base + 1] = portal.y;
+                    portalsA[base + 2] = portal.dirX;
+                    portalsA[base + 3] = portal.dirY;
+                    portalsA[base + 4] = portal.linkedX;
+                    portalsA[base + 5] = portal.linkedY;
+                    portalsA[base + 6] = portal.linkedDirX;
+                    portalsA[base + 7] = portal.linkedDirY;
+                    portalsA[base + 8] = portal.linkedFloor;
                     portalIndex++;
                 }
-                System.arraycopy(md.sdf, 0, sdfA, 2 * pointOffset, md.sdf.length);
-                pointOffset += md.cols * md.rows;
+                System.arraycopy(mapData.sdf, 0, sdfA, 2 * pointOffset, mapData.sdf.length);
+                pointOffset += mapData.cols * mapData.rows;
                 offset += w * h;
             }
 
@@ -1493,44 +1498,27 @@ public final class MoriartyEngine implements RenderEngine {
             portals = ensure(portals, 4L * portalsA.length);
             shade.write(portals, portalsA, portalsA.length);
         }
-
         private static MapData mapDataFor(int[][] m) {
-            MapData d = mapDataCache.get(m);
-            if (d == null) {
+            MapData mapData = mapDataCache.get(m);
+            if (mapData == null) {
                 if (mapDataCache.size() >= MAX_CACHED_MAPS) mapDataCache.clear();
-                d = new MapData(m, sdfFieldFor(m), buildCorners(m));
-                mapDataCache.put(m, d);
+                mapData = new MapData(m, sdfFieldFor(m), buildCorners(m));
+                mapDataCache.put(m, mapData);
             }
-            return d;
+            return mapData;
         }
-        private static int[][][] layersOf(RenderFrame fr) {
-            int floors = fr.map3D == null ? 0 : fr.map3D.length;
+        private static int[][][] layersOf(RenderFrame renderFrame) {
+            int floors = renderFrame.map3D == null ? 0 : renderFrame.map3D.length;
             int[][][] layers = new int[1 + floors][][];
-            layers[0] = fr.map;
-            if (floors > 0) System.arraycopy(fr.map3D, 0, layers, 1, floors);
+            layers[0] = renderFrame.map;
+            if (floors > 0) System.arraycopy(renderFrame.map3D, 0, layers, 1, floors);
             return layers;
         }
-        static double[] cameraParams(RenderFrame fr, int width, int height) {
-            double dirX = Math.cos(fr.cameraAngle), dirY = Math.sin(fr.cameraAngle);
-            double tanHalfFov = Math.tan(Math.toRadians(60.0) * 0.5);
-            double verticalTan = tanHalfFov / ((double) width / height);
-            return new double[]{
-                    fr.playerX, fr.playerY, fr.cameraHeight,
-                    dirX, dirY, Math.cos(fr.cameraPitch), Math.sin(fr.cameraPitch),
-                    tanHalfFov, verticalTan
-            };
-        }
-        static int[] ipValues(RenderFrame fr, int width, int height, int floors, boolean tinted) {
-            int q = Math.clamp(cfgQuality, 0, 2);
-            return new int[]{
-                    width, height, floors, tinted ? 1 : 0,
-                    fr.wallTexture.width(), fr.wallTexture.height(),
-                    fr.finishTexture.width(), fr.finishTexture.height(),
-                    fr.floorTexture.width(), fr.floorTexture.height(),
-                    fr.ceilingTexture.width(), fr.ceilingTexture.height(),
-                    q, AO_SAMPLES[q], REFLECTION_DEPTH[q], REFLECTION_STEPS[q], EDGE_GRID[q],
-                    fr.cameraPitch == 0 ? 1 : 0
-            };
+        private GpuProgram.Buffer ensure(GpuProgram.Buffer current, long bytes) {
+            long size = Math.max(4L, bytes);
+            if (current != null && current.bytes() == size) return current;
+            if (current != null) shade.release(current);
+            return shade.buffer(size);
         }
     }
     //endregion

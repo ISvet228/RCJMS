@@ -102,6 +102,7 @@
         }
 
         r.layer = rayLayer;
+        r.dirX = rx; r.dirY = ry; r.dirZ = rz;
         float planeT = INFINITY;
         int planeType = 0;
         if (rz < -1e-9f) { planeT = -oz / rz; planeType = -1; }
@@ -237,7 +238,7 @@
     static Shade shadeOneRT(Hit h, float lx, float ly, float lz, float pathBefore, __global const int* maps, __global const int* meta,
                             __global const int* wallTex, int ww, int wh, __global const int* finishTex, int fw, int fh, __global const int* floorTex, int flw, int flh,
                             __global const int* ceilTex, int clw, int clh, __global const float* sdfW, __global const float* sdfF, __global const int* sm,
-                            __global const float* lut, int tinted) {
+                            __global const float* lut, int tinted, int sky, float skyTime) {
         Shade s;
         float llen = sqrt(lx * lx + ly * ly + lz * lz);
         if (llen > 1e-9f) { lx /= llen; ly /= llen; lz /= llen; }
@@ -248,6 +249,7 @@
         int emissive = 0;
         if (h.isPlane) {
             int isFloor = h.type == -1;
+            if (!isFloor && sky) { s.lit = skyDirGpu(h.dirX, h.dirY, h.dirZ, skyTime); s.refl = 0; s.dist = 0; s.nx = 0; s.ny = 0; s.nz = 1; return s; }
             base = isFloor ? sampleFloorCeilRT(floorTex, flw, flh, h.x, h.y, FLOOR_BASE_RT) : sampleFloorCeilRT(ceilTex, clw, clh, h.x, h.y, CEILING_BASE_RT);
             if (isFloor && tinted) base = tintStairsGpu(base, h.x, h.y, h.layer, maps, meta);
             nx = 0; ny = 0; nz = isFloor ? 1 : -1;
@@ -313,6 +315,7 @@
         if (x >= W || y >= H) return;
 
         float px = dp[0], py = dp[1], pz = dp[2];
+        int sky = ip[14]; float skyTime = dp[9];
         float dirX = dp[3], dirY = dp[4], cp = dp[5], sp = dp[6], tanHalfFov = dp[7], verticalTan = dp[8];
 
         float sx = ((x + 0.5f) / W * 2.0f - 1.0f) * tanHalfFov;
@@ -324,7 +327,7 @@
         rx *= inv; ry *= inv; rz *= inv;
 
         Hit cur = traceRay(px, py, pz, rx, ry, rz, 0, floors, maps, meta, grid, portals, MAX_PRIMARY_STEPS);
-        if (!cur.hit) { out[y * W + x] = CEILING_BASE_RT; return; }
+        if (!cur.hit) { out[y * W + x] = sky ? skyDirGpu(cur.dirX, cur.dirY, cur.dirZ, skyTime) : CEILING_BASE_RT; return; }
 
         int lits[3];
         float refls[3];
@@ -335,7 +338,7 @@
         int depthLeft = depthMax;
         for (int k = 0; ; k++) {
             Shade s = shadeOneRT(cur, lx, ly, lz, pathBefore, maps, meta, wallTex, ip[6], ip[7], finishTex, ip[8], ip[9],
-                                 floorTex, ip[10], ip[11], ceilTex, ip[12], ip[13], sdfW, sdfF, sm, lut, tinted);
+                                 floorTex, ip[10], ip[11], ceilTex, ip[12], ip[13], sdfW, sdfF, sm, lut, tinted, sky, skyTime);
             lits[k] = s.lit;
             refls[k] = s.refl;
             count = k + 1;
@@ -350,7 +353,7 @@
             rrx /= rlen; rry /= rlen; rrz /= rlen;
 
             Hit child = traceRay(cur.x + s.nx * 0.004f, cur.y + s.ny * 0.004f, cur.z + s.nz * 0.004f, rrx, rry, rrz, cur.layer, floors, maps, meta, grid, portals, steps);
-            if (!child.hit) { result = s.lit; break; }
+            if (!child.hit) { result = sky ? mixColorRT(s.lit, skyDirGpu(child.dirX, child.dirY, child.dirZ, skyTime), s.refl) : s.lit; break; }
 
             cur = child;
             lx = -rrx; ly = -rry; lz = -rrz + 0.18f;

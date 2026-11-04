@@ -1,4 +1,7 @@
 package Project.Helpers;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import Project.Game.RenderEngines;
 import Project.StyleUI.Style;
@@ -10,7 +13,10 @@ import java.util.*;
 
 public final class SaveData {
     //region Variables
+    //region Format
     public static final String VERSION = "2.3";
+    //endregion
+    //region Default Settings
     public static final String DEFAULT_LANGUAGE = Locale.getDefault().getLanguage();
     public static final Style DEFAULT_THEME = Style.FLAT;
     public static final double DEFAULT_RENDER_SCALE = 1.0;
@@ -24,18 +30,13 @@ public final class SaveData {
     public static final int DEFAULT_MAZE_SIZE = 25, DEFAULT_MAZE_FLOORS = 3;
     public static final String DEFAULT_MENU_THEME = "space";
     //endregion
+    //endregion
 
     //region Constructors
     private SaveData() { }
     //endregion
 
-    //region Public API
-    private static String parseRenderEngine(String value) {
-        String trimmed = value.trim();
-        // Older saves stored the engine's position in the list instead of its id.
-        if (trimmed.matches("\\d{1,3}")) return RenderEngines.idAt(Integer.parseInt(trimmed));
-        return trimmed;
-    }
+    //region Loading
     public static Data load() {
         Data data = new Data();
         Path file = AppPaths.SAVE_FILE;
@@ -85,6 +86,9 @@ public final class SaveData {
                             }
                             case "vsync" -> data.vsync = Boolean.parseBoolean(value);
                             case "openCl" -> data.openCl = Boolean.parseBoolean(value);
+                            case "doomMovement" -> data.doomMovement = Boolean.parseBoolean(value);
+                            case "noCeiling" -> data.noCeiling = Boolean.parseBoolean(value);
+                            case "textMode" -> data.textMode = Boolean.parseBoolean(value);
                             case "renderEngine" -> { data.renderEngine = parseRenderEngine(value); engineSet = true; }
                             case "renderEngineQuality" -> data.renderEngineQuality = Math.clamp(Integer.parseInt(value), 0, 3);
                             case "windowWidth" -> { int w = Integer.parseInt(value); if (w >= 960) data.windowWidth = w; }
@@ -170,6 +174,14 @@ public final class SaveData {
         } catch (IOException ignored) { }
         return data;
     }
+    private static String parseRenderEngine(String value) {
+        String trimmed = value.trim();
+        if (trimmed.matches("\\d{1,3}")) return RenderEngines.idAt(Integer.parseInt(trimmed));
+        return trimmed;
+    }
+    //endregion
+
+    //region Saving
     public static void saveSettings(String language, Style theme, double renderScale, boolean vsync, String renderEngine, int renderEngineQuality, int windowWidth, int windowHeight, boolean fullscreen, boolean openCl) throws IOException {
         Data data = load();
         data.language = language;
@@ -182,6 +194,13 @@ public final class SaveData {
         data.windowHeight = windowHeight >= 540 ? windowHeight : DEFAULT_WINDOW_HEIGHT;
         data.fullscreen = fullscreen;
         data.openCl = openCl;
+        save(data);
+    }
+    public static void saveGameplay(boolean doomMovement, boolean noCeiling, boolean textMode) throws IOException {
+        Data data = load();
+        data.doomMovement = doomMovement;
+        data.noCeiling = noCeiling;
+        data.textMode = textMode;
         save(data);
     }
     public static void saveMenuTheme(String themeId) throws IOException {
@@ -213,7 +232,7 @@ public final class SaveData {
     }
     //endregion
 
-    //region Helpers
+    //region Writing Files
     private static void save(Data data) throws IOException {
         Files.createDirectories(AppPaths.DATA_DIR);
         Path temp = AppPaths.SAVE_FILE.resolveSibling(AppPaths.SAVE_FILE.getFileName() + ".tmp");
@@ -230,6 +249,9 @@ public final class SaveData {
             writer.write("windowHeight=" + data.windowHeight); writer.newLine();
             writer.write("fullscreen=" + data.fullscreen); writer.newLine();
             writer.write("openCl=" + data.openCl); writer.newLine();
+            writer.write("doomMovement=" + data.doomMovement); writer.newLine();
+            writer.write("noCeiling=" + data.noCeiling); writer.newLine();
+            writer.write("textMode=" + data.textMode); writer.newLine();
             writer.write("menuTheme=" + data.menuTheme); writer.newLine(); writer.newLine();
 
             writer.write("[maze]"); writer.newLine();
@@ -281,14 +303,14 @@ public final class SaveData {
             writer.write("[portals]"); writer.newLine();
             if (data.mapPortalLinks != null) {
                 for (int[] link : data.mapPortalLinks) {
-                    StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < link.length; i++) { if (i > 0) sb.append(','); sb.append(link[i]); }
-                    writer.write(sb.toString()); writer.newLine();
+                    StringBuilder stringBuilder = new StringBuilder();
+                    for (int i = 0; i < link.length; i++) { if (i > 0) stringBuilder.append(','); stringBuilder.append(link[i]); }
+                    writer.write(stringBuilder.toString()); writer.newLine();
                 }
             }
         }
         try { Files.move(temp, AppPaths.SAVE_FILE, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
-        catch (AtomicMoveNotSupportedException e) { Files.move(temp, AppPaths.SAVE_FILE, StandardCopyOption.REPLACE_EXISTING); }
+        catch (AtomicMoveNotSupportedException exception) { Files.move(temp, AppPaths.SAVE_FILE, StandardCopyOption.REPLACE_EXISTING); }
     }
     private static String formatScale(double scale) {
         if (scale >= 0.99) return "1.0";
@@ -299,7 +321,7 @@ public final class SaveData {
     private static String safe(String value) { return value == null || value.isBlank() ? DEFAULT_LANGUAGE : value.trim(); }
     //endregion
 
-    //region Nested Types
+    //region Data Model
     public static final class Data {
         public String language = DEFAULT_LANGUAGE;
         public Style theme = DEFAULT_THEME;
@@ -312,18 +334,19 @@ public final class SaveData {
         public int windowHeight = DEFAULT_WINDOW_HEIGHT;
         public boolean fullscreen = DEFAULT_FULLSCREEN;
         public String menuTheme = DEFAULT_MENU_THEME;
-        public int[][] map;
-        public int[][][] mapFloors;
-        public List<int[]> mapPortalLinks = new ArrayList<>();
-        public int mapGeometryMode = 0;
+        public boolean doomMovement = false, noCeiling = false, textMode = false;
+        public boolean victoryRainbow = true;
+        public boolean victoryFireworks = true;
         public int mazeWidth = DEFAULT_MAZE_SIZE, mazeHeight = DEFAULT_MAZE_SIZE;
         public int mazeFinishMode = 0;
         public int mazeGeometry = 0;
         public boolean maze3D = false;
         public int mazeFloors = DEFAULT_MAZE_FLOORS;
         public boolean mazeFog = false;
-        public boolean victoryRainbow = true;
-        public boolean victoryFireworks = true;
+        public int[][] map;
+        public int[][][] mapFloors;
+        public List<int[]> mapPortalLinks = new ArrayList<>();
+        public int mapGeometryMode = 0;
     }
     //endregion
 }

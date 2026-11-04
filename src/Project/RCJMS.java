@@ -1,9 +1,13 @@
 package Project;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 import Project.Credits.CreditsView;
 import Project.Game.GameView;
 import Project.MainMenu.MainMenuView;
 import Project.MapEditor.MapEditorView;
 import Project.EngineCreator.RenderEngineCreatorView;
+import Project.ThemeCreator.ThemeCreatorView;
 import Project.TextureEditor.TextureEditorView;
 import Project.Victory.VictoryView;
 import Project.Helpers.SaveData;
@@ -15,7 +19,10 @@ import java.io.IOException;
 
 public class RCJMS extends JFrame {
     //region Variables
+    //region Singleton
     public static RCJMS instance;
+    //endregion
+    //region View References
     public MainMenuView mainMenuView = new MainMenuView();
     public GameView gameView;
     public VictoryView victoryView;
@@ -23,14 +30,21 @@ public class RCJMS extends JFrame {
     public CreditsView creditsView;
     public MapEditorView mapEditorView;
     public RenderEngineCreatorView renderEngineCreatorView;
+    public ThemeCreatorView themeCreatorView;
     private JPanel currentView;
-    private boolean fullscreen = false, f11Down = false, f8Down = false;
-
-    public static final int SCREEN_WIDTH = 960;//DO NOT CHANGE UI WILL BE BROKEN
-    public static final int SCREEN_HEIGHT = 540;//DO NOT CHANGE UI WILL BE BROKEN
+    //endregion
+    //region Window Metrics
+    public static final int SCREEN_WIDTH = 960;
+    //DO NOT CHANGE UI WILL BE BROKEN
+    public static final int SCREEN_HEIGHT = 540;
+    //DO NOT CHANGE UI WILL BE BROKEN
     public static int GAME_WIDTH = SCREEN_WIDTH;
     public static int GAME_HEIGHT = SCREEN_HEIGHT;
     public static final Color MY_FAV_GRAY = new Color(28, 28, 32);
+    //endregion
+    //region Fullscreen State
+    private boolean fullscreen = false, f11Down = false, f8Down = false;
+    //endregion
     //endregion
 
     //region Constructors
@@ -55,7 +69,30 @@ public class RCJMS extends JFrame {
     }
     //endregion
 
-    //region Public API
+    //region Startup
+    public static void main(String[] args) { SwingUtilities.invokeLater(() -> { try {new RCJMS();} catch (IOException exception){throw new RuntimeException(exception);}}); }
+    //endregion
+
+    //region Window Hotkeys
+    private void installWindowHotkeys() {
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(keyEvent -> {
+            int code = keyEvent.getKeyCode();
+            if (code != KeyEvent.VK_F11 && code != KeyEvent.VK_F8) return false;
+            Component source = keyEvent.getSource() instanceof Component component ? component : null;
+            Window window = source instanceof Window w ? w : source == null ? null : SwingUtilities.getWindowAncestor(source);
+            if (window != this) return false;
+            boolean pressed = keyEvent.getID() == KeyEvent.KEY_PRESSED;
+            if (keyEvent.getID() != KeyEvent.KEY_PRESSED && keyEvent.getID() != KeyEvent.KEY_RELEASED) return false;
+            boolean down = code == KeyEvent.VK_F11 ? f11Down : f8Down;
+            if (pressed && !down)
+                if (code == KeyEvent.VK_F11) setFullscreen(!fullscreen, true); else fixAspectRatio();
+            if (code == KeyEvent.VK_F11) f11Down = pressed; else f8Down = pressed;
+            return true;
+        });
+    }
+    //endregion
+
+    //region Fullscreen
     public void setFullscreen(boolean value, boolean save) {
         fullscreen = value;
         dispose();
@@ -92,6 +129,15 @@ public class RCJMS extends JFrame {
         revalidate();
         repaint();
     }
+    private void saveFullscreenSetting() {
+        try {
+            SaveData.Data data = SaveData.load();
+            SaveData.saveSettings(data.language, data.theme, data.renderScale, data.vsync, data.renderEngine, data.renderEngineQuality, GAME_WIDTH, GAME_HEIGHT, fullscreen, data.openCl);
+        } catch (IOException exception) { exception.printStackTrace(); }
+    }
+    //endregion
+
+    //region View Switching
     public void changeView(JPanel nextView, String nextTitle) {
         if (currentView != null) remove(currentView);
         add(nextView);
@@ -99,32 +145,6 @@ public class RCJMS extends JFrame {
         setTitle(nextTitle);
         revalidate();
         repaint();
-    }
-    public static void main(String[] args) { SwingUtilities.invokeLater(() -> { try {new RCJMS();} catch (IOException e){throw new RuntimeException(e);}}); }
-    //endregion
-
-    //region Helpers
-    private void installWindowHotkeys() {
-        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(e -> {
-            int code = e.getKeyCode();
-            if (code != KeyEvent.VK_F11 && code != KeyEvent.VK_F8) return false;
-            Component source = e.getSource() instanceof Component c ? c : null;
-            Window window = source instanceof Window w ? w : source == null ? null : SwingUtilities.getWindowAncestor(source);
-            if (window != this) return false;
-            boolean pressed = e.getID() == KeyEvent.KEY_PRESSED;
-            if (e.getID() != KeyEvent.KEY_PRESSED && e.getID() != KeyEvent.KEY_RELEASED) return false;
-            boolean down = code == KeyEvent.VK_F11 ? f11Down : f8Down;
-            if (pressed && !down)
-                if (code == KeyEvent.VK_F11) setFullscreen(!fullscreen, true); else fixAspectRatio();
-            if (code == KeyEvent.VK_F11) f11Down = pressed; else f8Down = pressed;
-            return true;
-        });
-    }
-    private void saveFullscreenSetting() {
-        try {
-            SaveData.Data data = SaveData.load();
-            SaveData.saveSettings(data.language, data.theme, data.renderScale, data.vsync, data.renderEngine, data.renderEngineQuality, GAME_WIDTH, GAME_HEIGHT, fullscreen, data.openCl);
-        } catch (IOException ex) { ex.printStackTrace(); }
     }
     //endregion
 }

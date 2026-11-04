@@ -1,4 +1,7 @@
 package Project.Game;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import java.io.IOException;
 import java.lang.reflect.Modifier;
@@ -9,12 +12,16 @@ import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
 public final class RenderEngines {
+    //region Variables
     private static final String ENGINE_PACKAGE = "Engines";
     private static volatile List<RenderEngine> engines;
+    //endregion
 
+    //region Constructors
     private RenderEngines() {}
+    //endregion
 
-    //region Public API
+    //region Engine Lookup
     public static List<RenderEngine> all() {
         List<RenderEngine> list = engines;
         if (list == null) {
@@ -34,7 +41,7 @@ public final class RenderEngines {
     public static RenderEngine find(String id) {
         List<RenderEngine> list = all();
         if (list.isEmpty()) return null;
-        for (RenderEngine e : list) if (e.id().equals(id)) return e;
+        for (RenderEngine renderEngine : list) if (renderEngine.id().equals(id)) return renderEngine;
         return list.getFirst();
     }
     public static RenderEngine forMapSize(String id, int width, int height) {
@@ -70,7 +77,7 @@ public final class RenderEngines {
     public static String[] qualityHintKeys() { return all().stream().map(RenderEngine::qualityHintKey).toArray(String[]::new); }
     //endregion
 
-    //region Discovery
+    //region Engine Discovery
     private static List<RenderEngine> discover() {
         String pkgPath = ENGINE_PACKAGE;
         Map<String, RenderEngine> byId = new LinkedHashMap<>();
@@ -81,7 +88,7 @@ public final class RenderEngines {
                 if (type.isInterface() || Modifier.isAbstract(type.getModifiers())) continue;
                 RenderEngine engine = (RenderEngine) type.getDeclaredConstructor().newInstance();
                 byId.putIfAbsent(engine.id(), engine);
-            } catch (ReflectiveOperationException | LinkageError e) { System.err.println("Render engine module skipped: " + className + " (" + e + ")"); }
+            } catch (ReflectiveOperationException | LinkageError exception) { System.err.println("Render engine module skipped: " + className + " (" + exception + ")"); }
         }
         List<RenderEngine> result = new ArrayList<>(byId.values());
         result.addAll(ExternalEngines.load());
@@ -105,13 +112,13 @@ public final class RenderEngines {
                     else if ("jar".equals(root.getProtocol())) collectFromJarUrl(root, pkgPath, pkgName, names);
                 }
             }
-        } catch (IOException | java.net.URISyntaxException | RuntimeException e) { System.err.println("Render engine discovery failed: " + e); }
+        } catch (IOException | java.net.URISyntaxException | RuntimeException exception) { System.err.println("Render engine discovery failed: " + exception); }
         return new ArrayList<>(names);
     }
     private static void collectFromDirectory(Path dir, String pkgName, Set<String> names) throws IOException {
         if (!Files.isDirectory(dir)) return;
         try (Stream<Path> files = Files.list(dir)) {
-            files.map(p -> p.getFileName().toString()).filter(n -> n.endsWith(".class") && !n.contains("$"))
+            files.map(path -> path.getFileName().toString()).filter(n -> n.endsWith(".class") && !n.contains("$"))
                     .forEach(n -> names.add(pkgName + "." + n.substring(0, n.length() - ".class".length())));
         }
     }

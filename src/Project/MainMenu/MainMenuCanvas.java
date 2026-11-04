@@ -1,4 +1,7 @@
 package Project.MainMenu;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import Project.StyleUI.*;
 
@@ -9,14 +12,17 @@ import java.util.List;
 
 public final class MainMenuCanvas {
     //region Variables
+    //region Palette
     static final Color ACCENT = new Color(255, 127, 0);
     static final Color TEXT = new Color(235, 235, 240);
     static final Color MUTED = new Color(165, 165, 180);
-
+    //endregion
+    //region Layout State
     private final int screenWidth, screenHeight;
     private double scale = 1;
     private int originX, originY;
     private int lastWidth = -1, lastHeight = -1;
+    //endregion
     //endregion
 
     //region Constructors
@@ -26,7 +32,7 @@ public final class MainMenuCanvas {
     }
     //endregion
 
-    //region Measuring
+    //region Scaling
     public boolean measure(Container host) {
         int width = host.getWidth(), height = host.getHeight();
         if (width <= 0 || height <= 0) return false;
@@ -42,13 +48,13 @@ public final class MainMenuCanvas {
         return changed;
     }
     public double scale() { return scale; }
-    public int x(int designX) { return originX + (int) Math.round(designX * scale); }
-    public int y(int designY) { return originY + (int) Math.round(designY * scale); }
-    public Font font(float designSize, int style) { return new Font(Font.SANS_SERIF, style, Math.max(1, (int) Math.round(designSize * scale))); }
     private int size(int designSize) { return Math.max(1, (int) Math.round(designSize * scale)); }
     //endregion
 
-    //region Layout
+    //region Placement
+    public int x(int designX) { return originX + (int) Math.round(designX * scale); }
+    public int y(int designY) { return originY + (int) Math.round(designY * scale); }
+    public Font font(float designSize, int style) { return new Font(Font.SANS_SERIF, style, Math.max(1, (int) Math.round(designSize * scale))); }
     public void place(Component component, int designX, int designY, int designWidth, int designHeight) {
         if (component instanceof StyledToggleButton toggle) {
             toggle.setReferenceSize(screenWidth, screenHeight);
@@ -72,13 +78,13 @@ public final class MainMenuCanvas {
         box.setPopupFont(font(13, Font.BOLD));
         place(box, designX, designY, designWidth, designHeight);
     }
+    //endregion
+
+    //region Styling
     public void resetStyleUi(Container host) {
         for (Component component : host.getComponents())
             if (component instanceof AnimatedComponent animated) animated.updateScale();
     }
-    //endregion
-
-    //region Style
     public void applyStyle(Container host, Style style) { applyStyle(host, style, List.of()); }
     public void applyStyle(Container host, Style style, Collection<? extends Component> unstyled) {
         for (Component component : host.getComponents()) {
@@ -92,8 +98,8 @@ public final class MainMenuCanvas {
         }
         host.repaint();
     }
-    void paintCard(Graphics g, Style style, int designX, int designY, int designWidth, int designHeight) {
-        Graphics2D g2d = (Graphics2D) g.create();
+    void paintCard(Graphics graphics, Style style, int designX, int designY, int designWidth, int designHeight) {
+        Graphics2D g2d = (Graphics2D) graphics.create();
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         int x = x(designX), y = y(designY), width = size(designWidth), height = size(designHeight), arc = size(18);
         g2d.setColor(panelColor(style));
@@ -102,8 +108,8 @@ public final class MainMenuCanvas {
         g2d.drawRoundRect(x, y, width - 1, height - 1, arc, arc);
         g2d.dispose();
     }
-    void paintDivider(Graphics g, Style style, int designX, int designFromY, int designToY) {
-        Graphics2D g2d = (Graphics2D) g.create();
+    void paintDivider(Graphics graphics, Style style, int designX, int designFromY, int designToY) {
+        Graphics2D g2d = (Graphics2D) graphics.create();
         g2d.setColor(borderColor(style));
         int top = y(designFromY);
         g2d.fillRect(x(designX), top, size(1), Math.max(1, y(designToY) - top));

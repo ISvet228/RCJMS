@@ -1,4 +1,7 @@
 package Project.MapEditor;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 import Project.Helpers.MazeGenerator;
 import Project.Helpers.MazeGenerator3D;
 import Project.Helpers.PortalData;
@@ -12,7 +15,7 @@ public final class SeedMapBuilder {
     private SeedMapBuilder() {}
     //endregion
 
-    //region Public API
+    //region Building
     public static Result build(Options options) {
         String seed = SeedUtil.normalize(options.seed());
         if (seed.isEmpty()) seed = SeedUtil.randomSeed();
@@ -38,28 +41,29 @@ public final class SeedMapBuilder {
         }
         return new Result(floors, toLinks(portals), seed);
     }
-    //endregion
-
-    //region Helpers
     private static List<int[]> toLinks(PortalData[] portals) {
         List<int[]> links = new ArrayList<>();
         for (int f = 0; f < portals.length; f++) {
-            for (PortalData.Portal a : portals[f].values()) {
-                int otherFloor = a.linkedFloor >= 0 ? a.linkedFloor : f;
+            for (PortalData.Portal portal : portals[f].values()) {
+                int otherFloor = portal.linkedFloor >= 0 ? portal.linkedFloor : f;
                 if (otherFloor >= portals.length) continue;
-                PortalData.Portal b = portals[otherFloor].get(a.linkedX, a.linkedY);
+                PortalData.Portal b = portals[otherFloor].get(portal.linkedX, portal.linkedY);
                 if (b == null) continue;
-                boolean firstEnd = f != otherFloor ? f < otherFloor : (a.y != b.y ? a.y < b.y : a.x < b.x);
+                boolean firstEnd = f != otherFloor ? f < otherFloor : (portal.y != b.y ? portal.y < b.y : portal.x < b.x);
                 if (!firstEnd) continue;
-                links.add(new int[]{f, a.x, a.y, a.dirX, a.dirY, b.x, b.y, b.dirX, b.dirY, 0, 0, otherFloor});
+                links.add(new int[]{f, portal.x, portal.y, portal.dirX, portal.dirY, b.x, b.y, b.dirX, b.dirY, 0, 0, otherFloor});
             }
         }
         return links;
     }
     //endregion
 
-    //region Nested Types
-    public record Options(int width, int height, int floors, boolean looped, int finishMode, String seed) {}
-    public record Result(List<int[][]> floors, List<int[]> portalLinks, String seed) {}
+    //region Results
+    public record Options(int width, int height, int floors, boolean looped, int finishMode, String seed) {
+
+    }
+    public record Result(List<int[][]> floors, List<int[]> portalLinks, String seed) {
+
+    }
     //endregion
 }

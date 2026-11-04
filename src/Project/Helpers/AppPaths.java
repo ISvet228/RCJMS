@@ -1,28 +1,31 @@
 package Project.Helpers;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import java.io.IOException;
 import java.nio.file.*;
 
 public final class AppPaths {
     //region Variables
+    //region Folders
     private static final String APP_FOLDER_NAME = "RCJMS";
     public static final Path DATA_DIR = resolveDataDir();
+    //endregion
+    //region Files
     public static final Path SAVE_FILE = DATA_DIR.resolve("save.rcjms");
     public static final Path WALL_TEXTURE_FILE = DATA_DIR.resolve("walltexture.rctx");
     public static final Path FLOOR_TEXTURE_FILE = DATA_DIR.resolve("floortexture.rctx");
     public static final Path CEILING_TEXTURE_FILE = DATA_DIR.resolve("ceilingtexture.rctx");
     public static final Path FINISH_TEXTURE_FILE = DATA_DIR.resolve("finishtexture.rctx");
     //endregion
+    //endregion
 
     //region Constructors
     private AppPaths() { }
     //endregion
 
-    //region Public API
-    public static Path file(String name) { return DATA_DIR.resolve(name); }
-    //endregion
-
-    //region Helpers
+    //region Paths
     private static Path resolveDataDir() {
         String os = System.getProperty("os.name", "").toLowerCase();
         String userHome = System.getProperty("user.home", ".");
@@ -39,12 +42,13 @@ public final class AppPaths {
         }
 
         Path dataDir = base.resolve(APP_FOLDER_NAME);
-        try { Files.createDirectories(dataDir); } catch (IOException e) {
+        try { Files.createDirectories(dataDir); } catch (IOException exception) {
             dataDir = Paths.get(userHome, "." + APP_FOLDER_NAME.toLowerCase());
             try { Files.createDirectories(dataDir); }
             catch (IOException ignored) { throw new RuntimeException("Omegatron Fotla"); }
         }
         return dataDir;
     }
+    public static Path file(String name) { return DATA_DIR.resolve(name); }
     //endregion
 }

@@ -6,14 +6,20 @@ import java.awt.geom.Path2D;
 
 /** Night sky with curtains of northern lights that ripple and sway over a dark horizon. */
 public final class AuroraTheme implements MenuTheme {
+    //region Variables
     private static final Color[] CURTAINS = {new Color(60, 255, 150), new Color(40, 220, 255), new Color(160, 90, 255)};
+    //endregion
 
+    //region Theme Identity
     @Override public String id() { return "aurora"; }
     @Override public String nameKey() { return "mm.bg_aurora"; }
     @Override public int order() { return 3; }
-    @Override public void paintBase(Graphics2D g, int w, int h, double t) {
-        g.setPaint(new GradientPaint(0, 0, new Color(3, 6, 20), 0, h, new Color(12, 20, 40)));
-        g.fillRect(0, 0, w, h);
+    //endregion
+
+    //region Painting
+    @Override public void paintBase(Graphics2D g2d, int w, int h, double t) {
+        g2d.setPaint(new GradientPaint(0, 0, new Color(3, 6, 20), 0, h, new Color(12, 20, 40)));
+        g2d.fillRect(0, 0, w, h);
         for (int k = 0; k < CURTAINS.length; k++) {
             double base = h * (0.18 + 0.12 * k) + Math.sin(t * 0.3 + k) * h * 0.02;
             double amp = h * 0.06 * (1 + 0.3 * Math.sin(t * 0.7 + k));
@@ -24,14 +30,14 @@ public final class AuroraTheme implements MenuTheme {
             double bottom = h * 0.62;
             for (int x = w; x >= 0; x -= 8) band.lineTo(x, bottom + Math.sin(x * freq * 0.7 + phase) * amp * 0.5);
             band.closePath();
-            Color c = CURTAINS[k];
+            Color color = CURTAINS[k];
             int shimmer = (int) (10 * Math.sin(t * 1.3 + k * 2));
-            g.setPaint(new LinearGradientPaint(0, (float) base, 0, (float) bottom, new float[]{0f, 0.6f, 1f},
-                    new Color[]{new Color(c.getRed(), c.getGreen(), c.getBlue(), 150 + shimmer),
-                                new Color(c.getRed(), c.getGreen(), c.getBlue(), 40), new Color(c.getRed(), c.getGreen(), c.getBlue(), 0)}));
-            g.fill(band);
+            g2d.setPaint(new LinearGradientPaint(0, (float) base, 0, (float) bottom, new float[]{0f, 0.6f, 1f},
+                    new Color[]{new Color(color.getRed(), color.getGreen(), color.getBlue(), 150 + shimmer),
+                                new Color(color.getRed(), color.getGreen(), color.getBlue(), 40), new Color(color.getRed(), color.getGreen(), color.getBlue(), 0)}));
+            g2d.fill(band);
         }
-        g.setColor(new Color(2, 4, 8));
+        g2d.setColor(new Color(2, 4, 8));
         Path2D.Double ground = new Path2D.Double();
         ground.moveTo(0, h);
         ground.lineTo(0, h * 0.86);
@@ -39,6 +45,7 @@ public final class AuroraTheme implements MenuTheme {
         ground.curveTo(w * 0.72, h * 0.78, w * 0.85, h * 0.9, w, h * 0.82);
         ground.lineTo(w, h);
         ground.closePath();
-        g.fill(ground);
+        g2d.fill(ground);
     }
+    //endregion
 }

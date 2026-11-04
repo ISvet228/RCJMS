@@ -16,7 +16,8 @@
     #define TEXCALL wallTex, ww, wh, finishTex, fw, fh, floorTex, flw, flh, ceilTex, clw, clh
 
     typedef struct { float x, y, dx, dy; int layer, hops; } Ray;
-    typedef struct { int kind, type, side, layer; float u, frac, hx, hy, dist; } Hit;
+    typedef struct { int kind, type, side, layer; float u, frac, hx, hy, dist, dx, dy, dz; } Hit;
+    static Hit withDirRC(Hit h, float dx, float dy, float dz) { h.dx = dx; h.dy = dy; h.dz = dz; return h; }
     typedef struct {
         int segCount, finCount, wallSide, segLayer[RC_MAX_SEG], finSide[RC_MAX_FIN];
         float segStartDist[RC_MAX_SEG], segStartX[RC_MAX_SEG], segStartY[RC_MAX_SEG], segDirX[RC_MAX_SEG], segDirY[RC_MAX_SEG];
@@ -180,10 +181,10 @@
         float hl = sqrt(dx * dx + dy * dy);
         if (hl < 1e-9f) {
             float t = dz < 0 ? z / -dz : (dz > 0 ? (1.0f - z) / dz : INFINITY);
-            if (!(t <= maxDistance)) return h;
+            if (!(t <= maxDistance)) return withDirRC(h, s.dx, s.dy, dz);
             h.kind = dz < 0 ? RC_HIT_FLOOR : RC_HIT_CEIL;
             h.hx = x; h.hy = y; h.dist = t;
-            return h;
+            return withDirRC(h, s.dx, s.dy, dz);
         }
         float scale = 1.0f / hl;
         float sigma = dz / hl;
@@ -193,7 +194,7 @@
         int side = 0;
         for (int guard = 0; guard < 8192 && d < maxH; guard++) {
             int mo = meta[3 * s.layer], mw = meta[3 * s.layer + 1], mh = meta[3 * s.layer + 2];
-            if (cx < 0 || cy < 0 || cx >= mw || cy >= mh) return h;
+            if (cx < 0 || cy < 0 || cx >= mw || cy >= mh) return withDirRC(h, s.dx, s.dy, dz);
             float ux = s.dx / hl, uy = s.dy / hl;
             float tX = ux > 0 ? (cx + 1 - s.x) / ux : (ux < 0 ? (s.x - cx) / -ux : INFINITY);
             float tY = uy > 0 ? (cy + 1 - s.y) / uy : (uy < 0 ? (s.y - cy) / -uy : INFINITY);
@@ -206,12 +207,12 @@
                 s.x += ux * tPlane; s.y += uy * tPlane;
                 h.kind = sigma < 0 ? RC_HIT_FLOOR : RC_HIT_CEIL;
                 h.hx = s.x; h.hy = s.y; h.dist = (d + tPlane) * scale; h.layer = s.layer;
-                return h;
+                return withDirRC(h, s.dx, s.dy, dz);
             }
             s.x += ux * seg; s.y += uy * seg;
             zc += sigma * seg;
             d += seg;
-            if (d >= maxH) return h;
+            if (d >= maxH) return withDirRC(h, s.dx, s.dy, dz);
             if (corner) {
                 cx += ux > 0 ? 1 : -1; cy += uy > 0 ? 1 : -1;
                 s.x = ux > 0 ? cx : cx + 1;
@@ -226,7 +227,7 @@
                 cy += uy > 0 ? 1 : -1; side = 1;
                 s.y = uy > 0 ? cy : cy + 1;
             }
-            if (cx < 0 || cy < 0 || cx >= mw || cy >= mh) return h;
+            if (cx < 0 || cy < 0 || cx >= mw || cy >= mh) return withDirRC(h, s.dx, s.dy, dz);
             int type = maps[mo + cy * mw + cx];
             if (type == RC_PORTAL && enterPortalRC(&s, cx, cy, floors, MAPCALL)) {
                 cx = (int)floor(s.x); cy = (int)floor(s.y);
@@ -240,13 +241,13 @@
                 if ((side == 0 && s.dx < 0) || (side == 1 && s.dy > 0)) u = 1 - u;
                 h.u = clamp(u, 0.0f, 0.999999f);
                 h.frac = clamp((wallH - zc) / wallH, 0.0f, 0.999999f);
-                return h;
+                return withDirRC(h, s.dx, s.dy, dz);
             }
         }
-        return h;
+        return withDirRC(h, s.dx, s.dy, dz);
     }
-    static int shadeHitRC(Hit h, float light, int tinted, MAPARGS, TEXARGS) {
-        if (h.kind == 0) return RC_CEIL_BASE;
+    static int shadeHitRC(Hit h, float light, int tinted, int sky, float skyTime, MAPARGS, TEXARGS) {
+        if (h.kind == 0) return sky ? skyDirGpu(h.dx, h.dy, h.dz, skyTime) : RC_CEIL_BASE;
         if (h.kind == RC_HIT_WALL) {
             int finish = h.type == 2;
             int tw = finish ? fw : ww, th = finish ? fh : wh;
@@ -263,6 +264,7 @@
             return applyBrightnessRC(color, b);
         }
         int isFloor = h.kind == RC_HIT_FLOOR;
+        if (!isFloor && sky) return skyDirGpu(h.dx, h.dy, h.dz, skyTime);
         int color = isFloor ? sampleNearestRC(floorTex, flw, flh, h.hx, h.hy, RC_FLOOR_BASE) : sampleNearestRC(ceilTex, clw, clh, h.hx, h.hy, RC_CEIL_BASE);
         if (isFloor && tinted) color = tintStairsRC(color, h.hx, h.hy, h.layer, maps, meta);
         float b = clamp(1.0f - h.dist / light, 0.05f, 1.0f);
@@ -274,6 +276,7 @@
         int W = ip[0], H = ip[1], floors = ip[2], tinted = ip[3];
         int ww = ip[4], wh = ip[5], fw = ip[6], fh = ip[7], flw = ip[8], flh = ip[9], clw = ip[10], clh = ip[11];
         int mode = ip[12];
+        int sky = ip[13]; float skyTime = dp[12];
         if (x >= W) return;
         float playerX = dp[0], playerY = dp[1], camZ = dp[2];
         float dirX = dp[3], dirY = dp[4], planeLength = dp[5];
@@ -290,7 +293,8 @@
             for (int y = 0; y < H; y++) {
                 float sigma = ((halfHeight - (y + 0.5f)) / focal) / hl;
                 Hit h = columnHitRC(&c, camZ, sigma);
-                out[y * W + x] = shadeHitRC(h, light, tinted, MAPCALL, TEXCALL);
+                h.dx = c.segDirX[max(c.segCount - 1, 0)]; h.dy = c.segDirY[max(c.segCount - 1, 0)]; h.dz = sigma;
+                out[y * W + x] = shadeHitRC(h, light, tinted, sky, skyTime, MAPCALL, TEXCALL);
             }
             return;
         }
@@ -306,5 +310,5 @@
         float rx = dirX - lateral * dirY, ry = dirY + lateral * dirX, rz = rowZ;
         float len = sqrt(rx * rx + ry * ry + rz * rz);
         Hit h = marchExactRC(playerX, playerY, camZ, rx / len, ry / len, rz / len, floors, maxDist, MAPCALL);
-        out[y * W + x] = shadeHitRC(h, light, tinted, MAPCALL, TEXCALL);
+        out[y * W + x] = shadeHitRC(h, light, tinted, sky, skyTime, MAPCALL, TEXCALL);
     }

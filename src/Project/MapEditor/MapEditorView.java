@@ -1,4 +1,7 @@
 package Project.MapEditor;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 import Project.Game.GameView;
 import Project.MainMenu.MainMenuView;
 import Project.RCJMS;
@@ -18,23 +21,24 @@ import static Project.Helpers.EditorKit.*;
 
 public class MapEditorView extends JPanel {
     //region Variables
+    //region Editor Constants
     private final Style currentStyle = loadTheme();
-
     private static final int MIN_MAP_SIZE = 5, MAX_MAP_SIZE = 201;
     private static final int MIN_TOOL_SIZE = 1, MAX_TOOL_SIZE = 15;
     private static final int MAX_FLOORS = 20;
-    private static final int PATH = 0, WALL = 1, FINISH = 2, STAIRS_UP = 3, STAIRS_DOWN = 4, PORTAL = 5;
     private static final int DEFAULT_SIZE = 25;
     private static final int START_X = 1, START_Y = 1;
     private static final int LEFT_WIDTH = 176, RIGHT_WIDTH = 208;
     private static final int[] SIZE_PRESETS = {15, 25, 51, 101};
-    private static final int[][] PORTAL_DIRS = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-    private static final double[] PORTAL_ROTATIONS = {-Math.PI / 2, 0, Math.PI / 2, Math.PI};
-    private static final int GEOMETRY_EUCLIDEAN = 0, GEOMETRY_WRONG = 1;
+    private static final int PATH = 0, WALL = 1, FINISH = 2, STAIRS_UP = 3, STAIRS_DOWN = 4, PORTAL = 5;
     private static final Color PATH_COLOR = new Color(45, 45, 50), WALL_COLOR = new Color(225, 225, 230), FINISH_COLOR = new Color(80, 200, 100),
             STAIRS_UP_COLOR = new Color(70, 140, 255), STAIRS_DOWN_COLOR = new Color(255, 150, 60), PORTAL_COLOR = new Color(190, 90, 230);
     private static final String[] BLOCK_NAME_KEYS = {"me.name_path", "me.name_wall", "me.name_finish", "me.name_up", "me.name_down", "me.name_portal"};
-
+    private static final int[][] PORTAL_DIRS = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+    private static final double[] PORTAL_ROTATIONS = {-Math.PI / 2, 0, Math.PI / 2, Math.PI};
+    private static final int GEOMETRY_EUCLIDEAN = 0, GEOMETRY_WRONG = 1;
+    //endregion
+    //region Map State
     private int mapWidth = DEFAULT_SIZE, mapHeight = DEFAULT_SIZE;
     private final java.util.List<int[][]> floorMaps = createInitialFloorList();
     private int currentFloorIndex = 0;
@@ -42,32 +46,40 @@ public class MapEditorView extends JPanel {
     private final java.util.List<int[]> portalLinks = new ArrayList<>();
     private int[] pendingPortal = null;
     private int portalDirIndex = 1;
+    private SeedMapBuilder.Options lastSeedOptions = null;
+    private boolean dirty = false;
+    //endregion
+    //region Tool State
     private Tool currentTool = Tool.BRUSH;
     private int selectedBlock = WALL;
     private int brushSize = 1, eraserSize = 1;
-    private boolean dirty = false;
-    private SeedMapBuilder.Options lastSeedOptions = null;
-
+    //endregion
+    //region History State
     private final Deque<EditorState> undoHistory = new ArrayDeque<>(), redoHistory = new ArrayDeque<>();
     private EditorState strokeBase;
     private boolean strokePushed;
     private boolean restoringHistory = false, updatingControls = false;
-
+    //endregion
+    //region Widgets
     private final MapCanvas canvas = new MapCanvas();
     private final FloorStrip floorStrip = new FloorStrip();
     private final HintBar hintBar = new HintBar();
     private final Text hoverText = new Text(null, 12f, true, TEXT, 2);
     private final Text dirtyText = new Text(null, 12f, true, WARN, 0);
-    private final Text sizeValue = new Text(null, 12f, true, TEXT, 2);
     private final Note checkNote = new Note(RIGHT_WIDTH - 32, 12f, MUTED);
-    private final javax.swing.Timer checkTimer = new javax.swing.Timer(250, e -> runCheck());
-
+    private final javax.swing.Timer checkTimer = new javax.swing.Timer(250, actionEvent -> runCheck());
+    //endregion
+    //region Toolbar Controls
     private final ToolButton undoButton = new ToolButton(currentStyle, ToolButton.Layout.ICON, Glyph.UNDO, null).tip("undo", "Ctrl+Z");
     private final ToolButton redoButton = new ToolButton(currentStyle, ToolButton.Layout.ICON, Glyph.REDO, null).tip("redo", "Ctrl+Y");
     private final ToolButton[] toolButtons = new ToolButton[4];
-    private final ToolButton[] blockButtons = new ToolButton[7]; //path, wall, finish, up, down, portal, one-sided portal
+    private final ToolButton[] blockButtons = new ToolButton[7];
+    //path, wall, finish, up, down, portal, one-sided portal
     private final ToolButton portalDirButton = new ToolButton(currentStyle, ToolButton.Layout.ROW, Glyph.ARROW, "me.portal_direction_short").badge("R").tip("me.portal_direction_tip", "R");
     private final ToolButton loadButton = new ToolButton(currentStyle, ToolButton.Layout.TILE, Glyph.FOLDER, "me.load_short").tip("me.load_tip", null);
+    //endregion
+    //region Size And Option Controls
+    private final Text sizeValue = new Text(null, 12f, true, TEXT, 2);
     private final StyledSlider sizeSlider = new StyledSlider(currentStyle, MIN_TOOL_SIZE, MAX_TOOL_SIZE, 1);
     private final StyledTextField widthField = new StyledTextField(currentStyle, String.valueOf(DEFAULT_SIZE));
     private final StyledTextField heightField = new StyledTextField(currentStyle, String.valueOf(DEFAULT_SIZE));
@@ -75,6 +87,7 @@ public class MapEditorView extends JPanel {
     private final StyledToggle wrongGeometryToggle = new StyledToggle(currentStyle, "wrong_geometry");
     private final StyledToggle skipValidationToggle = new StyledToggle(currentStyle, "me.test_anyway");
     private final StyledToggle fogToggle = new StyledToggle(currentStyle, "me.fog_minimap");
+    //endregion
     //endregion
 
     //region Constructors
@@ -94,23 +107,212 @@ public class MapEditorView extends JPanel {
     }
     //endregion
 
-    //region Map Utilities
-    private static int[][] createMap(int width, int height) {
-        int[][] result = new int[height][width];
-        for (int y = 0; y < height; y++) Arrays.fill(result[y], PATH);
-        return result;
+    //region Layout
+    private JComponent buildHeader() {
+        JPanel header = new JPanel(new BorderLayout(10, 0));
+        header.setOpaque(false);
+
+        ToolButton back = new ToolButton(currentStyle, ToolButton.Layout.ROW, Glyph.BACK, "back").tip("back", "Esc").size(104, 36);
+        back.onClick(this::exitToMainMenu);
+        Text title = new Text("map_editor", 18f, true, TEXT, 0);
+        title.setPreferredSize(new Dimension(200, 36));
+        dirtyText.setPreferredSize(new Dimension(150, 36));
+        JPanel left = row(10, back, title, dirtyText);
+        left.setPreferredSize(new Dimension(480, 36));
+
+        ToolButton helpButton = new ToolButton(currentStyle, ToolButton.Layout.ICON, Glyph.HELP, null).tip("help", "F1").size(36, 36);
+        helpButton.onClick(this::showHelp);
+        ToolButton saveButton = new ToolButton(currentStyle, ToolButton.Layout.ROW, Glyph.SAVE, "save").tip("me.save_tip", "Ctrl+S").accent(new Color(46, 150, 96)).size(130, 36);
+        saveButton.onClick(this::saveMapOnly);
+        undoButton.size(36, 36).onClick(this::undo);
+        redoButton.size(36, 36).onClick(this::redo);
+
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        right.setOpaque(false);
+        right.add(undoButton);
+        right.add(redoButton);
+        right.add(helpButton);
+        right.add(saveButton);
+        header.add(left, BorderLayout.WEST);
+        header.add(right, BorderLayout.CENTER);
+        return header;
     }
-    private static java.util.List<int[][]> createInitialFloorList() {
-        java.util.List<int[][]> list = new ArrayList<>();
-        list.add(createMap(DEFAULT_SIZE, DEFAULT_SIZE));
-        return list;
+    private JComponent buildBody() {
+        JPanel body = new JPanel(new BorderLayout(10, 0));
+        body.setOpaque(false);
+        JPanel center = new JPanel(new BorderLayout(0, 8));
+        center.setOpaque(false);
+        floorStrip.setPreferredSize(new Dimension(100, 32));
+        center.add(floorStrip, BorderLayout.NORTH);
+        center.add(canvas, BorderLayout.CENTER);
+        canvas.setMinimumSize(new Dimension(120, 120));
+        body.add(sidebar(buildLeft(), LEFT_WIDTH), BorderLayout.WEST);
+        body.add(center, BorderLayout.CENTER);
+        body.add(sidebar(buildRight(), RIGHT_WIDTH), BorderLayout.EAST);
+        return body;
     }
-    private static int[][] copyMap(int[][] source) {
-        if (source == null) return null;
-        int[][] result = new int[source.length][];
-        for (int y = 0; y < source.length; y++) result[y] = source[y] == null ? null : source[y].clone();
-        return result;
+    private JComponent sidebar(Column column, int width) {
+        ScrollBody holder = new ScrollBody();
+        holder.add(column, BorderLayout.NORTH);
+        StyledScrollPane scroll = new StyledScrollPane(holder, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER, currentStyle);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.setPreferredSize(new Dimension(width, 100));
+        return scroll;
     }
+    private Column buildLeft() {
+        Column column = new Column();
+        column.setBorder(new EmptyBorder(0, 0, 0, 6));
+
+        Card tools = new Card("tool");
+        JPanel toolRow = new JPanel(new GridLayout(1, 4, 4, 0));
+        toolRow.setOpaque(false);
+        toolRow.setPreferredSize(new Dimension(100, 38));
+        Glyph[] glyphs = {Glyph.BRUSH, Glyph.ERASER, Glyph.BOX, Glyph.FILL};
+        String[] tips = {"me.tip_brush", "me.tip_eraser", "me.tip_box", "me.tip_fill"}, keys = {"V", "B", "X", "F"};
+        Tool[] order = {Tool.BRUSH, Tool.ERASER, Tool.BOX, Tool.FILL};
+        for (int i = 0; i < 4; i++) {
+            final Tool tool = order[i];
+            toolButtons[i] = new ToolButton(currentStyle, ToolButton.Layout.ICON, glyphs[i], null).tip(tips[i], keys[i]);
+            toolButtons[i].onClick(() -> selectTool(tool));
+            toolRow.add(toolButtons[i]);
+        }
+        tools.put(toolRow, 0);
+        sizeSlider.setPreferredSize(new Dimension(100, 22));
+        sizeSlider.setOpaque(false);
+        sizeSlider.addChangeListener(changeEvent -> {
+            if (updatingControls) return;
+            if (currentTool == Tool.ERASER) eraserSize = sizeSlider.getValue(); else brushSize = sizeSlider.getValue();
+            sizeValue.setRaw(String.valueOf(sizeSlider.getValue()));
+            canvas.repaint();
+        });
+        sizeValue.setPreferredSize(new Dimension(22, 22));
+        JPanel sizeRow = new JPanel(new BorderLayout(6, 0));
+        sizeRow.setOpaque(false);
+        sizeRow.add(new Text("size", 12f, true, MUTED, 0), BorderLayout.WEST);
+        sizeRow.add(sizeSlider, BorderLayout.CENTER);
+        sizeRow.add(sizeValue, BorderLayout.EAST);
+        sizeRow.setPreferredSize(new Dimension(100, 24));
+        tools.put(sizeRow, 8);
+        column.put(tools, 0);
+
+        Card blocks = new Card("me.block");
+        Color dark = new Color(20, 20, 26);
+        Object[][] defs = {
+                {PATH_COLOR, Glyph.PATH, new Color(150, 150, 160), "me.name_path", "1", "me.tip_path"},
+                {WALL_COLOR, null, null, "me.name_wall", "2", "me.tip_wall"},
+                {FINISH_COLOR, Glyph.FLAG, new Color(15, 60, 30), "me.name_finish", "3", "me.tip_finish"},
+                {STAIRS_UP_COLOR, Glyph.UP, Color.WHITE, "me.name_up", "4", "me.tip_up"},
+                {STAIRS_DOWN_COLOR, Glyph.DOWN, Color.WHITE, "me.name_down", "5", "me.tip_down"},
+                {PORTAL_COLOR, Glyph.PORTAL, Color.WHITE, "me.name_portal", "N", "me.tip_portal"},
+                {PORTAL_COLOR, Glyph.PORTAL_ONE, Color.WHITE, "me.name_portal_one", "M", "me.tip_portal_one"}};
+        for (int i = 0; i < defs.length; i++) {
+            final int index = i;
+            Object[] d = defs[i];
+            blockButtons[i] = new ToolButton(currentStyle, ToolButton.Layout.ROW, null, (String) d[3]).swatch((Color) d[0], (Glyph) d[1], (Color) d[2]).badge((String) d[4]).tip((String) d[5], (String) d[4]);
+            blockButtons[i].size(100, 26);
+            blockButtons[i].onClick(() -> chooseBlockRow(index));
+            blocks.put(blockButtons[i], i == 0 ? 0 : 2);
+        }
+        column.put(blocks, 6);
+
+        portalDirButton.size(100, 28);
+        portalDirButton.setIconRotation(PORTAL_ROTATIONS[portalDirIndex]);
+        portalDirButton.onClick(this::rotatePortalDirection);
+        column.put(portalDirButton, 6);
+        return column;
+    }
+    private Column buildRight() {
+        Column column = new Column();
+        column.setBorder(new EmptyBorder(0, 6, 0, 0));
+
+        Card size = new Card("me.map_size");
+        size.put(stepperRow("width", widthField, -2), 0);
+        size.put(stepperRow("height", heightField, -2), 3);
+        JPanel presets = new JPanel(new GridLayout(1, SIZE_PRESETS.length, 3, 0));
+        presets.setOpaque(false);
+        presets.setPreferredSize(new Dimension(100, 26));
+        for (int i = 0; i < SIZE_PRESETS.length; i++) {
+            final int value = SIZE_PRESETS[i];
+            presetButtons[i] = new ToolButton(currentStyle, ToolButton.Layout.TEXT, null, null).tip("me.preset_tip", null);
+            presetButtons[i].setLabel(String.valueOf(value));
+            presetButtons[i].onClick(() -> resizeMap(value, value));
+            presets.add(presetButtons[i]);
+        }
+        size.put(presets, 4);
+        column.put(size, 0);
+
+        Card actions = new Card("me.actions");
+        JPanel grid = new JPanel(new GridLayout(2, 2, 4, 4));
+        grid.setOpaque(false);
+        grid.setPreferredSize(new Dimension(100, 74));
+        loadButton.onClick(this::loadMapFromSave);
+        ToolButton seedButton = new ToolButton(currentStyle, ToolButton.Layout.TILE, Glyph.DICE, "me.seed_short").tip("me.seed_tip", null);
+        seedButton.onClick(this::loadMapFromSeed);
+        ToolButton clearButton = new ToolButton(currentStyle, ToolButton.Layout.TILE, Glyph.TRASH, "me.clear_short").tip("me.clear_tip", null);
+        clearButton.onClick(this::clearMap);
+        ToolButton newButton = new ToolButton(currentStyle, ToolButton.Layout.TILE, Glyph.NEW, "me.new_short").tip("me.new_tip", null);
+        newButton.onClick(this::resetMap);
+        grid.add(loadButton); grid.add(seedButton); grid.add(clearButton); grid.add(newButton);
+        actions.put(grid, 0);
+        column.put(actions, 4);
+
+        Card test = new Card("me.test");
+        test.put(checkNote, 0);
+        ToolButton play = new ToolButton(currentStyle, ToolButton.Layout.ROW, Glyph.PLAY, "me.play_map").tip("me.play_tip", null).accent(new Color(46, 150, 96));
+        play.size(100, 34);
+        play.onClick(this::playMap);
+        test.put(play, 6);
+        wrongGeometryToggle.setPreferredSize(new Dimension(100, 24));
+        skipValidationToggle.setPreferredSize(new Dimension(100, 24));
+        test.put(wrongGeometryToggle, 6);
+        test.put(skipValidationToggle, 1);
+        fogToggle.setPreferredSize(new Dimension(100, 24));
+        test.put(fogToggle, 1);
+        column.put(test, 4);
+        return column;
+    }
+    private JComponent stepperRow(String labelKey, StyledTextField field, int ignored) {
+        JPanel row = new JPanel(new BorderLayout(6, 0));
+        row.setOpaque(false);
+        row.setPreferredSize(new Dimension(100, 24));
+        Text label = new Text(null, 12f, true, MUTED, 0);
+        label.setRaw(L(labelKey) + ":");
+        label.setPreferredSize(new Dimension(66, 24));
+        ToolButton minus = new ToolButton(currentStyle, ToolButton.Layout.ICON, Glyph.MINUS, null).size(24, 24);
+        ToolButton plus = new ToolButton(currentStyle, ToolButton.Layout.ICON, Glyph.PLUS, null).size(24, 24);
+        boolean isWidth = field == widthField;
+        minus.onClick(() -> resizeMap(isWidth ? mapWidth - 2 : mapWidth, isWidth ? mapHeight : mapHeight - 2));
+        plus.onClick(() -> resizeMap(isWidth ? mapWidth + 2 : mapWidth, isWidth ? mapHeight : mapHeight + 2));
+        field.setHorizontalAlignment(JTextField.CENTER);
+        field.limitInput(3, c -> c >= '0' && c <= '9');
+        field.addActionListener(actionEvent -> applyFields());
+        field.addFocusListener(new FocusAdapter() { @Override public void focusLost(FocusEvent focusEvent) { applyFields(); } });
+        JPanel middle = new JPanel(new BorderLayout(4, 0));
+        middle.setOpaque(false);
+        middle.add(minus, BorderLayout.WEST);
+        middle.add(field, BorderLayout.CENTER);
+        middle.add(plus, BorderLayout.EAST);
+        row.add(label, BorderLayout.WEST);
+        row.add(middle, BorderLayout.CENTER);
+        return row;
+    }
+    private JComponent buildStatusBar() {
+        JPanel bar = new JPanel(new BorderLayout(10, 0));
+        bar.setOpaque(false);
+        hoverText.setPreferredSize(new Dimension(190, 28));
+        JPanel east = new JPanel(new BorderLayout(6, 0));
+        east.setOpaque(false);
+        east.add(hoverText, BorderLayout.WEST);
+        east.add(zoomBar(currentStyle, canvas), BorderLayout.CENTER);
+        bar.add(hintBar, BorderLayout.CENTER);
+        bar.add(east, BorderLayout.EAST);
+        canvas.addViewListener(this::updateHover);
+        return bar;
+    }
+    //endregion
+
+    //region Map Size
     private int normalizeSize(int value) {
         value = Math.clamp(value, MIN_MAP_SIZE, MAX_MAP_SIZE);
         if ((value & 1) == 0) {
@@ -119,18 +321,18 @@ public class MapEditorView extends JPanel {
         }
         return value;
     }
-    private boolean isOutside(int x, int y) { return x < 0 || y < 0 || x >= mapWidth || y >= mapHeight; }
-    private boolean floorHasContent() {
-        for (int[] row : map) for (int v : row) if (v != PATH) return true;
-        return false;
+    private void applyFields() {
+        if (updatingControls) return;
+        try { resizeMap(Integer.parseInt(widthField.getText().trim()), Integer.parseInt(heightField.getText().trim())); }
+        catch (NumberFormatException ignored) { updateSizeControls(); }
     }
-    private boolean mapHasContent() {
-        if (floorMaps.size() > 1 || !portalLinks.isEmpty()) return true;
-        return floorHasContent();
+    private void updateSizeControls() {
+        updatingControls = true;
+        widthField.setText(String.valueOf(mapWidth));
+        heightField.setText(String.valueOf(mapHeight));
+        for (int i = 0; i < presetButtons.length; i++) presetButtons[i].setSelected(mapWidth == SIZE_PRESETS[i] && mapHeight == SIZE_PRESETS[i]);
+        updatingControls = false;
     }
-    //endregion
-
-    //region Map Resizing
     private void resizeMap(int newWidth, int newHeight) {
         int wantedWidth = newWidth, wantedHeight = newHeight;
         newWidth = normalizeSize(newWidth);
@@ -168,21 +370,14 @@ public class MapEditorView extends JPanel {
         updateAll();
     }
     private void syncCanvasSize() { if (canvas.getCols() != mapWidth || canvas.getRows() != mapHeight) canvas.setGrid(mapWidth, mapHeight); }
-    private void updateSizeControls() {
-        updatingControls = true;
-        widthField.setText(String.valueOf(mapWidth));
-        heightField.setText(String.valueOf(mapHeight));
-        for (int i = 0; i < presetButtons.length; i++) presetButtons[i].setSelected(mapWidth == SIZE_PRESETS[i] && mapHeight == SIZE_PRESETS[i]);
-        updatingControls = false;
-    }
-    private void applyFields() {
-        if (updatingControls) return;
-        try { resizeMap(Integer.parseInt(widthField.getText().trim()), Integer.parseInt(heightField.getText().trim())); }
-        catch (NumberFormatException ignored) { updateSizeControls(); }
-    }
     //endregion
 
     //region Floors
+    private static java.util.List<int[][]> createInitialFloorList() {
+        java.util.List<int[][]> list = new ArrayList<>();
+        list.add(createMap(DEFAULT_SIZE, DEFAULT_SIZE));
+        return list;
+    }
     private void switchFloor(int index) {
         index = Math.clamp(index, 0, floorMaps.size() - 1);
         if (index == currentFloorIndex) return;
@@ -239,6 +434,85 @@ public class MapEditorView extends JPanel {
         blockButtons[4].setEnabled(canGoDown);
         if ((selectedBlock == STAIRS_UP && !canGoUp) || (selectedBlock == STAIRS_DOWN && !canGoDown)) selectedBlock = WALL;
         syncSelection();
+    }
+    private boolean floorHasContent() {
+        for (int[] row : map) for (int v : row) if (v != PATH) return true;
+        return false;
+    }
+    private boolean mapHasContent() {
+        if (floorMaps.size() > 1 || !portalLinks.isEmpty()) return true;
+        return floorHasContent();
+    }
+    private final class FloorStrip extends JComponent {
+        private static final int ADD = -2, REMOVE = -3, NONE = -4;
+        private int count = 1, current = 0, hover = NONE;
+
+        FloorStrip() {
+            setToolTipText("");
+            MouseAdapter mouse = new MouseAdapter() {
+                @Override public void mouseMoved(MouseEvent mouseEvent) { int h = hit(mouseEvent.getX(), mouseEvent.getY()); if (h != hover) { hover = h; repaint(); } }
+                @Override public void mouseExited(MouseEvent mouseEvent) { hover = NONE; repaint(); }
+                @Override public void mouseReleased(MouseEvent mouseEvent) {
+                    int h = hit(mouseEvent.getX(), mouseEvent.getY());
+                    if (h == ADD) addFloor(); else if (h == REMOVE) removeFloor(); else if (h >= 0) switchFloor(h);
+                }
+            };
+            addMouseListener(mouse);
+            addMouseMotionListener(mouse);
+        }
+
+        private int labelWidth() { return 64; }
+        private Rectangle addRect() { return new Rectangle(getWidth() - 62, 3, 26, 26); }
+        private Rectangle removeRect() { return new Rectangle(getWidth() - 30, 3, 26, 26); }
+        private int pillWidth() { return Math.clamp((getWidth() - labelWidth() - 62 - 8) / Math.max(1, count) - 3, 20, 40); }
+        private Rectangle pillRect(int i) { int w = pillWidth(); return new Rectangle(labelWidth() + i * (w + 3), 3, w, 26); }
+        private int hit(int x, int y) {
+            if (addRect().contains(x, y)) return ADD;
+            if (removeRect().contains(x, y)) return REMOVE;
+            for (int i = 0; i < count; i++) if (pillRect(i).contains(x, y)) return i;
+            return NONE;
+        }
+
+        void update(int count, int current) { this.count = count; this.current = current; repaint(); }
+        @Override public String getToolTipText(MouseEvent mouseEvent) {
+            int h = hit(mouseEvent.getX(), mouseEvent.getY());
+            return h == ADD ? L("me.add_floor") : h == REMOVE ? L("me.remove_floor") : h >= 0 ? fmt("me.go_floor", h + 1) : null;
+        }
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D g2d = smooth(graphics);
+            Theme theme = Theme.of(currentStyle);
+            g2d.setFont(font(12f, true));
+            g2d.setColor(MUTED);
+            g2d.drawString(ellipsize(L("me.floor_strip"), g2d.getFontMetrics(), labelWidth() - 6), 2, (getHeight() - g2d.getFontMetrics().getHeight()) / 2 + g2d.getFontMetrics().getAscent());
+            for (int i = 0; i < count; i++) {
+                Rectangle rectangle = pillRect(i);
+                boolean on = i == current;
+                g2d.setColor(on ? mix(theme.normal(), HILITE, 0.55f) : hover == i ? theme.hover() : theme.normal());
+                g2d.fillRoundRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height, 10, 10);
+                g2d.setColor(on ? HILITE : theme.accent());
+                g2d.setStroke(new BasicStroke(on ? 2f : 1f));
+                g2d.drawRoundRect(rectangle.x, rectangle.y, rectangle.width - 1, rectangle.height - 1, 10, 10);
+                String label = String.valueOf(i + 1);
+                g2d.setFont(font(12f, true));
+                FontMetrics fontMetrics = g2d.getFontMetrics();
+                g2d.setColor(Color.WHITE);
+                g2d.drawString(label, rectangle.x + (rectangle.width - fontMetrics.stringWidth(label)) / 2, rectangle.y + (rectangle.height - fontMetrics.getHeight()) / 2 + fontMetrics.getAscent());
+            }
+            drawRoundButton(g2d, theme, addRect(), Glyph.PLUS, count < MAX_FLOORS, hover == ADD);
+            drawRoundButton(g2d, theme, removeRect(), Glyph.TRASH, count > 1, hover == REMOVE);
+            g2d.dispose();
+        }
+        private void drawRoundButton(Graphics2D g2d, Theme theme, Rectangle rectangle, Glyph glyph, boolean enabled, boolean hovered) {
+            Composite old = g2d.getComposite();
+            if (!enabled) g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
+            g2d.setColor(hovered && enabled ? theme.hover() : theme.normal());
+            g2d.fillRoundRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height, 10, 10);
+            g2d.setColor(theme.accent());
+            g2d.setStroke(new BasicStroke(1f));
+            g2d.drawRoundRect(rectangle.x, rectangle.y, rectangle.width - 1, rectangle.height - 1, 10, 10);
+            glyph.paint(g2d, rectangle.x + 5, rectangle.y + 5, rectangle.width - 10, theme.text());
+            g2d.setComposite(old);
+        }
     }
     //endregion
 
@@ -301,289 +575,20 @@ public class MapEditorView extends JPanel {
     }
     //endregion
 
-    //region UI Building
-    private JComponent buildHeader() {
-        JPanel header = new JPanel(new BorderLayout(10, 0));
-        header.setOpaque(false);
-
-        ToolButton back = new ToolButton(currentStyle, ToolButton.Layout.ROW, Glyph.BACK, "back").tip("back", "Esc").size(104, 36);
-        back.onClick(this::exitToMainMenu);
-        Text title = new Text("map_editor", 18f, true, TEXT, 0);
-        title.setPreferredSize(new Dimension(200, 36));
-        dirtyText.setPreferredSize(new Dimension(150, 36));
-        JPanel left = row(10, back, title, dirtyText);
-        left.setPreferredSize(new Dimension(480, 36));
-
-        ToolButton helpButton = new ToolButton(currentStyle, ToolButton.Layout.ICON, Glyph.HELP, null).tip("help", "F1").size(36, 36);
-        helpButton.onClick(this::showHelp);
-        ToolButton saveButton = new ToolButton(currentStyle, ToolButton.Layout.ROW, Glyph.SAVE, "save").tip("me.save_tip", "Ctrl+S").accent(new Color(46, 150, 96)).size(130, 36);
-        saveButton.onClick(this::saveMapOnly);
-        undoButton.size(36, 36).onClick(this::undo);
-        redoButton.size(36, 36).onClick(this::redo);
-
-        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        right.setOpaque(false);
-        right.add(undoButton);
-        right.add(redoButton);
-        right.add(helpButton);
-        right.add(saveButton);
-        header.add(left, BorderLayout.WEST);
-        header.add(right, BorderLayout.CENTER);
-        return header;
+    //region Map Editing
+    private static int[][] createMap(int width, int height) {
+        int[][] result = new int[height][width];
+        for (int y = 0; y < height; y++) Arrays.fill(result[y], PATH);
+        return result;
     }
-
-    private JComponent buildBody() {
-        JPanel body = new JPanel(new BorderLayout(10, 0));
-        body.setOpaque(false);
-        JPanel center = new JPanel(new BorderLayout(0, 8));
-        center.setOpaque(false);
-        floorStrip.setPreferredSize(new Dimension(100, 32));
-        center.add(floorStrip, BorderLayout.NORTH);
-        center.add(canvas, BorderLayout.CENTER);
-        canvas.setMinimumSize(new Dimension(120, 120));
-        body.add(sidebar(buildLeft(), LEFT_WIDTH), BorderLayout.WEST);
-        body.add(center, BorderLayout.CENTER);
-        body.add(sidebar(buildRight(), RIGHT_WIDTH), BorderLayout.EAST);
-        return body;
+    private static int[][] copyMap(int[][] source) {
+        if (source == null) return null;
+        int[][] result = new int[source.length][];
+        for (int y = 0; y < source.length; y++) result[y] = source[y] == null ? null : source[y].clone();
+        return result;
     }
-
-    private JComponent sidebar(Column column, int width) {
-        ScrollBody holder = new ScrollBody();
-        holder.add(column, BorderLayout.NORTH);
-        StyledScrollPane scroll = new StyledScrollPane(holder, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER, currentStyle);
-        scroll.setBorder(BorderFactory.createEmptyBorder());
-        scroll.getVerticalScrollBar().setUnitIncrement(16);
-        scroll.setPreferredSize(new Dimension(width, 100));
-        return scroll;
-    }
-
-    private Column buildLeft() {
-        Column column = new Column();
-        column.setBorder(new EmptyBorder(0, 0, 0, 6));
-
-        Card tools = new Card("tool");
-        JPanel toolRow = new JPanel(new GridLayout(1, 4, 4, 0));
-        toolRow.setOpaque(false);
-        toolRow.setPreferredSize(new Dimension(100, 38));
-        Glyph[] glyphs = {Glyph.BRUSH, Glyph.ERASER, Glyph.BOX, Glyph.FILL};
-        String[] tips = {"me.tip_brush", "me.tip_eraser", "me.tip_box", "me.tip_fill"}, keys = {"V", "B", "X", "F"};
-        Tool[] order = {Tool.BRUSH, Tool.ERASER, Tool.BOX, Tool.FILL};
-        for (int i = 0; i < 4; i++) {
-            final Tool t = order[i];
-            toolButtons[i] = new ToolButton(currentStyle, ToolButton.Layout.ICON, glyphs[i], null).tip(tips[i], keys[i]);
-            toolButtons[i].onClick(() -> selectTool(t));
-            toolRow.add(toolButtons[i]);
-        }
-        tools.put(toolRow, 0);
-        sizeSlider.setPreferredSize(new Dimension(100, 22));
-        sizeSlider.setOpaque(false);
-        sizeSlider.addChangeListener(e -> {
-            if (updatingControls) return;
-            if (currentTool == Tool.ERASER) eraserSize = sizeSlider.getValue(); else brushSize = sizeSlider.getValue();
-            sizeValue.setRaw(String.valueOf(sizeSlider.getValue()));
-            canvas.repaint();
-        });
-        sizeValue.setPreferredSize(new Dimension(22, 22));
-        JPanel sizeRow = new JPanel(new BorderLayout(6, 0));
-        sizeRow.setOpaque(false);
-        sizeRow.add(new Text("size", 12f, true, MUTED, 0), BorderLayout.WEST);
-        sizeRow.add(sizeSlider, BorderLayout.CENTER);
-        sizeRow.add(sizeValue, BorderLayout.EAST);
-        sizeRow.setPreferredSize(new Dimension(100, 24));
-        tools.put(sizeRow, 8);
-        column.put(tools, 0);
-
-        Card blocks = new Card("me.block");
-        Color dark = new Color(20, 20, 26);
-        Object[][] defs = {
-                {PATH_COLOR, Glyph.PATH, new Color(150, 150, 160), "me.name_path", "1", "me.tip_path"},
-                {WALL_COLOR, null, null, "me.name_wall", "2", "me.tip_wall"},
-                {FINISH_COLOR, Glyph.FLAG, new Color(15, 60, 30), "me.name_finish", "3", "me.tip_finish"},
-                {STAIRS_UP_COLOR, Glyph.UP, Color.WHITE, "me.name_up", "4", "me.tip_up"},
-                {STAIRS_DOWN_COLOR, Glyph.DOWN, Color.WHITE, "me.name_down", "5", "me.tip_down"},
-                {PORTAL_COLOR, Glyph.PORTAL, Color.WHITE, "me.name_portal", "N", "me.tip_portal"},
-                {PORTAL_COLOR, Glyph.PORTAL_ONE, Color.WHITE, "me.name_portal_one", "M", "me.tip_portal_one"}};
-        for (int i = 0; i < defs.length; i++) {
-            final int index = i;
-            Object[] d = defs[i];
-            blockButtons[i] = new ToolButton(currentStyle, ToolButton.Layout.ROW, null, (String) d[3]).swatch((Color) d[0], (Glyph) d[1], (Color) d[2]).badge((String) d[4]).tip((String) d[5], (String) d[4]);
-            blockButtons[i].size(100, 26);
-            blockButtons[i].onClick(() -> chooseBlockRow(index));
-            blocks.put(blockButtons[i], i == 0 ? 0 : 2);
-        }
-        column.put(blocks, 6);
-
-        portalDirButton.size(100, 28);
-        portalDirButton.setIconRotation(PORTAL_ROTATIONS[portalDirIndex]);
-        portalDirButton.onClick(this::rotatePortalDirection);
-        column.put(portalDirButton, 6);
-        return column;
-    }
-
-    private Column buildRight() {
-        Column column = new Column();
-        column.setBorder(new EmptyBorder(0, 6, 0, 0));
-
-        Card size = new Card("me.map_size");
-        size.put(stepperRow("width", widthField, -2), 0);
-        size.put(stepperRow("height", heightField, -2), 3);
-        JPanel presets = new JPanel(new GridLayout(1, SIZE_PRESETS.length, 3, 0));
-        presets.setOpaque(false);
-        presets.setPreferredSize(new Dimension(100, 26));
-        for (int i = 0; i < SIZE_PRESETS.length; i++) {
-            final int value = SIZE_PRESETS[i];
-            presetButtons[i] = new ToolButton(currentStyle, ToolButton.Layout.TEXT, null, null).tip("me.preset_tip", null);
-            presetButtons[i].setLabel(String.valueOf(value));
-            presetButtons[i].onClick(() -> resizeMap(value, value));
-            presets.add(presetButtons[i]);
-        }
-        size.put(presets, 4);
-        column.put(size, 0);
-
-        Card actions = new Card("me.actions");
-        JPanel grid = new JPanel(new GridLayout(2, 2, 4, 4));
-        grid.setOpaque(false);
-        grid.setPreferredSize(new Dimension(100, 74));
-        loadButton.onClick(this::loadMapFromSave);
-        ToolButton seedButton = new ToolButton(currentStyle, ToolButton.Layout.TILE, Glyph.DICE, "me.seed_short").tip("me.seed_tip", null);
-        seedButton.onClick(this::loadMapFromSeed);
-        ToolButton clearButton = new ToolButton(currentStyle, ToolButton.Layout.TILE, Glyph.TRASH, "me.clear_short").tip("me.clear_tip", null);
-        clearButton.onClick(this::clearMap);
-        ToolButton newButton = new ToolButton(currentStyle, ToolButton.Layout.TILE, Glyph.NEW, "me.new_short").tip("me.new_tip", null);
-        newButton.onClick(this::resetMap);
-        grid.add(loadButton); grid.add(seedButton); grid.add(clearButton); grid.add(newButton);
-        actions.put(grid, 0);
-        column.put(actions, 4);
-
-        Card test = new Card("me.test");
-        test.put(checkNote, 0);
-        ToolButton play = new ToolButton(currentStyle, ToolButton.Layout.ROW, Glyph.PLAY, "me.play_map").tip("me.play_tip", null).accent(new Color(46, 150, 96));
-        play.size(100, 34);
-        play.onClick(this::playMap);
-        test.put(play, 6);
-        wrongGeometryToggle.setPreferredSize(new Dimension(100, 24));
-        skipValidationToggle.setPreferredSize(new Dimension(100, 24));
-        test.put(wrongGeometryToggle, 6);
-        test.put(skipValidationToggle, 1);
-        fogToggle.setPreferredSize(new Dimension(100, 24));
-        test.put(fogToggle, 1);
-        column.put(test, 4);
-        return column;
-    }
-
-    private JComponent stepperRow(String labelKey, StyledTextField field, int ignored) {
-        JPanel row = new JPanel(new BorderLayout(6, 0));
-        row.setOpaque(false);
-        row.setPreferredSize(new Dimension(100, 24));
-        Text label = new Text(null, 12f, true, MUTED, 0);
-        label.setRaw(L(labelKey) + ":");
-        label.setPreferredSize(new Dimension(66, 24));
-        ToolButton minus = new ToolButton(currentStyle, ToolButton.Layout.ICON, Glyph.MINUS, null).size(24, 24);
-        ToolButton plus = new ToolButton(currentStyle, ToolButton.Layout.ICON, Glyph.PLUS, null).size(24, 24);
-        boolean isWidth = field == widthField;
-        minus.onClick(() -> resizeMap(isWidth ? mapWidth - 2 : mapWidth, isWidth ? mapHeight : mapHeight - 2));
-        plus.onClick(() -> resizeMap(isWidth ? mapWidth + 2 : mapWidth, isWidth ? mapHeight : mapHeight + 2));
-        field.setHorizontalAlignment(JTextField.CENTER);
-        field.limitInput(3, c -> c >= '0' && c <= '9');
-        field.addActionListener(e -> applyFields());
-        field.addFocusListener(new FocusAdapter() { @Override public void focusLost(FocusEvent e) { applyFields(); } });
-        JPanel middle = new JPanel(new BorderLayout(4, 0));
-        middle.setOpaque(false);
-        middle.add(minus, BorderLayout.WEST);
-        middle.add(field, BorderLayout.CENTER);
-        middle.add(plus, BorderLayout.EAST);
-        row.add(label, BorderLayout.WEST);
-        row.add(middle, BorderLayout.CENTER);
-        return row;
-    }
-
-    private JComponent buildStatusBar() {
-        JPanel bar = new JPanel(new BorderLayout(10, 0));
-        bar.setOpaque(false);
-        hoverText.setPreferredSize(new Dimension(190, 28));
-        JPanel east = new JPanel(new BorderLayout(6, 0));
-        east.setOpaque(false);
-        east.add(hoverText, BorderLayout.WEST);
-        east.add(zoomBar(currentStyle, canvas), BorderLayout.CENTER);
-        bar.add(hintBar, BorderLayout.CENTER);
-        bar.add(east, BorderLayout.EAST);
-        canvas.addViewListener(this::updateHover);
-        return bar;
-    }
-    //endregion
-
-    //region Tools & Selection
-    private void selectTool(Tool tool) {
-        currentTool = tool;
-        if (tool != Tool.PORTAL && tool != Tool.PORTAL_ONE) pendingPortal = null;
-        syncSelection();
-        updateHint();
-        canvas.repaint();
-    }
-    private void chooseBlockRow(int index) {
-        if (index == 5) selectTool(Tool.PORTAL);
-        else if (index == 6) selectTool(Tool.PORTAL_ONE);
-        else {
-            selectedBlock = index;
-            if (currentTool == Tool.ERASER || portalToolActive()) { currentTool = Tool.BRUSH; pendingPortal = null; }
-            syncSelection();
-            updateHint();
-            canvas.repaint();
-        }
-    }
-    private void syncSelection() {
-        Tool[] order = {Tool.BRUSH, Tool.ERASER, Tool.BOX, Tool.FILL};
-        for (int i = 0; i < toolButtons.length; i++) toolButtons[i].setSelected(currentTool == order[i]);
-        boolean paints = currentTool == Tool.BRUSH || currentTool == Tool.BOX || currentTool == Tool.FILL;
-        for (int i = 0; i < 5; i++) blockButtons[i].setSelected(paints && selectedBlock == i);
-        blockButtons[5].setSelected(currentTool == Tool.PORTAL);
-        blockButtons[6].setSelected(currentTool == Tool.PORTAL_ONE);
-        portalDirButton.setEnabled(portalToolActive());
-        boolean sized = currentTool == Tool.BRUSH || currentTool == Tool.ERASER;
-        updatingControls = true;
-        sizeSlider.setEnabled(sized);
-        sizeSlider.setValue(currentTool == Tool.ERASER ? eraserSize : brushSize);
-        sizeValue.setRaw(String.valueOf(sizeSlider.getValue()));
-        sizeValue.setEnabled(sized);
-        updatingControls = false;
-    }
-    private void updateHint() {
-        if (pendingPortal != null) { hintBar.setHint(L("me.hint_pending")); return; }
-        hintBar.setHint(L(switch (currentTool) {
-            case BRUSH -> "me.hint_brush"; case ERASER -> "me.hint_eraser"; case BOX -> "me.hint_box"; case FILL -> "me.hint_fill";
-            case PORTAL -> "me.hint_portal"; case PORTAL_ONE -> "me.hint_portal_one";
-        }));
-    }
-    private void updateHover() {
-        int x = canvas.getHoverX(), y = canvas.getHoverY();
-        if (isOutside(x, y)) { hoverText.setRaw(""); return; }
-        boolean start = currentFloorIndex == 0 && x == START_X && y == START_Y;
-        hoverText.setRaw(x + ", " + y + "   " + L(start ? "me.name_start" : BLOCK_NAME_KEYS[Math.clamp(map[y][x], 0, 5)]));
-    }
-    private void updateAll() {
-        updateSizeControls();
-        updateFloorControls();
-        updateHistoryButtons();
-        updateDirtyText();
-        updateHint();
-        updateHover();
-        updateLoadButton();
-        scheduleCheck();
-        canvas.repaint();
-    }
-    private void updateHistoryButtons() { undoButton.setEnabled(!undoHistory.isEmpty()); redoButton.setEnabled(!redoHistory.isEmpty()); }
-    private void updateDirtyText() { dirtyText.setRaw(dirty ? "● " + L("unsaved") : ""); }
+    private boolean isOutside(int x, int y) { return x < 0 || y < 0 || x >= mapWidth || y >= mapHeight; }
     private void markDirty() { dirty = true; updateDirtyText(); updateHistoryButtons(); }
-    //endregion
-
-    //region Editing
-    private void beginStroke() { strokeBase = snapshot(); strokePushed = false; }
-    private void touch() {
-        if (!strokePushed && strokeBase != null) { pushUndo(strokeBase); strokePushed = true; }
-        markDirty();
-        scheduleCheck();
-        canvas.repaint();
-    }
     private boolean setCell(int x, int y, int value) {
         if (isOutside(x, y)) return false;
         if (currentFloorIndex == 0 && x == START_X && y == START_Y) return false;
@@ -662,9 +667,84 @@ public class MapEditorView extends JPanel {
         syncSelection();
         updateHint();
     }
+    private void beginStroke() { strokeBase = snapshot(); strokePushed = false; }
+    private void touch() {
+        if (!strokePushed && strokeBase != null) { pushUndo(strokeBase); strokePushed = true; }
+        markDirty();
+        scheduleCheck();
+        canvas.repaint();
+    }
     //endregion
 
-    //region Map Validation
+    //region Tool Selection
+    private enum Tool {BRUSH, ERASER, BOX, FILL, PORTAL, PORTAL_ONE}
+    private void selectTool(Tool tool) {
+        currentTool = tool;
+        if (tool != Tool.PORTAL && tool != Tool.PORTAL_ONE) pendingPortal = null;
+        syncSelection();
+        updateHint();
+        canvas.repaint();
+    }
+    private void chooseBlockRow(int index) {
+        if (index == 5) selectTool(Tool.PORTAL);
+        else if (index == 6) selectTool(Tool.PORTAL_ONE);
+        else {
+            selectedBlock = index;
+            if (currentTool == Tool.ERASER || portalToolActive()) { currentTool = Tool.BRUSH; pendingPortal = null; }
+            syncSelection();
+            updateHint();
+            canvas.repaint();
+        }
+    }
+    private void syncSelection() {
+        Tool[] order = {Tool.BRUSH, Tool.ERASER, Tool.BOX, Tool.FILL};
+        for (int i = 0; i < toolButtons.length; i++) toolButtons[i].setSelected(currentTool == order[i]);
+        boolean paints = currentTool == Tool.BRUSH || currentTool == Tool.BOX || currentTool == Tool.FILL;
+        for (int i = 0; i < 5; i++) blockButtons[i].setSelected(paints && selectedBlock == i);
+        blockButtons[5].setSelected(currentTool == Tool.PORTAL);
+        blockButtons[6].setSelected(currentTool == Tool.PORTAL_ONE);
+        portalDirButton.setEnabled(portalToolActive());
+        boolean sized = currentTool == Tool.BRUSH || currentTool == Tool.ERASER;
+        updatingControls = true;
+        sizeSlider.setEnabled(sized);
+        sizeSlider.setValue(currentTool == Tool.ERASER ? eraserSize : brushSize);
+        sizeValue.setRaw(String.valueOf(sizeSlider.getValue()));
+        sizeValue.setEnabled(sized);
+        updatingControls = false;
+    }
+    //endregion
+
+    //region Status And Hints
+    private void updateHint() {
+        if (pendingPortal != null) { hintBar.setHint(L("me.hint_pending")); return; }
+        hintBar.setHint(L(switch (currentTool) {
+            case BRUSH -> "me.hint_brush"; case ERASER -> "me.hint_eraser"; case BOX -> "me.hint_box"; case FILL -> "me.hint_fill";
+            case PORTAL -> "me.hint_portal"; case PORTAL_ONE -> "me.hint_portal_one";
+        }));
+    }
+    private void updateHover() {
+        int x = canvas.getHoverX(), y = canvas.getHoverY();
+        if (isOutside(x, y)) { hoverText.setRaw(""); return; }
+        boolean start = currentFloorIndex == 0 && x == START_X && y == START_Y;
+        hoverText.setRaw(x + ", " + y + "   " + L(start ? "me.name_start" : BLOCK_NAME_KEYS[Math.clamp(map[y][x], 0, 5)]));
+    }
+    private void updateDirtyText() { dirtyText.setRaw(dirty ? "● " + L("common.unsaved") : ""); }
+    private void updateHistoryButtons() { undoButton.setEnabled(!undoHistory.isEmpty()); redoButton.setEnabled(!redoHistory.isEmpty()); }
+    private void updateAll() {
+        updateSizeControls();
+        updateFloorControls();
+        updateHistoryButtons();
+        updateDirtyText();
+        updateHint();
+        updateHover();
+        updateLoadButton();
+        scheduleCheck();
+        canvas.repaint();
+    }
+    private void showHelp() { inform(this, currentStyle, "help", L("me.help_text")); }
+    //endregion
+
+    //region Validation
     private java.util.List<int[]> findExits() {
         java.util.List<int[]> exits = new ArrayList<>();
         for (int f = 0; f < floorMaps.size(); f++) {
@@ -689,47 +769,36 @@ public class MapEditorView extends JPanel {
     }
     //endregion
 
-    //region Map Saving And Loading
-    private void saveMapOnly() {
-        try {
-            writeMap(AppPaths.SAVE_FILE, wrongGeometryToggle.isSelected() ? GEOMETRY_WRONG : GEOMETRY_EUCLIDEAN);
-            dirty = false;
-            updateDirtyText();
-            updateLoadButton();
-            hintBar.flash(Tone.OK, L("saved_ok"));
-        } catch (IOException e) {
-            inform(this, currentStyle, "save_error", L("me.could_not_save_map") + ":\n" + e.getMessage());
-        }
-    }
-    private void playMap() {
-        if (!skipValidationToggle.isSelected()) {
-            String error = validateMap();
-            if (error != null) { inform(this, currentStyle, "me.map_cannot_be_played", error + "\n\n" + L("me.play_anyway_hint")); return; }
-        }
-        try {
-            int geometryIndex = wrongGeometryToggle.isSelected() ? GEOMETRY_WRONG : GEOMETRY_EUCLIDEAN;
-            Files.createDirectories(AppPaths.DATA_DIR);
-            writeMap(AppPaths.SAVE_FILE, geometryIndex);
-            dirty = false;
-            int[][][] floorsArray = floorMaps.toArray(new int[0][][]);
-            PortalData[] portalsPerFloor = buildPortalDataPerFloor();
-            GameView gameView = new GameView(floorsArray, portalsPerFloor, geometryIndex);
-            gameView.resolveRenderEngine();
-            gameView.setFogOfWarMinimap(fogToggle.isSelected());
-            RCJMS.instance.gameView = gameView;
-            RCJMS.instance.changeView(gameView, "Raycast Me!");
-            gameView.start();
-        } catch (Project.Game.NoRenderEngineException e) {
-            inform(this, currentStyle, "me.map_cannot_be_played", L("no_fallback_engine"));
-        } catch (IOException e) {
-            inform(this, currentStyle, "save_error", L("me.could_not_save_map") + ":\n" + e.getMessage());
-        }
-    }
+    //region Save And Load
+    private Style loadTheme() { return SaveData.load().theme; }
     private static boolean hasSavedMap() {
         try { return !readMap(AppPaths.SAVE_FILE).isEmpty(); }
-        catch (IOException e) { return false; }
+        catch (IOException exception) { return false; }
     }
     private void updateLoadButton() { loadButton.setEnabled(hasSavedMap()); }
+    public static java.util.List<int[][]> readMap(Path file) throws IOException {
+        SaveData.Data data = SaveData.load();
+        int[][][] floors = data.mapFloors;
+        if (floors == null || floors.length == 0) return new ArrayList<>();
+
+        int height = floors[0].length;
+        int width = height == 0 ? 0 : floors[0][0].length;
+        if (height < MIN_MAP_SIZE || height > MAX_MAP_SIZE) throw new IOException("Map height must be between " + MIN_MAP_SIZE + " and " + MAX_MAP_SIZE);
+        if (width < MIN_MAP_SIZE || width > MAX_MAP_SIZE) throw new IOException("Map width must be between " + MIN_MAP_SIZE + " and " + MAX_MAP_SIZE);
+        if ((height & 1) == 0) throw new IOException("Map height must be odd.");
+        if ((width & 1) == 0) throw new IOException("Map width must be odd.");
+
+        java.util.List<int[][]> result = new ArrayList<>();
+        for (int[][] floor : floors) {
+            if (floor == null || floor.length != height) throw new IOException("Invalid map: floors have different heights.");
+            for (int[] row : floor) {
+                if (row.length != width) throw new IOException("Invalid map: rows have different widths.");
+                for (int value : row) if (value < PATH || value > PORTAL) throw new IOException("Invalid block value: " + value + ". Expected 0-5.");
+            }
+            result.add(floor);
+        }
+        return result;
+    }
     private void loadMapFromSave() {
         if (dirty && mapHasContent() && ask(this, currentStyle, "confirm_title", L("me.load_confirm"), 1, "me.load_yes", "cancel") != 0) return;
         java.util.List<int[][]> floors;
@@ -737,8 +806,8 @@ public class MapEditorView extends JPanel {
         try {
             floors = readMap(AppPaths.SAVE_FILE);
             data = SaveData.load();
-        } catch (IOException e) {
-            inform(this, currentStyle, "load_error", L("me.could_not_load_map") + ":\n" + e.getMessage());
+        } catch (IOException exception) {
+            inform(this, currentStyle, "common.load_error", L("me.could_not_load_map") + ":\n" + exception.getMessage());
             updateLoadButton();
             return;
         }
@@ -775,41 +844,17 @@ public class MapEditorView extends JPanel {
     private void writeMap(Path file, int geometryIndex) throws IOException {
         SaveData.saveMap(floorMaps.toArray(new int[0][][]), portalLinks, geometryIndex, NSLocalizedString.getLanguage(), currentStyle, GameView.getRenderScale());
     }
-    public static java.util.List<int[][]> readMap(Path file) throws IOException {
-        SaveData.Data data = SaveData.load();
-        int[][][] floors = data.mapFloors;
-        if (floors == null || floors.length == 0) return new ArrayList<>();
-
-        int height = floors[0].length;
-        int width = height == 0 ? 0 : floors[0][0].length;
-        if (height < MIN_MAP_SIZE || height > MAX_MAP_SIZE) throw new IOException("Map height must be between " + MIN_MAP_SIZE + " and " + MAX_MAP_SIZE);
-        if (width < MIN_MAP_SIZE || width > MAX_MAP_SIZE) throw new IOException("Map width must be between " + MIN_MAP_SIZE + " and " + MAX_MAP_SIZE);
-        if ((height & 1) == 0) throw new IOException("Map height must be odd.");
-        if ((width & 1) == 0) throw new IOException("Map width must be odd.");
-
-        java.util.List<int[][]> result = new ArrayList<>();
-        for (int[][] floor : floors) {
-            if (floor == null || floor.length != height) throw new IOException("Invalid map: floors have different heights.");
-            for (int[] row : floor) {
-                if (row.length != width) throw new IOException("Invalid map: rows have different widths.");
-                for (int value : row) if (value < PATH || value > PORTAL) throw new IOException("Invalid block value: " + value + ". Expected 0-5.");
-            }
-            result.add(floor);
+    private void saveMapOnly() {
+        try {
+            writeMap(AppPaths.SAVE_FILE, wrongGeometryToggle.isSelected() ? GEOMETRY_WRONG : GEOMETRY_EUCLIDEAN);
+            dirty = false;
+            updateDirtyText();
+            updateLoadButton();
+            hintBar.flash(Tone.OK, L("saved_ok"));
+        } catch (IOException exception) {
+            inform(this, currentStyle, "common.save_error", L("me.could_not_save_map") + ":\n" + exception.getMessage());
         }
-        return result;
     }
-    private void exitToMainMenu() {
-        if (dirty && mapHasContent()) {
-            int answer = ask(this, currentStyle, "unsaved_title", L("unsaved_msg"), 0, "save_and_leave", "leave_without_saving", "keep_editing");
-            if (answer == 0) { saveMapOnly(); if (dirty) return; }
-            else if (answer != 1) return;
-        }
-        RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu");
-    }
-    private void showHelp() { inform(this, currentStyle, "help", L("me.help_text")); }
-    //endregion
-
-    //region Seed Maps
     private void loadMapFromSeed() {
         SeedMapBuilder.Options initial = lastSeedOptions != null ? lastSeedOptions
                 : new SeedMapBuilder.Options(mapWidth, mapHeight, floorMaps.size(), false, 0, SeedUtil.randomSeed());
@@ -835,9 +880,54 @@ public class MapEditorView extends JPanel {
         updateAll();
         hintBar.flash(Tone.OK, L("me.seed_map_loaded"));
     }
+    private void playMap() {
+        if (!skipValidationToggle.isSelected()) {
+            String error = validateMap();
+            if (error != null) { inform(this, currentStyle, "me.map_cannot_be_played", error + "\n\n" + L("me.play_anyway_hint")); return; }
+        }
+        try {
+            int geometryIndex = wrongGeometryToggle.isSelected() ? GEOMETRY_WRONG : GEOMETRY_EUCLIDEAN;
+            Files.createDirectories(AppPaths.DATA_DIR);
+            writeMap(AppPaths.SAVE_FILE, geometryIndex);
+            dirty = false;
+            int[][][] floorsArray = floorMaps.toArray(new int[0][][]);
+            PortalData[] portalsPerFloor = buildPortalDataPerFloor();
+            GameView gameView = new GameView(floorsArray, portalsPerFloor, geometryIndex);
+            gameView.resolveRenderEngine();
+            gameView.setFogOfWarMinimap(fogToggle.isSelected());
+            RCJMS.instance.gameView = gameView;
+            RCJMS.instance.changeView(gameView, "Raycast Me!");
+            gameView.start();
+        } catch (Project.Game.NoRenderEngineException exception) {
+            inform(this, currentStyle, "me.map_cannot_be_played", L("no_fallback_engine"));
+        } catch (IOException exception) {
+            inform(this, currentStyle, "common.save_error", L("me.could_not_save_map") + ":\n" + exception.getMessage());
+        }
+    }
+    private void exitToMainMenu() {
+        if (dirty && mapHasContent()) {
+            int answer = ask(this, currentStyle, "common.unsaved_title", L("me.unsaved_msg"), 0, "common.save_and_leave", "common.leave_without_saving", "common.keep_editing");
+            if (answer == 0) { saveMapOnly(); if (dirty) return; }
+            else if (answer != 1) return;
+        }
+        RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu");
+    }
     //endregion
 
-    //region Undo/Redo
+    //region History
+    private record EditorState(java.util.List<int[][]> floors, int currentFloor, java.util.List<int[]> portals, int width, int height) {
+    private EditorState(java.util.List<int[][]> floors, int currentFloor, java.util.List<int[]> portals, int width, int height) {
+            java.util.List<int[][]> copiedFloors = new ArrayList<>();
+            for (int[][] floor : floors) copiedFloors.add(copyMap(floor));
+            this.floors = copiedFloors;
+            this.currentFloor = currentFloor;
+            java.util.List<int[]> copiedPortals = new ArrayList<>();
+            for (int[] link : portals) copiedPortals.add(link.clone());
+            this.portals = copiedPortals;
+            this.width = width;
+            this.height = height;
+        }
+    }
     private EditorState snapshot() { return new EditorState(floorMaps, currentFloorIndex, portalLinks, mapWidth, mapHeight); }
     private int historyLimit() { return (long) mapWidth * mapHeight * floorMaps.size() > 150_000 ? 10 : 50; }
     private void pushUndo(EditorState state) {
@@ -877,7 +967,7 @@ public class MapEditorView extends JPanel {
     }
     //endregion
 
-    //region Key Binds
+    //region Keyboard Shortcuts
     private void setupKeyBinds() {
         InputMap windowMap = getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         ActionMap actionMap = getActionMap();
@@ -907,7 +997,7 @@ public class MapEditorView extends JPanel {
     private void bindKey(InputMap inputMap, ActionMap actionMap, KeyStroke key, String name, Runnable action) {
         String id = "mapEditor" + name;
         inputMap.put(key, id);
-        actionMap.put(id, new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { action.run(); } });
+        actionMap.put(id, new AbstractAction() { @Override public void actionPerformed(ActionEvent actionEvent) { action.run(); } });
     }
     private void bindHotkey(InputMap inputMap, ActionMap actionMap, int keyCode, Runnable action) {
         bindKey(inputMap, actionMap, KeyStroke.getKeyStroke(keyCode, 0), "hotkey" + keyCode, () -> {
@@ -917,106 +1007,51 @@ public class MapEditorView extends JPanel {
     }
     //endregion
 
-    //region Helpers
-    private Style loadTheme() { return SaveData.load().theme; }
-    //endregion
-
-    //region Nested Types
-    private enum Tool {BRUSH, ERASER, BOX, FILL, PORTAL, PORTAL_ONE}
-
-    private record EditorState(java.util.List<int[][]> floors, int currentFloor, java.util.List<int[]> portals, int width, int height) {
-        private EditorState(java.util.List<int[][]> floors, int currentFloor, java.util.List<int[]> portals, int width, int height) {
-            java.util.List<int[][]> copiedFloors = new ArrayList<>();
-            for (int[][] floor : floors) copiedFloors.add(copyMap(floor));
-            this.floors = copiedFloors;
-            this.currentFloor = currentFloor;
-            java.util.List<int[]> copiedPortals = new ArrayList<>();
-            for (int[] link : portals) copiedPortals.add(link.clone());
-            this.portals = copiedPortals;
-            this.width = width;
-            this.height = height;
-        }
-    }
-
-    private final class FloorStrip extends JComponent {
-        private static final int ADD = -2, REMOVE = -3, NONE = -4;
-        private int count = 1, current = 0, hover = NONE;
-
-        FloorStrip() {
-            setToolTipText("");
-            MouseAdapter mouse = new MouseAdapter() {
-                @Override public void mouseMoved(MouseEvent e) { int h = hit(e.getX(), e.getY()); if (h != hover) { hover = h; repaint(); } }
-                @Override public void mouseExited(MouseEvent e) { hover = NONE; repaint(); }
-                @Override public void mouseReleased(MouseEvent e) {
-                    int h = hit(e.getX(), e.getY());
-                    if (h == ADD) addFloor(); else if (h == REMOVE) removeFloor(); else if (h >= 0) switchFloor(h);
-                }
-            };
-            addMouseListener(mouse);
-            addMouseMotionListener(mouse);
-        }
-        void update(int count, int current) { this.count = count; this.current = current; repaint(); }
-        private int labelWidth() { return 64; }
-        private Rectangle addRect() { return new Rectangle(getWidth() - 62, 3, 26, 26); }
-        private Rectangle removeRect() { return new Rectangle(getWidth() - 30, 3, 26, 26); }
-        private int pillWidth() { return Math.clamp((getWidth() - labelWidth() - 62 - 8) / Math.max(1, count) - 3, 20, 40); }
-        private Rectangle pillRect(int i) { int w = pillWidth(); return new Rectangle(labelWidth() + i * (w + 3), 3, w, 26); }
-        private int hit(int x, int y) {
-            if (addRect().contains(x, y)) return ADD;
-            if (removeRect().contains(x, y)) return REMOVE;
-            for (int i = 0; i < count; i++) if (pillRect(i).contains(x, y)) return i;
-            return NONE;
-        }
-        @Override public String getToolTipText(MouseEvent e) {
-            int h = hit(e.getX(), e.getY());
-            return h == ADD ? L("me.add_floor") : h == REMOVE ? L("me.remove_floor") : h >= 0 ? fmt("me.go_floor", h + 1) : null;
-        }
-        @Override protected void paintComponent(Graphics g) {
-            Graphics2D g2d = smooth(g);
-            Theme theme = Theme.of(currentStyle);
-            g2d.setFont(font(12f, true));
-            g2d.setColor(MUTED);
-            g2d.drawString(ellipsize(L("me.floor_strip"), g2d.getFontMetrics(), labelWidth() - 6), 2, (getHeight() - g2d.getFontMetrics().getHeight()) / 2 + g2d.getFontMetrics().getAscent());
-            for (int i = 0; i < count; i++) {
-                Rectangle r = pillRect(i);
-                boolean on = i == current;
-                g2d.setColor(on ? mix(theme.normal(), HILITE, 0.55f) : hover == i ? theme.hover() : theme.normal());
-                g2d.fillRoundRect(r.x, r.y, r.width, r.height, 10, 10);
-                g2d.setColor(on ? HILITE : theme.accent());
-                g2d.setStroke(new BasicStroke(on ? 2f : 1f));
-                g2d.drawRoundRect(r.x, r.y, r.width - 1, r.height - 1, 10, 10);
-                String label = String.valueOf(i + 1);
-                g2d.setFont(font(12f, true));
-                FontMetrics fm = g2d.getFontMetrics();
-                g2d.setColor(Color.WHITE);
-                g2d.drawString(label, r.x + (r.width - fm.stringWidth(label)) / 2, r.y + (r.height - fm.getHeight()) / 2 + fm.getAscent());
-            }
-            drawRoundButton(g2d, theme, addRect(), Glyph.PLUS, count < MAX_FLOORS, hover == ADD);
-            drawRoundButton(g2d, theme, removeRect(), Glyph.TRASH, count > 1, hover == REMOVE);
-            g2d.dispose();
-        }
-        private void drawRoundButton(Graphics2D g2d, Theme theme, Rectangle r, Glyph glyph, boolean enabled, boolean hovered) {
-            Composite old = g2d.getComposite();
-            if (!enabled) g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
-            g2d.setColor(hovered && enabled ? theme.hover() : theme.normal());
-            g2d.fillRoundRect(r.x, r.y, r.width, r.height, 10, 10);
-            g2d.setColor(theme.accent());
-            g2d.setStroke(new BasicStroke(1f));
-            g2d.drawRoundRect(r.x, r.y, r.width - 1, r.height - 1, 10, 10);
-            glyph.paint(g2d, r.x + 5, r.y + 5, r.width - 10, theme.text());
-            g2d.setComposite(old);
-        }
-    }
-
+    //region Canvas
     private final class MapCanvas extends GridCanvas {
         private Tool strokeTool;
         private int strokeSize, strokeValue, lastX, lastY;
         private boolean boxing, boxErase;
         private int boxX0, boxY0, boxX1, boxY1;
 
-        private Color colorOf(int value) {
-            return switch (value) { case WALL -> WALL_COLOR; case FINISH -> FINISH_COLOR; case STAIRS_UP -> STAIRS_UP_COLOR; case STAIRS_DOWN -> STAIRS_DOWN_COLOR; case PORTAL -> PORTAL_COLOR; default -> PATH_COLOR; };
+        @Override protected void pointerPressed(int x, int y, MouseEvent mouseEvent) {
+            if (!inGrid(x, y)) return;
+            boolean right = SwingUtilities.isRightMouseButton(mouseEvent);
+            if (mouseEvent.isAltDown() && !right) { pickBlockFromCell(x, y); return; }
+            if (!right && (currentTool == Tool.PORTAL || currentTool == Tool.PORTAL_ONE)) { handlePortalClick(x, y, currentTool == Tool.PORTAL_ONE); return; }
+            Tool tool = right ? Tool.ERASER : currentTool;
+            if (tool == Tool.PORTAL || tool == Tool.PORTAL_ONE) tool = Tool.ERASER;
+            int value = tool == Tool.ERASER ? PATH : selectedBlock;
+            switch (tool) {
+                case BRUSH, ERASER -> {
+                    beginStroke();
+                    strokeTool = tool; strokeValue = value; lastX = x; lastY = y;
+                    strokeSize = tool == Tool.BRUSH ? brushSize : (right && portalToolActive() ? 1 : eraserSize);
+                    if (stamp(x, y, strokeSize, value)) touch();
+                }
+                case BOX -> { boxing = true; boxErase = right; boxX0 = boxX1 = x; boxY0 = boxY1 = y; repaint(); }
+                case FILL -> { beginStroke(); if (floodFill(x, y, value)) touch(); }
+                default -> { }
+            }
         }
+        @Override protected void pointerDragged(int x, int y, MouseEvent mouseEvent) {
+            if (boxing) { boxX1 = Math.clamp(x, 0, cols - 1); boxY1 = Math.clamp(y, 0, rows - 1); repaint(); return; }
+            if (strokeTool == null || !inGrid(x, y)) return;
+            boolean[] any = {false};
+            line(lastX, lastY, x, y, (cx, cy) -> any[0] |= stamp(cx, cy, strokeSize, strokeValue));
+            lastX = x; lastY = y;
+            if (any[0]) touch();
+        }
+        @Override protected void pointerReleased(int x, int y, MouseEvent mouseEvent) {
+            if (boxing) {
+                boxing = false;
+                beginStroke();
+                if (fillRect(boxX0, boxY0, boxX1, boxY1, boxErase ? PATH : selectedBlock)) touch();
+                repaint();
+            }
+            strokeTool = null;
+        }
+
         @Override protected void paintContent(Graphics2D g2d, int x0, int y0, int x1, int y1) {
             for (int y = y0; y <= y1; y++) {
                 int ry = py(y), rh = Math.max(1, py(y + 1) - ry);
@@ -1044,20 +1079,6 @@ public class MapEditorView extends JPanel {
             drawPortalArrows(g2d);
             g2d.setColor(new Color(0, 0, 0, 200));
             g2d.drawRect(px(0) - 1, py(0) - 1, px(cols) - px(0) + 1, py(rows) - py(0) + 1);
-        }
-        private void drawStart(Graphics2D g2d) {
-            int rx = px(START_X), ry = py(START_Y), size = Math.max(1, px(START_X + 1) - rx);
-            int inset = Math.max(1, size / 6);
-            g2d.setColor(new Color(40, 110, 255));
-            g2d.fillRect(rx + inset, ry + inset, Math.max(1, size - inset * 2), Math.max(1, size - inset * 2));
-            if (cell >= 14) {
-                Graphics2D smoothG2d = smooth(g2d);
-                smoothG2d.setFont(font((float) Math.max(9, cell * 0.5), true));
-                FontMetrics fm = smoothG2d.getFontMetrics();
-                smoothG2d.setColor(Color.WHITE);
-                smoothG2d.drawString("S", rx + (size - fm.stringWidth("S")) / 2, ry + (size - fm.getHeight()) / 2 + fm.getAscent());
-                smoothG2d.dispose();
-            }
         }
         @Override protected void paintOverlay(Graphics2D g2d, int x0, int y0, int x1, int y1) {
             if (pendingPortal != null && pendingPortal[0] == currentFloorIndex) outline(g2d, pendingPortal[1], pendingPortal[2], new Color(230, 220, 60), 2);
@@ -1091,6 +1112,23 @@ public class MapEditorView extends JPanel {
                     }
                 }
                 default -> outline(g2d, hoverX, hoverY, Color.WHITE, 1);
+            }
+        }
+        private Color colorOf(int value) {
+            return switch (value) { case WALL -> WALL_COLOR; case FINISH -> FINISH_COLOR; case STAIRS_UP -> STAIRS_UP_COLOR; case STAIRS_DOWN -> STAIRS_DOWN_COLOR; case PORTAL -> PORTAL_COLOR; default -> PATH_COLOR; };
+        }
+        private void drawStart(Graphics2D g2d) {
+            int rx = px(START_X), ry = py(START_Y), size = Math.max(1, px(START_X + 1) - rx);
+            int inset = Math.max(1, size / 6);
+            g2d.setColor(new Color(40, 110, 255));
+            g2d.fillRect(rx + inset, ry + inset, Math.max(1, size - inset * 2), Math.max(1, size - inset * 2));
+            if (cell >= 14) {
+                Graphics2D smoothG2d = smooth(g2d);
+                smoothG2d.setFont(font((float) Math.max(9, cell * 0.5), true));
+                FontMetrics fontMetrics = smoothG2d.getFontMetrics();
+                smoothG2d.setColor(Color.WHITE);
+                smoothG2d.drawString("S", rx + (size - fontMetrics.stringWidth("S")) / 2, ry + (size - fontMetrics.getHeight()) / 2 + fontMetrics.getAscent());
+                smoothG2d.dispose();
             }
         }
         private void outline(Graphics2D g2d, int x, int y, Color color, int thickness) {
@@ -1147,44 +1185,6 @@ public class MapEditorView extends JPanel {
             g2d.fill(arrow);
             g2d.setColor(new Color(15, 15, 18));
             g2d.draw(arrow);
-        }
-
-        @Override protected void pointerPressed(int x, int y, MouseEvent e) {
-            if (!inGrid(x, y)) return;
-            boolean right = SwingUtilities.isRightMouseButton(e);
-            if (e.isAltDown() && !right) { pickBlockFromCell(x, y); return; }
-            if (!right && (currentTool == Tool.PORTAL || currentTool == Tool.PORTAL_ONE)) { handlePortalClick(x, y, currentTool == Tool.PORTAL_ONE); return; }
-            Tool tool = right ? Tool.ERASER : currentTool;
-            if (tool == Tool.PORTAL || tool == Tool.PORTAL_ONE) tool = Tool.ERASER;
-            int value = tool == Tool.ERASER ? PATH : selectedBlock;
-            switch (tool) {
-                case BRUSH, ERASER -> {
-                    beginStroke();
-                    strokeTool = tool; strokeValue = value; lastX = x; lastY = y;
-                    strokeSize = tool == Tool.BRUSH ? brushSize : (right && portalToolActive() ? 1 : eraserSize);
-                    if (stamp(x, y, strokeSize, value)) touch();
-                }
-                case BOX -> { boxing = true; boxErase = right; boxX0 = boxX1 = x; boxY0 = boxY1 = y; repaint(); }
-                case FILL -> { beginStroke(); if (floodFill(x, y, value)) touch(); }
-                default -> { }
-            }
-        }
-        @Override protected void pointerDragged(int x, int y, MouseEvent e) {
-            if (boxing) { boxX1 = Math.clamp(x, 0, cols - 1); boxY1 = Math.clamp(y, 0, rows - 1); repaint(); return; }
-            if (strokeTool == null || !inGrid(x, y)) return;
-            boolean[] any = {false};
-            line(lastX, lastY, x, y, (cx, cy) -> any[0] |= stamp(cx, cy, strokeSize, strokeValue));
-            lastX = x; lastY = y;
-            if (any[0]) touch();
-        }
-        @Override protected void pointerReleased(int x, int y, MouseEvent e) {
-            if (boxing) {
-                boxing = false;
-                beginStroke();
-                if (fillRect(boxX0, boxY0, boxX1, boxY1, boxErase ? PATH : selectedBlock)) touch();
-                repaint();
-            }
-            strokeTool = null;
         }
     }
     //endregion

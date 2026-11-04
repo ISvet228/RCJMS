@@ -1,4 +1,7 @@
 package Project.Credits;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 import Project.MainMenu.MainMenuView;
 import Project.RCJMS;
 import Project.Helpers.NSLocalizedString;
@@ -12,6 +15,7 @@ import java.util.List;
 
 public class CreditsView extends JPanel {
     //region Variables
+    //region Credits Text
     private final String[] creditsText = {
             "cv.project_rcjms",
             "",
@@ -53,16 +57,17 @@ public class CreditsView extends JPanel {
             "",
             ""
     };
-
     private final List<CreditLine> lines = new ArrayList<>();
+    //endregion
+    //region Scroll State
     private final Timer scrollTimer;
     private final Runnable languageListener = () -> { parseCredits(); repaint(); };
-
     private final double scrollSpeed = 1.0;
     private double scrollY;
     private boolean scrollInitialized = false;
     private double endY;
     private boolean finished = false;
+    //endregion
     //endregion
 
     //region Constructors
@@ -73,19 +78,19 @@ public class CreditsView extends JPanel {
         parseCredits();
         NSLocalizedString.addLanguageChangeListener(languageListener);
 
-        addKeyListener(new KeyAdapter() {@Override public void keyPressed(KeyEvent e) {if (e.getKeyCode() == KeyEvent.VK_ESCAPE) returnToMenu();}});
+        addKeyListener(new KeyAdapter() {@Override public void keyPressed(KeyEvent keyEvent) {if (keyEvent.getKeyCode() == KeyEvent.VK_ESCAPE) returnToMenu();}});
         addMouseListener(new MouseAdapter() {
-            @Override public void mouseClicked(MouseEvent e) {
-                CreditLine clickedLine = getClickedLine(e.getX(), e.getY());
+            @Override public void mouseClicked(MouseEvent mouseEvent) {
+                CreditLine clickedLine = getClickedLine(mouseEvent.getX(), mouseEvent.getY());
                 if (clickedLine != null && clickedLine.url != null) openURL(clickedLine.url);
             }});
-        scrollTimer = new Timer(16, e -> {updateCredits();repaint();});
+        scrollTimer = new Timer(16, actionEvent -> {updateCredits();repaint();});
         scrollTimer.start();
         SwingUtilities.invokeLater(this::requestFocusInWindow);
     }
     //endregion
 
-    //region Public API
+    //region Lifecycle
     @Override public void addNotify() {
         super.addNotify();
         if (scrollTimer != null && !scrollTimer.isRunning()) scrollTimer.start();
@@ -95,18 +100,17 @@ public class CreditsView extends JPanel {
         NSLocalizedString.removeLanguageChangeListener(languageListener);
         super.removeNotify();
     }
-
     public void returnToMenu() {
         if (finished && scrollTimer == null) return;
         finished = true;
         if (scrollTimer != null) scrollTimer.stop();
 
         try {RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu");}
-        catch (Exception ex) {ex.printStackTrace();}
+        catch (Exception exception) {exception.printStackTrace();}
     }
     //endregion
 
-    //region Credits
+    //region Credit Parsing
     private void parseCredits() {
         lines.clear();
         for (String text : creditsText) {
@@ -122,40 +126,35 @@ public class CreditsView extends JPanel {
             } else lines.add(new CreditLine(NSLocalizedString.localizeDynamic(text)));
         }
     }
+    private static class CreditLine {
+        String text, url;
+        CreditLine(String text) { this.text = text; this.url = null; }
+        CreditLine(String text, String url) { this.text = text; this.url = url; }
+    }
+    //endregion
 
+    //region Scrolling
     private void updateCredits() {
         if (finished) return;
         scrollY -= scrollSpeed;
         if (scrollY <= endY) {
             scrollY = endY;
             finished = true;
-            Timer returnTimer = new Timer(1200, e -> {((Timer) e.getSource()).stop();returnToMenu();});
+            Timer returnTimer = new Timer(1200, actionEvent -> {((Timer) actionEvent.getSource()).stop();returnToMenu();});
             returnTimer.setRepeats(false);
             returnTimer.start();
         }
     }
     //endregion
 
-    //region Layout
-    private double getScale() {
-        int width = getWidth();
-        int height = getHeight();
-
-        if (width <= 0 || height <= 0) return 1.0;
-        return Math.min((double) width / RCJMS.SCREEN_WIDTH, (double) height / RCJMS.SCREEN_HEIGHT);
-    }
-    private int getOffsetX(double scale) {return (getWidth() - (int) (RCJMS.SCREEN_WIDTH * scale)) / 2;}
-    private int getOffsetY(double scale) {return (getHeight() - (int) (RCJMS.SCREEN_HEIGHT * scale)) / 2;}
-    //endregion
-
-    //region Rendering
-    @Override protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
+    //region Drawing
+    @Override protected void paintComponent(Graphics graphics) {
+        super.paintComponent(graphics);
         int width = getWidth(), height = getHeight();
         if (width <= 0 || height <= 0) return;
         double scale = getScale();
 
-        Graphics2D g2d = (Graphics2D) g.create();
+        Graphics2D g2d = (Graphics2D) graphics.create();
         g2d.setColor(Color.BLACK);
         g2d.fillRect(0, 0, width, height);
         g2d.translate(getOffsetX(scale), getOffsetY(scale));
@@ -204,9 +203,9 @@ public class CreditsView extends JPanel {
 
             if (i == 0 && !line.text.isEmpty()) font = titleFont;
             g2d.setFont(font);
-            FontMetrics fm = g2d.getFontMetrics();
+            FontMetrics fontMetrics = g2d.getFontMetrics();
 
-            int textWidth = fm.stringWidth(line.text);
+            int textWidth = fontMetrics.stringWidth(line.text);
             int x = (RCJMS.SCREEN_WIDTH - textWidth) / 2;
             int baseline = (int) y;
 
@@ -219,9 +218,18 @@ public class CreditsView extends JPanel {
             }
         }
     }
+    private double getScale() {
+        int width = getWidth();
+        int height = getHeight();
+
+        if (width <= 0 || height <= 0) return 1.0;
+        return Math.min((double) width / RCJMS.SCREEN_WIDTH, (double) height / RCJMS.SCREEN_HEIGHT);
+    }
+    private int getOffsetX(double scale) {return (getWidth() - (int) (RCJMS.SCREEN_WIDTH * scale)) / 2;}
+    private int getOffsetY(double scale) {return (getHeight() - (int) (RCJMS.SCREEN_HEIGHT * scale)) / 2;}
     //endregion
 
-    //region Mouse Input
+    //region Link Clicks
     private CreditLine getClickedLine(int mouseX, int mouseY) {
         double scale = getScale();
         int offsetX = getOffsetX(scale);
@@ -236,12 +244,12 @@ public class CreditsView extends JPanel {
             double y = scrollY + i * lineHeight;
 
             Font font = new Font(Font.SANS_SERIF, Font.PLAIN, 28);
-            FontMetrics fm = getFontMetrics(font);
+            FontMetrics fontMetrics = getFontMetrics(font);
 
-            int textWidth = fm.stringWidth(line.text);
+            int textWidth = fontMetrics.stringWidth(line.text);
             int x = (RCJMS.SCREEN_WIDTH - textWidth) / 2;
-            int top = (int) y - fm.getAscent();
-            int bottom = (int) y + fm.getDescent();
+            int top = (int) y - fontMetrics.getAscent();
+            int bottom = (int) y + fontMetrics.getDescent();
 
             if (logicalX >= x && logicalX <= x + textWidth && logicalY >= top && logicalY <= bottom) return line;
         }
@@ -253,15 +261,7 @@ public class CreditsView extends JPanel {
                 Desktop desktop = Desktop.getDesktop();
                 if (desktop.isSupported(Desktop.Action.BROWSE)) desktop.browse(new URI(url));
             }
-        } catch (Exception ex) {ex.printStackTrace();}
-    }
-    //endregion
-
-    //region Nested Types
-    private static class CreditLine {
-        String text, url;
-        CreditLine(String text) { this.text = text; this.url = null; }
-        CreditLine(String text, String url) { this.text = text; this.url = url; }
+        } catch (Exception exception) {exception.printStackTrace();}
     }
     //endregion
 }

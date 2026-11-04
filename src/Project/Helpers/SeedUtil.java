@@ -1,4 +1,7 @@
 package Project.Helpers;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -13,13 +16,16 @@ public final class SeedUtil {
     private SeedUtil() {}
     //endregion
 
-    //region Public API
+    //region Seed Generation
     public static String randomSeed() {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         StringBuilder seed = new StringBuilder(LENGTH);
         for (int i = 0; i < LENGTH; i++) seed.append(RANDOM_ALPHABET.charAt(random.nextInt(RANDOM_ALPHABET.length())));
         return seed.toString();
     }
+    //endregion
+
+    //region Seed Validation
     public static String normalize(String text) {
         if (text == null) return "";
         StringBuilder seed = new StringBuilder(LENGTH);
@@ -30,19 +36,19 @@ public final class SeedUtil {
     public static boolean isAllowedChar(int codePoint) {
         return !Character.isWhitespace(codePoint);
     }
+    private static boolean isPackable(String seed) {
+        for (int i = 0; i < seed.length(); i++) if (PACKED_ALPHABET.indexOf(seed.charAt(i)) < 0) return false;
+        return true;
+    }
+    //endregion
+
+    //region Seed Conversion
     public static long toLong(String seedText) {
         String seed = normalize(seedText);
         if (isPackable(seed)) return pack(seed);
         long hash = 1125899906842597L;
         for (int i = 0; i < seed.length(); i++) hash = 31 * hash + seed.charAt(i);
         return hash;
-    }
-    //endregion
-
-    //region Helpers
-    private static boolean isPackable(String seed) {
-        for (int i = 0; i < seed.length(); i++) if (PACKED_ALPHABET.indexOf(seed.charAt(i)) < 0) return false;
-        return true;
     }
     private static long pack(String seed) {
         long value = seed.length();

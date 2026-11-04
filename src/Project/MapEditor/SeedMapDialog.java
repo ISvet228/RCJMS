@@ -1,4 +1,7 @@
 package Project.MapEditor;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 import Project.RCJMS;
 import Project.StyleUI.*;
 import Project.Helpers.*;
@@ -9,20 +12,25 @@ import java.util.function.IntUnaryOperator;
 
 public class SeedMapDialog extends JDialog {
     //region Variables
+    //region Constants
     private static final String[] FINISH_MODES = {"opposite_corner", "center", "random_edge"};
-
+    //endregion
+    //region Inputs
     private final IntUnaryOperator sizeNormalizer;
     private final int maxFloors;
     private final SeedMapBuilder.Options initial;
-
+    //endregion
+    //region Controls
     private final StyledTextField widthField;
     private final StyledTextField heightField;
     private final StyledTextField floorsField;
     private final StyledTextField seedField;
     private final StyledToggle loopedToggle;
     private final StyledComboBox finishBox;
-
+    //endregion
+    //region Result
     private SeedMapBuilder.Options result = null;
+    //endregion
     //endregion
 
     //region Constructors
@@ -46,12 +54,12 @@ public class SeedMapDialog extends JDialog {
         StyledButton randomSeedButton = new StyledButton(style, "me.random_seed");
         StyledButton generateButton = new StyledButton(style, "me.generate");
         StyledButton cancelButton = new StyledButton(style, "cancel");
-        randomSeedButton.addActionListener(e -> seedField.setText(SeedUtil.randomSeed()));
-        generateButton.addActionListener(e -> confirm());
-        cancelButton.addActionListener(e -> dispose());
+        randomSeedButton.addActionListener(actionEvent -> seedField.setText(SeedUtil.randomSeed()));
+        generateButton.addActionListener(actionEvent -> confirm());
+        cancelButton.addActionListener(actionEvent -> dispose());
         for (StyledTextField field : new StyledTextField[]{widthField, heightField, floorsField, seedField}) {
             field.setPreferredSize(new Dimension(150, 34));
-            field.addActionListener(e -> confirm());
+            field.addActionListener(actionEvent -> confirm());
         }
         seedField.setPreferredSize(new Dimension(150, 34));
         loopedToggle.setPreferredSize(new Dimension(220, 34));
@@ -66,11 +74,25 @@ public class SeedMapDialog extends JDialog {
     }
     //endregion
 
-    //region Public API
+    //region Dialog Flow
     public SeedMapBuilder.Options showDialog() { setVisible(true); return result; }
+    private void confirm() {
+        String seed = SeedUtil.normalize(seedField.getText());
+        if (seed.isEmpty()) seed = SeedUtil.randomSeed();
+        result = new SeedMapBuilder.Options(
+                sizeNormalizer.applyAsInt(parseNumber(widthField, initial.width())),
+                sizeNormalizer.applyAsInt(parseNumber(heightField, initial.height())),
+                Math.clamp(parseNumber(floorsField, initial.floors()), 1, maxFloors),
+                loopedToggle.isSelected(), finishBox.getSelectedIndex(), seed);
+        dispose();
+    }
+    private static int parseNumber(StyledTextField field, int fallback) {
+        try { return Integer.parseInt(field.getText().trim()); }
+        catch (NumberFormatException exception) { return fallback; }
+    }
     //endregion
 
-    //region Helpers
+    //region Layout
     private void buildLayout(Style style, StyledButton randomSeedButton, StyledButton generateButton, StyledButton cancelButton) {
         JPanel content = new JPanel(new GridBagLayout());
         content.setBackground(RCJMS.MY_FAV_GRAY);
@@ -80,7 +102,7 @@ public class SeedMapDialog extends JDialog {
         addRow(content, row++, new StyledLabel(style, NSLocalizedString.get("width") + ":"), widthField);
         addRow(content, row++, new StyledLabel(style, NSLocalizedString.get("height") + ":"), heightField);
         addRow(content, row++, new StyledLabel(style, "floors_count"), floorsField);
-        addRow(content, row++, new StyledLabel(style, "mm.mode"), finishBox);
+        addRow(content, row++, new StyledLabel(style, "me.mode"), finishBox);
         addRow(content, row++, null, loopedToggle);
 
         JPanel seedPanel = new JPanel(new BorderLayout(6, 0));
@@ -115,20 +137,6 @@ public class SeedMapDialog extends JDialog {
         constraints.insets = new Insets(4, 0, 4, 0);
         constraints.fill = GridBagConstraints.HORIZONTAL;
         panel.add(control, constraints);
-    }
-    private void confirm() {
-        String seed = SeedUtil.normalize(seedField.getText());
-        if (seed.isEmpty()) seed = SeedUtil.randomSeed();
-        result = new SeedMapBuilder.Options(
-                sizeNormalizer.applyAsInt(parseNumber(widthField, initial.width())),
-                sizeNormalizer.applyAsInt(parseNumber(heightField, initial.height())),
-                Math.clamp(parseNumber(floorsField, initial.floors()), 1, maxFloors),
-                loopedToggle.isSelected(), finishBox.getSelectedIndex(), seed);
-        dispose();
-    }
-    private static int parseNumber(StyledTextField field, int fallback) {
-        try { return Integer.parseInt(field.getText().trim()); }
-        catch (NumberFormatException ex) { return fallback; }
     }
     //endregion
 }

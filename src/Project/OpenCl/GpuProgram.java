@@ -1,40 +1,40 @@
 package Project.OpenCl;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import java.lang.foreign.*;
 
 import static java.lang.foreign.ValueLayout.*;
 
 public final class GpuProgram implements AutoCloseable {
-    public static final class Buffer {
-        private MemorySegment mem;
-        final long bytes;
-        private Buffer(MemorySegment mem, long bytes) { this.mem = mem; this.bytes = bytes; }
-        public long bytes() { return bytes; }
-        boolean alive() { return mem != null && mem.address() != 0; }
-    }
-
+    //region Variables
+    //region Native Session
     private final OpenCLSession session;
     private final CL.Api api;
     private final MemorySegment program, kernel;
     private boolean closed;
+    //endregion
+    //endregion
 
+    //region Constructors
     public GpuProgram(String source, String kernelName) {
         synchronized (GpuRuntime.LOCK) {
-            OpenCLSession s = GpuRuntime.session();
-            if (s == null) throw new OpenCLSession.Unavailable("no OpenCL session");
-            this.session = s;
-            this.api = s.api();
+            OpenCLSession openCLSession = GpuRuntime.session();
+            if (openCLSession == null) throw new OpenCLSession.Unavailable("no OpenCL session");
+            this.session = openCLSession;
+            this.api = openCLSession.api();
             try (Arena arena = Arena.ofConfined()) {
                 MemorySegment err = arena.allocate(JAVA_INT);
                 MemorySegment sources = arena.allocate(ADDRESS.byteSize());
-                sources.setAtIndex(ADDRESS, 0, CL.cString(arena, (s.needsFp64Pragma ? "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n" : "") + source));
-                program = api.createProgram(s.context(), 1, sources, MemorySegment.NULL, err);
+                sources.setAtIndex(ADDRESS, 0, CL.cString(arena, (openCLSession.needsFp64Pragma ? "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n" : "") + source));
+                program = api.createProgram(openCLSession.context(), 1, sources, MemorySegment.NULL, err);
                 CL.check(err.get(JAVA_INT, 0), "clCreateProgramWithSource");
 
                 MemorySegment devices = arena.allocate(ADDRESS.byteSize());
-                devices.setAtIndex(ADDRESS, 0, s.device());
+                devices.setAtIndex(ADDRESS, 0, openCLSession.device());
                 if (api.buildProgram(program, 1, devices, CL.cString(arena, "")) != CL.SUCCESS) {
-                    String log = CL.buildLog(api, program, s.device());
+                    String log = CL.buildLog(api, program, openCLSession.device());
                     api.releaseProgram(program);
                     throw new OpenCLSession.Unavailable("kernel " + kernelName + " build failed: " + log);
                 }
@@ -43,6 +43,9 @@ public final class GpuProgram implements AutoCloseable {
             }
         }
     }
+    //endregion
+
+    //region Buffers
     public Buffer buffer(long bytes) {
         long size = Math.max(4L, bytes);
         synchronized (GpuRuntime.LOCK) {
@@ -55,6 +58,25 @@ public final class GpuProgram implements AutoCloseable {
             }
         }
     }
+    public void release(Buffer buffer) {
+        if (buffer == null) return;
+        synchronized (GpuRuntime.LOCK) {
+            if (buffer.alive() && !session.isClosed()) api.releaseMem(buffer.mem);
+            buffer.mem = null;
+        }
+    }
+    private void requireLive(Buffer buffer) {
+        requireOpen();
+        if (buffer == null || !buffer.alive()) throw new IllegalStateException("device buffer is released");
+    }
+    private static void checkCount(Buffer buffer, int count, long elementBytes, int arrayLength) {
+        if (count < 0 || count > arrayLength) throw new IllegalArgumentException("count " + count + " exceeds array length " + arrayLength);
+        if (elementBytes * count > buffer.bytes)
+            throw new IllegalArgumentException("buffer of " + buffer.bytes + " bytes cannot hold " + count + " elements of " + elementBytes + " bytes");
+    }
+    //endregion
+
+    //region Kernel Execution
     public void write(Buffer buffer, int[] values, int count) {
         if (count == 0) return;
         checkCount(buffer, count, 4L, values.length);
@@ -94,7 +116,7 @@ public final class GpuProgram implements AutoCloseable {
     public void run(int width, int height, Buffer... args) {
         synchronized (GpuRuntime.LOCK) {
             requireOpen();
-            for (Buffer b : args) requireLive(b);
+            for (Buffer buffer : args) requireLive(buffer);
             try (Arena arena = Arena.ofConfined()) {
                 MemorySegment slot = arena.allocate(ADDRESS.byteSize());
                 for (int i = 0; i < args.length; i++) {
@@ -109,13 +131,9 @@ public final class GpuProgram implements AutoCloseable {
             }
         }
     }
-    public void release(Buffer buffer) {
-        if (buffer == null) return;
-        synchronized (GpuRuntime.LOCK) {
-            if (buffer.alive() && !session.isClosed()) api.releaseMem(buffer.mem);
-            buffer.mem = null;
-        }
-    }
+    //endregion
+
+    //region Lifecycle
     @Override public void close() {
         synchronized (GpuRuntime.LOCK) {
             if (closed) return;
@@ -125,18 +143,21 @@ public final class GpuProgram implements AutoCloseable {
             if (program.address() != 0) api.releaseProgram(program);
         }
     }
-
     private void requireOpen() {
         if (closed) throw new IllegalStateException("GPU program is closed");
         if (session.isClosed()) throw new IllegalStateException("OpenCL session is closed");
     }
-    private void requireLive(Buffer b) {
-        requireOpen();
-        if (b == null || !b.alive()) throw new IllegalStateException("device buffer is released");
+    //endregion
+
+    //region Buffer Type
+    public static final class Buffer {
+        private MemorySegment mem;
+        final long bytes;
+
+        private Buffer(MemorySegment mem, long bytes) { this.mem = mem; this.bytes = bytes; }
+
+        public long bytes() { return bytes; }
+        boolean alive() { return mem != null && mem.address() != 0; }
     }
-    private static void checkCount(Buffer buffer, int count, long elementBytes, int arrayLength) {
-        if (count < 0 || count > arrayLength) throw new IllegalArgumentException("count " + count + " exceeds array length " + arrayLength);
-        if (elementBytes * count > buffer.bytes)
-            throw new IllegalArgumentException("buffer of " + buffer.bytes + " bytes cannot hold " + count + " elements of " + elementBytes + " bytes");
-    }
+    //endregion
 }

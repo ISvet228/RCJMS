@@ -1,4 +1,7 @@
 package Project.Game;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import java.awt.*;
 import java.awt.datatransfer.*;
@@ -7,15 +10,105 @@ import java.util.*;
 import java.util.List;
 
 public final class DevConsole {
-    public enum Level { INFO, COMMAND, WARN, ERROR }
+    //region Variables
+    //region Layout Constants
+    private static final int MAX_LOG_LINES = 400, MAX_HISTORY = 100, PADDING = 10, LINE_HEIGHT = 18, WHEEL_ROWS = 3;
+    private static final Font FONT = new Font(Font.MONOSPACED, Font.PLAIN, 14);
+    private static final Color BACKGROUND = new Color(8, 10, 14, 218);
+    private static final Color BORDER = new Color(120, 170, 255);
+    private static final Color INPUT_TEXT = new Color(235, 235, 235);
+    private static final Color SELECTION = new Color(70, 110, 180, 200);
+    //endregion
+    //region Command Registry
+    private final Map<String, Entry> commands = new LinkedHashMap<>();
+    private final Map<String, String> shortNames = new HashMap<>();
+    //endregion
+    //region Console Text
+    private final Deque<LogLine> log = new ArrayDeque<>();
+    private long nextSeq = 0;
+    private String input = "";
+    private long cursorStart = System.currentTimeMillis();
+    private String pending;
+    //endregion
+    //region History State
+    private final List<String> history = new ArrayList<>();
+    private int historyIndex = -1;
+    private String draft = "";
+    //endregion
+    //region Panel State
+    private boolean open = false;
+    private int scrollRows = 0;
+    private List<Row> rows = List.of();
+    private int firstVisible = 0, visibleCount = 1, panelHeight = 0, charWidth = 8;
+    //endregion
+    //region Selection State
+    private Point selectionStart, selectionEnd;
+    private boolean dragging;
+    //endregion
+    //endregion
 
-    @FunctionalInterface public interface Command { void run(Args args); }
-
+    //region Commands
+    public synchronized void register(String name, String usage, Command command) {
+        commands.put(name.toLowerCase(Locale.ROOT), new Entry(usage, command, new ArrayList<>()));
+    }
+    public synchronized void alias(String shortName, String name) {
+        String target = name.toLowerCase(Locale.ROOT);
+        Entry entry = commands.get(target);
+        if (entry == null) throw new IllegalArgumentException("no command " + name + " to give a short name to");
+        String key = shortName.toLowerCase(Locale.ROOT);
+        entry.shortNames().add(key);
+        shortNames.put(key, target);
+    }
+    public synchronized List<String> commandNames() { return new ArrayList<>(commands.keySet()); }
+    public synchronized List<String> helpLines() {
+        List<String> out = new ArrayList<>();
+        for (Entry entry : commands.values()) {
+            String line = entry.usage();
+            if (!entry.shortNames().isEmpty()) line += "  (short: " + String.join(", ", entry.shortNames()) + ")";
+            out.add(line);
+        }
+        return out;
+    }
+    public synchronized String usageOf(String name) {
+        Entry entry = commands.get(name.toLowerCase(Locale.ROOT));
+        return entry == null ? null : entry.usage();
+    }
+    public void execute(String line) {
+        String text = line == null ? "" : line.trim();
+        if (text.isEmpty()) return;
+        synchronized (this) {
+            log(Level.COMMAND, "> " + text);
+            if (history.isEmpty() || !history.getLast().equals(text)) history.add(text);
+            while (history.size() > MAX_HISTORY) history.removeFirst();
+        }
+        List<String> tokens = new ArrayList<>(Arrays.asList(text.split("\\s+")));
+        String name = tokens.removeFirst().toLowerCase(Locale.ROOT);
+        Entry entry;
+        synchronized (this) { entry = commands.get(shortNames.getOrDefault(name, name)); }
+        if (entry == null) {
+            log(Level.ERROR, "unknown command: " + name + " (type --help)");
+            return;
+        }
+        Args args = new Args(tokens, this);
+        try {
+            entry.command().run(args);
+            for (String token : tokens) {
+                if (args.isOptionUnread(token)) log(Level.WARN, name + ": unknown option " + token + " (type --help)");
+            }
+        }
+        catch (IllegalArgumentException exception) {
+            log(Level.ERROR, exception.getMessage());
+            log(Level.INFO, "usage: " + entry.usage());
+        }
+        catch (RuntimeException exception) { log(Level.ERROR, name + " failed: " + exception); }
+    }
+    @FunctionalInterface public interface Command {
+void run(Args args);
+ }
     public static final class Args {
         private final List<String> tokens;
         private final Set<String> used = new HashSet<>();
         private final DevConsole console;
-
         private Args(List<String> tokens, DevConsole console) {
             this.tokens = tokens;
             this.console = console;
@@ -42,70 +135,13 @@ public final class DevConsole {
             }
             return null;
         }
+        boolean isOptionUnread(String token) { return token.startsWith("-") && !used.contains(token.toLowerCase(Locale.ROOT)); }
         public void info(String text) { console.log(Level.INFO, text); }
         public void warn(String text) { console.log(Level.WARN, text); }
-        boolean isOptionUnread(String token) { return token.startsWith("-") && !used.contains(token.toLowerCase(Locale.ROOT)); }
-    }
-    private record Entry(String usage, Command command, List<String> shortNames) {}
-    private record LogLine(long seq, Level level, String text) {}
-    private record Row(long seq, int start, int end, Level level, String text) {}
-    private record Point(long seq, int index) {}
-
-    private static final int MAX_LOG_LINES = 400, MAX_HISTORY = 100, PADDING = 10, LINE_HEIGHT = 18, WHEEL_ROWS = 3;
-    private static final Font FONT = new Font(Font.MONOSPACED, Font.PLAIN, 14);
-    private static final Color BACKGROUND = new Color(8, 10, 14, 218);
-    private static final Color BORDER = new Color(120, 170, 255);
-    private static final Color INPUT_TEXT = new Color(235, 235, 235);
-    private static final Color SELECTION = new Color(70, 110, 180, 200);
-
-    private final Map<String, Entry> commands = new LinkedHashMap<>();
-    private final Map<String, String> shortNames = new HashMap<>();
-    private final Deque<LogLine> log = new ArrayDeque<>();
-    private final List<String> history = new ArrayList<>();
-    private long nextSeq = 0;
-    private int historyIndex = -1;
-    private String draft = "";
-    private String input = "";
-    private int scrollRows = 0;
-    private boolean open = false;
-    private long cursorStart = System.currentTimeMillis();
-    private String pending;
-
-    private List<Row> rows = List.of();
-    private int firstVisible = 0, visibleCount = 1, panelHeight = 0, charWidth = 8;
-
-    private Point selectionStart, selectionEnd;
-    private boolean dragging;
-
-    //region Setup
-    public synchronized void register(String name, String usage, Command command) {
-        commands.put(name.toLowerCase(Locale.ROOT), new Entry(usage, command, new ArrayList<>()));
-    }
-    public synchronized void alias(String shortName, String name) {
-        String target = name.toLowerCase(Locale.ROOT);
-        Entry entry = commands.get(target);
-        if (entry == null) throw new IllegalArgumentException("no command " + name + " to give a short name to");
-        String key = shortName.toLowerCase(Locale.ROOT);
-        entry.shortNames().add(key);
-        shortNames.put(key, target);
-    }
-    public synchronized List<String> commandNames() { return new ArrayList<>(commands.keySet()); }
-    public synchronized List<String> helpLines() {
-        List<String> out = new ArrayList<>();
-        for (Entry e : commands.values()) {
-            String line = e.usage();
-            if (!e.shortNames().isEmpty()) line += "  (short: " + String.join(", ", e.shortNames()) + ")";
-            out.add(line);
-        }
-        return out;
-    }
-    public synchronized String usageOf(String name) {
-        Entry e = commands.get(name.toLowerCase(Locale.ROOT));
-        return e == null ? null : e.usage();
     }
     //endregion
 
-    //region Open state
+    //region Visibility
     public synchronized boolean isOpen() { return open; }
     public synchronized void setOpen(boolean value) {
         open = value;
@@ -115,7 +151,7 @@ public final class DevConsole {
     public synchronized void toggle() { setOpen(!open); }
     //endregion
 
-    //region Log and history
+    //region Logging
     public synchronized void log(Level level, String text) {
         for (String line : text.split("\n", -1)) {
             log.addLast(new LogLine(nextSeq++, level, line));
@@ -132,44 +168,19 @@ public final class DevConsole {
         for (LogLine line : log) out.append(line.text()).append('\n');
         return out.toString();
     }
-    //endregion
+    public enum Level { INFO, COMMAND, WARN, ERROR }
+    private record Entry(String usage, Command command, List<String> shortNames) {
 
-    //region Execution
-    public void execute(String line) {
-        String text = line == null ? "" : line.trim();
-        if (text.isEmpty()) return;
-        synchronized (this) {
-            log(Level.COMMAND, "> " + text);
-            if (history.isEmpty() || !history.getLast().equals(text)) history.add(text);
-            while (history.size() > MAX_HISTORY) history.removeFirst();
-        }
-        List<String> tokens = new ArrayList<>(Arrays.asList(text.split("\\s+")));
-        String name = tokens.removeFirst().toLowerCase(Locale.ROOT);
-        Entry entry;
-        synchronized (this) { entry = commands.get(shortNames.getOrDefault(name, name)); }
-        if (entry == null) {
-            log(Level.ERROR, "unknown command: " + name + " (type --help)");
-            return;
-        }
-        Args args = new Args(tokens, this);
-        try {
-            entry.command().run(args);
-            for (String token : tokens) {
-                if (args.isOptionUnread(token)) log(Level.WARN, name + ": unknown option " + token + " (type --help)");
-            }
-        }
-        catch (IllegalArgumentException e) {
-            log(Level.ERROR, e.getMessage());
-            log(Level.INFO, "usage: " + entry.usage());
-        }
-        catch (RuntimeException e) { log(Level.ERROR, name + " failed: " + e); }
+    }
+    private record LogLine(long seq, Level level, String text) {
+
     }
     //endregion
 
-    //region Keys
-    public synchronized boolean handleKey(KeyEvent e) {
-        int key = e.getKeyCode();
-        if (e.isControlDown() || e.isMetaDown()) {
+    //region Keyboard
+    public synchronized boolean handleKey(KeyEvent keyEvent) {
+        int key = keyEvent.getKeyCode();
+        if (keyEvent.isControlDown() || keyEvent.isMetaDown()) {
             if (key == KeyEvent.VK_C) copySelection();
             else if (key == KeyEvent.VK_V) pasteIntoInput();
             else if (key == KeyEvent.VK_A) selectAll();
@@ -194,6 +205,14 @@ public final class DevConsole {
     public static boolean isToggleChar(char c) {
         return c == '`' || c == '~' || c == 'ё' || c == 'Ё';
     }
+    public synchronized String takeSubmitted() {
+        String line = pending;
+        pending = null;
+        return line;
+    }
+    //endregion
+
+    //region Command Line
     private void submit() {
         String line = input;
         input = "";
@@ -210,41 +229,29 @@ public final class DevConsole {
         historyIndex = next;
         input = history.get(next);
     }
-    public synchronized String takeSubmitted() {
-        String line = pending;
-        pending = null;
-        return line;
-    }
     //endregion
 
     //region Mouse
     public synchronized void wheel(int rotation) { scrollRows = Math.max(0, scrollRows - rotation * WHEEL_ROWS); }
     public synchronized void mousePressed(int x, int y) {
         if (y < 0 || y >= panelHeight - 2 * PADDING - LINE_HEIGHT) return;
-        Point p = pointAt(x, y);
-        if (p == null) return;
-        selectionStart = selectionEnd = p;
+        Point point = pointAt(x, y);
+        if (point == null) return;
+        selectionStart = selectionEnd = point;
         dragging = true;
     }
     public synchronized void mouseDragged(int x, int y) {
         if (!dragging) return;
-        Point p = pointAt(x, y);
-        if (p != null) selectionEnd = p;
+        Point point = pointAt(x, y);
+        if (point != null) selectionEnd = point;
     }
     public synchronized void mouseReleased() {
         dragging = false;
         if (selectionStart != null && selectionStart.equals(selectionEnd)) clearSelection();
     }
-    private Point pointAt(int x, int y) {
-        if (rows.isEmpty()) return null;
-        int row = firstVisible + Math.floorDiv(y - PADDING, LINE_HEIGHT);
-        row = Math.max(firstVisible, Math.min(row, firstVisible + visibleCount - 1));
-        if (row < 0 || row >= rows.size()) return null;
-        Row r = rows.get(row);
-        int column = Math.round((x - PADDING) / (float) charWidth);
-        column = Math.clamp(column, 0, r.text().length());
-        return new Point(r.seq(), r.start() + column);
-    }
+    //endregion
+
+    //region Selection
     private void clearSelection() {
         selectionStart = selectionEnd = null;
         dragging = false;
@@ -257,13 +264,13 @@ public final class DevConsole {
     }
     private String selectedText() {
         if (selectionStart == null || selectionEnd == null) return "";
-        Point from = selectionStart, to = selectionEnd;
-        if (from.seq() > to.seq() || (from.seq() == to.seq() && from.index() > to.index())) { Point t = from; from = to; to = t; }
+        Point from = selectionStart, point = selectionEnd;
+        if (from.seq() > point.seq() || (from.seq() == point.seq() && from.index() > point.index())) { Point t = from; from = point; point = t; }
         StringBuilder out = new StringBuilder();
         for (LogLine line : log) {
-            if (line.seq() < from.seq() || line.seq() > to.seq()) continue;
+            if (line.seq() < from.seq() || line.seq() > point.seq()) continue;
             int a = line.seq() == from.seq() ? from.index() : 0;
-            int b = line.seq() == to.seq() ? to.index() : line.text().length();
+            int b = line.seq() == point.seq() ? point.index() : line.text().length();
             a = Math.clamp(a, 0, line.text().length());
             b = Math.clamp(b, line.text().length(), a);
             if (!out.isEmpty()) out.append('\n');
@@ -279,9 +286,9 @@ public final class DevConsole {
     }
     private void pasteIntoInput() {
         try {
-            Transferable t = Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null);
-            if (t == null || !t.isDataFlavorSupported(DataFlavor.stringFlavor)) return;
-            String text = (String) t.getTransferData(DataFlavor.stringFlavor);
+            Transferable transferable = Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null);
+            if (transferable == null || !transferable.isDataFlavorSupported(DataFlavor.stringFlavor)) return;
+            String text = (String) transferable.getTransferData(DataFlavor.stringFlavor);
             StringBuilder clean = new StringBuilder();
             for (char c : text.toCharArray()) {
                 if (c == '\n' || c == '\r') break;
@@ -290,21 +297,46 @@ public final class DevConsole {
             if (input.length() + clean.length() <= 200) input += clean;
         } catch (Exception ignored) { log(Level.WARN, "clipboard is not available"); }
     }
+    private Point pointAt(int x, int y) {
+        if (rows.isEmpty()) return null;
+        int row = firstVisible + Math.floorDiv(y - PADDING, LINE_HEIGHT);
+        row = Math.max(firstVisible, Math.min(row, firstVisible + visibleCount - 1));
+        if (row < 0 || row >= rows.size()) return null;
+        Row r = rows.get(row);
+        int column = Math.round((x - PADDING) / (float) charWidth);
+        column = Math.clamp(column, 0, r.text().length());
+        return new Point(r.seq(), r.start() + column);
+    }
+    private void drawSelectionFor(Graphics2D g2d, Row row, int top) {
+        if (selectionStart == null || selectionEnd == null) return;
+        Point from = selectionStart, point = selectionEnd;
+        if (from.seq() > point.seq() || (from.seq() == point.seq() && from.index() > point.index())) { Point t = from; from = point; point = t; }
+        if (row.seq() < from.seq() || row.seq() > point.seq()) return;
+        int a = row.seq() == from.seq() ? from.index() : 0;
+        int b = row.seq() == point.seq() ? point.index() : Integer.MAX_VALUE;
+        int from0 = Math.max(row.start(), a), to0 = Math.min(row.end(), b);
+        if (from0 >= to0) return;
+        g2d.setColor(SELECTION);
+        g2d.fillRect(PADDING + (from0 - row.start()) * charWidth, top, (to0 - from0) * charWidth, LINE_HEIGHT);
+    }
+    private record Point(long seq, int index) {
+
+    }
     //endregion
 
     //region Drawing
-    public synchronized void draw(Graphics2D g, int width, int height) {
-        Font oldFont = g.getFont();
-        g.setFont(FONT);
-        FontMetrics fm = g.getFontMetrics();
-        charWidth = Math.max(1, fm.charWidth('0'));
+    public synchronized void draw(Graphics2D g2d, int width, int height) {
+        Font oldFont = g2d.getFont();
+        g2d.setFont(FONT);
+        FontMetrics fontMetrics = g2d.getFontMetrics();
+        charWidth = Math.max(1, fontMetrics.charWidth('0'));
         panelHeight = (int) (height * 0.45);
         int textWidth = Math.max(1, (width - 2 * PADDING) / charWidth);
 
-        g.setColor(BACKGROUND);
-        g.fillRect(0, 0, width, panelHeight);
-        g.setColor(BORDER);
-        g.fillRect(0, panelHeight - 2, width, 2);
+        g2d.setColor(BACKGROUND);
+        g2d.fillRect(0, 0, width, panelHeight);
+        g2d.setColor(BORDER);
+        g2d.fillRect(0, panelHeight - 2, width, 2);
 
         rows = layout(textWidth);
         int inputY = panelHeight - PADDING - 4;
@@ -317,31 +349,19 @@ public final class DevConsole {
         int y = PADDING + LINE_HEIGHT;
         for (int i = firstVisible; i < end; i++) {
             Row row = rows.get(i);
-            drawSelectionFor(g, row, y - fm.getAscent() + 2);
-            g.setColor(colorOf(row.level()));
-            g.drawString(row.text(), PADDING, y);
+            drawSelectionFor(g2d, row, y - fontMetrics.getAscent() + 2);
+            g2d.setColor(colorOf(row.level()));
+            g2d.drawString(row.text(), PADDING, y);
             y += LINE_HEIGHT;
         }
         if (scrollRows > 0) {
-            g.setColor(BORDER);
-            g.drawString("^ " + scrollRows + " more", width - PADDING - 12 * charWidth, PADDING + LINE_HEIGHT);
+            g2d.setColor(BORDER);
+            g2d.drawString("^ " + scrollRows + " more", width - PADDING - 12 * charWidth, PADDING + LINE_HEIGHT);
         }
         boolean cursorOn = (System.currentTimeMillis() - cursorStart) / 500 % 2 == 0;
-        g.setColor(INPUT_TEXT);
-        g.drawString("> " + input + (cursorOn ? "_" : " "), PADDING, inputY);
-        g.setFont(oldFont);
-    }
-    private void drawSelectionFor(Graphics2D g, Row row, int top) {
-        if (selectionStart == null || selectionEnd == null) return;
-        Point from = selectionStart, to = selectionEnd;
-        if (from.seq() > to.seq() || (from.seq() == to.seq() && from.index() > to.index())) { Point t = from; from = to; to = t; }
-        if (row.seq() < from.seq() || row.seq() > to.seq()) return;
-        int a = row.seq() == from.seq() ? from.index() : 0;
-        int b = row.seq() == to.seq() ? to.index() : Integer.MAX_VALUE;
-        int from0 = Math.max(row.start(), a), to0 = Math.min(row.end(), b);
-        if (from0 >= to0) return;
-        g.setColor(SELECTION);
-        g.fillRect(PADDING + (from0 - row.start()) * charWidth, top, (to0 - from0) * charWidth, LINE_HEIGHT);
+        g2d.setColor(INPUT_TEXT);
+        g2d.drawString("> " + input + (cursorOn ? "_" : " "), PADDING, inputY);
+        g2d.setFont(oldFont);
     }
     private List<Row> layout(int textWidth) {
         List<Row> out = new ArrayList<>();
@@ -362,6 +382,9 @@ public final class DevConsole {
             case ERROR -> new Color(231, 76, 60);
             case INFO -> new Color(210, 210, 210);
         };
+    }
+    private record Row(long seq, int start, int end, Level level, String text) {
+
     }
     //endregion
 }

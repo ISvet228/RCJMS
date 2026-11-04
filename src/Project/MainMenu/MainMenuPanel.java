@@ -1,4 +1,7 @@
 package Project.MainMenu;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 import Project.StyleUI.*;
 
 import javax.swing.*;
@@ -8,10 +11,14 @@ import java.util.List;
 
 public abstract class MainMenuPanel extends JPanel {
     //region Variables
+    //region Child Components
     protected final MainMenuHost menu;
     protected final MainMenuCanvas canvas;
+    //endregion
+    //region Card Overlay
     private boolean hasCard;
     private int cardX, cardY, cardWidth, cardHeight;
+    //endregion
     //endregion
 
     //region Constructors
@@ -30,6 +37,9 @@ public abstract class MainMenuPanel extends JPanel {
         layoutDesign();
     }
     protected abstract void layoutDesign();
+    //endregion
+
+    //region Card
     protected void setCard(int designX, int designY, int designWidth, int designHeight) {
         hasCard = true;
         cardX = designX;
@@ -37,9 +47,10 @@ public abstract class MainMenuPanel extends JPanel {
         cardWidth = designWidth;
         cardHeight = designHeight;
     }
+    protected void paintDecorations(Graphics graphics) { }
     //endregion
 
-    //region Factories
+    //region Components
     protected StyledLabel label(String keyOrText, Color color) {
         StyledLabel label = new StyledLabel(menu.style(), keyOrText, false, false);
         label.setForeground(color);
@@ -52,19 +63,18 @@ public abstract class MainMenuPanel extends JPanel {
     }
     //endregion
 
-    //region Painting
-    @Override public boolean isOptimizedDrawingEnabled() { return false; }
-    @Override protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        if (!canvas.measure(this)) return;
-        if (hasCard) canvas.paintCard(g, menu.style(), cardX, cardY, cardWidth, cardHeight);
-        paintDecorations(g);
-    }
-    protected void paintDecorations(Graphics g) { }
-    //endregion
-
     //region Styling
     public void applyStyle(Style style) { canvas.applyStyle(this, style, unstyledComponents()); }
     protected Collection<? extends Component> unstyledComponents() { return List.of(); }
+    //endregion
+
+    //region Painting
+    @Override public boolean isOptimizedDrawingEnabled() { return false; }
+    @Override protected void paintComponent(Graphics graphics) {
+        super.paintComponent(graphics);
+        if (!canvas.measure(this)) return;
+        if (hasCard) canvas.paintCard(graphics, menu.style(), cardX, cardY, cardWidth, cardHeight);
+        paintDecorations(graphics);
+    }
     //endregion
 }

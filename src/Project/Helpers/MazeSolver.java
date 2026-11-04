@@ -1,18 +1,25 @@
 package Project.Helpers;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 import java.util.ArrayDeque;
 
 public final class MazeSolver {
     //region Variables
+    //region Cell Codes
     private static final int WALL = 1, FINISH = 2, STAIRS_UP = 3, STAIRS_DOWN = 4, PORTAL = 5;
+    //endregion
+    //region Search Directions
     private static final int[][] DIRECTIONS = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+    //endregion
     //endregion
 
     //region Constructors
     private MazeSolver() {}
     //endregion
 
-    //region Public API
+    //region Reachability
     public static int[] findReachableFinish(int[][][] floors, PortalData[] portals, int startFloor, int startX, int startY) {
         int floorCount = floors.length;
         int height = floors[0].length, width = floors[0][0].length;
@@ -52,7 +59,14 @@ public final class MazeSolver {
         }
         return null;
     }
+    private static void visit(boolean[][][] visited, ArrayDeque<int[]> queue, int f, int x, int y) {
+        if (visited[f][y][x]) return;
+        visited[f][y][x] = true;
+        queue.add(new int[]{f, x, y});
+    }
+    //endregion
 
+    //region Portal Checks
     public static boolean portalExitsAreOpen(int[][][] floors, PortalData[] portals) { return findBlockedPortalExit(floors, portals) == null; }
     public static int[] findBlockedPortalExit(int[][][] floors, PortalData[] portals) {
         int height = floors[0].length, width = floors[0][0].length;
@@ -66,14 +80,6 @@ public final class MazeSolver {
             }
         }
         return null;
-    }
-    //endregion
-
-    //region Helpers
-    private static void visit(boolean[][][] visited, ArrayDeque<int[]> queue, int f, int x, int y) {
-        if (visited[f][y][x]) return;
-        visited[f][y][x] = true;
-        queue.add(new int[]{f, x, y});
     }
     //endregion
 }

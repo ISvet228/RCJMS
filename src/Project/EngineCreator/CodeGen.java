@@ -1,270 +1,23 @@
 package Project.EngineCreator;
+import Project.CreatorKit.*;
 
 import java.util.*;
 
 /** Turns a validated project into a RenderEngine class (Java) and, optionally, OpenCL C kernels.*/
 public final class CodeGen {
-    private CodeGen() {}
-
-    static String className(EcProject p) { return "Ext_" + p.name; }
-    static String kernelName(EcProject p, int pass) { return p.name + "_p" + pass; }
-
+    //region Variables
+    //region Inlining
     private static final int INLINE_ALWAYS = 24;
     private static final int INLINE_ONCE = 160;
-
-    static List<String> body(EcProject p, int pass, boolean java) {
-        List<String> lines = new ArrayList<>();
-        NodeInst out = p.output(pass);
-        List<Integer> order = Graph.order(p, Objects.requireNonNull(out).id);
-        Map<String, Integer> reads = new HashMap<>();
-        for (int id : Objects.requireNonNull(order)) {
-            NodeKind k = Nodes.get(Objects.requireNonNull(p.node(id)).kind);
-            for (Port port : k.inputs()) {
-                Link l = p.incoming(id, port.name());
-                if (l != null) reads.merge(varOf(l.from(), l.fromPort()), 1, Integer::sum);
-            }
-        }
-        Map<String, String> inlined = new HashMap<>();
-        for (int id : order) {
-            NodeInst n = p.node(id);
-            NodeKind k = Nodes.get(Objects.requireNonNull(n).kind);
-            String[] in = new String[k.inputs().size()];
-            for (int i = 0; i < in.length; i++) {
-                Link l = p.incoming(id, k.inputs().get(i).name());
-                if (l == null) in[i] = "0";
-                else {
-                    String v = varOf(l.from(), l.fromPort());
-                    in[i] = inlined.getOrDefault(v, v);
-                }
-            }
-            String[] outs = new String[k.outputs().size()];
-            DataType[] types = new DataType[outs.length];
-            for (int i = 0; i < outs.length; i++) {
-                String port = k.outputs().get(i).name();
-                outs[i] = varOf(id, port);
-                types[i] = Graph.outType(p, id, port, 0);
-            }
-            List<String> tmp = new ArrayList<>();
-            Emit e = new Emit(java, id, in, outs, types, n.params, tmp);
-            k.emitter().emit(e);
-            if (outs.length == 1 && tmp.size() == 1) {
-                String name = outs[0];
-                String head = e.typeName(types[0]) + " " + name + " = ";
-                String line = tmp.getFirst();
-                if (line.startsWith(head) && line.endsWith(";")) {
-                    String expr = line.substring(head.length(), line.length() - 1);
-                    int n_ = reads.getOrDefault(name, 0);
-                    if (n_ == 0) continue;
-                    if (expr.length() <= INLINE_ALWAYS || (n_ == 1 && expr.length() <= INLINE_ONCE)) {
-                        inlined.put(name, "(" + expr + ")");
-                        continue;
-                    }
-                }
-            }
-            lines.addAll(tmp);
-        }
-        return lines;
-    }
-
-    static String varOf(int node, String port) { return "v" + node + "_" + port; }
-
+    //endregion
+    //region Shader Parameters
     private static final String SHADE_PARAMS_JAVA =
             "int px, int py, int[] map, int[] pi, double[] pf, int[] prev, int[] texWall, int[] texFloor, int[] texCeil, int[] texFinish";
     private static final String SHADE_PARAMS_C =
             "int px, int py, global const int* map, global const int* pi, global const float* pf, global const int* prev, " +
                     "global const int* texWall, global const int* texFloor, global const int* texCeil, global const int* texFinish";
-
-    static String javaSource(EcProject p) {
-        int passes = p.passCount();
-        String cls = className(p);
-        StringBuilder s = new StringBuilder();
-        s.append("// Made By Render Engine Creator (RCJMS) Automatically.\n");
-        s.append("// DO NOT Edit Code: After Next Save Changes Will Be Lost.\n");
-        s.append("import Project.Game.RenderEngine;\n");
-        s.append("import Project.Game.RenderFrame;\n");
-        s.append("import Project.Helpers.MazeGenerator;\n");
-        s.append("import Project.Helpers.PortalData;\n");
-        if (p.openCl) s.append("import Project.OpenCl.GpuProgram;\nimport Project.OpenCl.GpuRuntime;\n");
-        s.append("\npublic final class ").append(cls).append(" implements RenderEngine {\n");
-        s.append("\tprivate static final String ID = ").append(Json.quote(p.name)).append(";\n");
-        s.append("\tprivate static final String TITLE = ").append(Json.quote(p.title)).append(";\n");
-        s.append("\tprivate static final int PASSES = ").append(passes).append(";\n");
-        s.append("\tprivate static final boolean HYPERBOLIC = ").append(p.usesHyperbolic()).append(";\n");
-        s.append("\tprivate static final int[] PASS_GEOM = {");
-        for (int k = 0; k < passes; k++) {
-            String g = p.geometry(k);
-            s.append(k > 0 ? ", " : "").append(EcProject.EUCLID.equals(g) ? 1 : EcProject.HYPER.equals(g) ? 2 : 0);
-        }
-        s.append("};\n");
-        s.append("\tprivate static final long T0 = System.nanoTime();\n");
-        if (p.openCl) {
-            s.append("\tprivate static final class Kernel {\n");
-            s.append("\t\tstatic final String SOURCE = Project.OpenCl.KernelSource.load(").append(cls).append(".class);\n");
-            s.append("\t}\n");
-            s.append("\tprivate static final String[] KERNEL_NAMES = {");
-            for (int k = 0; k < passes; k++) s.append(k > 0 ? ", " : "").append(Json.quote(kernelName(p, k)));
-            s.append("};\n");
-        }
-        s.append("\n");
-        s.append("\t@Override public String id() { return ID; }\n");
-        s.append("\t@Override public String displayName() { return TITLE; }\n");
-        s.append("\t@Override public int order() { return 200; }\n");
-        s.append("\t@Override public boolean hasHyperbolicGeometry() { return HYPERBOLIC; }\n");
-        s.append("\t@Override public boolean hasOpenCL() { return ").append(p.openCl).append("; }\n\n");
-
-        s.append("\t@Override public void render(RenderFrame f) {\n");
-        s.append("\t\tfinal int W = f.renderWidth, H = f.renderHeight;\n");
-        s.append("\t\tif (W <= 0 || H <= 0 || f.renderPixels == null) return;\n");
-        s.append("\t\tfinal int mapH = f.map == null ? 0 : f.map.length;\n");
-        s.append("\t\tfinal int mapW = mapH == 0 ? 0 : f.map[0].length;\n");
-        s.append("\t\tfinal int[] map = new int[mapW * mapH];\n");
-        s.append("\t\tfor (int y = 0; y < mapH; y++) System.arraycopy(f.map[y], 0, map, y * mapW, mapW);\n");
-        s.append("\t\tfinal int[] texWall = f.wallTexture.pixels(), texFloor = f.floorTexture.pixels();\n");
-        s.append("\t\tfinal int[] texCeil = f.ceilingTexture.pixels(), texFinish = f.finishTexture.pixels();\n");
-        s.append("\t\tfinal int[] pi0 = { W, H, f.quality, mapW, mapH,\n");
-        s.append("\t\t\t\tf.wallTexture.width(), f.wallTexture.height(),\n");
-        s.append("\t\t\t\tf.floorTexture.width(), f.floorTexture.height(),\n");
-        s.append("\t\t\t\tf.ceilingTexture.width(), f.ceilingTexture.height(),\n");
-        s.append("\t\t\t\tf.finishTexture.width(), f.finishTexture.height(),\n");
-        s.append("\t\t\t\tf.geometry == MazeGenerator.GeometryMode.WRONG ? 1 : 0 };\n");
-        // pi[14 + 6*cell ..] holds the portal links (see NodeLibrary.emitRayGridPortal) and stop deleting my comments
-        s.append("\t\tfinal int[] pi = java.util.Arrays.copyOf(pi0, 14 + 6 * mapW * mapH);\n");
-        s.append("\t\tif (f.portals != null) for (PortalData.Portal p : f.portals.values()) {\n");
-        s.append("\t\t\tif (p.x < 0 || p.y < 0 || p.x >= mapW || p.y >= mapH) continue;\n");
-        s.append("\t\t\tint b = 14 + 6 * (p.y * mapW + p.x);\n");
-        s.append("\t\t\tpi[b] = p.dirX; pi[b + 1] = p.dirY; pi[b + 2] = p.linkedX; pi[b + 3] = p.linkedY;\n");
-        s.append("\t\t\tpi[b + 4] = p.linkedDirX; pi[b + 5] = p.linkedDirY;\n");
-        s.append("\t\t}\n");
-        s.append("\t\tfinal double[] pf = { f.cameraAngle, f.cameraHeight, f.cameraPitch, f.playerX, f.playerY,\n");
-        s.append("\t\t\t\tf.curvature, (System.nanoTime() - T0) / 1e9 };\n");
-        s.append("\t\tfinal boolean hyp = f.geometry == MazeGenerator.GeometryMode.WRONG;\n");
-        s.append("\t\tint active = 0;\n");
-        s.append("\t\tfor (int g : PASS_GEOM) if (g == 0 || g == (hyp ? 2 : 1)) active++;\n");
-        s.append("\t\tint[] prev = new int[W * H];\n");
-        s.append("\t\tfor (int k = 0; k < PASSES; k++) {\n");
-        s.append("\t\t\tint g = PASS_GEOM[k];\n");
-        s.append("\t\t\tif (active > 0 && g != 0 && g != (hyp ? 2 : 1)) continue;\n");
-        s.append("\t\t\tfinal int pass = k;\n");
-        s.append("\t\t\tfinal int[] from = prev;\n");
-        s.append("\t\t\tfinal int[] out = new int[W * H];\n");
-        if (p.openCl)
-            s.append("\t\t\tif (!Gpu.pass(pass, W, H, map, pi, pf, from, texWall, texFloor, texCeil, texFinish, out)) {\n");
-        else
-            s.append("\t\t\t{\n");
-        s.append("\t\t\t\tjava.util.function.IntConsumer row = py -> {\n");
-        s.append("\t\t\t\t\tfor (int px = 0; px < W; px++)\n");
-        s.append("\t\t\t\t\t\tout[py * W + px] = shade(pass, px, py, map, pi, pf, from, texWall, texFloor, texCeil, texFinish);\n");
-        s.append("\t\t\t\t};\n");
-        s.append("\t\t\t\tif (f.renderWorkers != null) f.renderWorkers.execute(0, H, row);\n");
-        s.append("\t\t\t\telse for (int py = 0; py < H; py++) row.accept(py);\n");
-        s.append("\t\t\t}\n");
-        s.append("\t\t\tprev = out;\n");
-        s.append("\t\t}\n");
-        s.append("\t\tSystem.arraycopy(prev, 0, f.renderPixels, 0, W * H);\n");
-        s.append("\t\tif (f.bufferedImage != null) {\n");
-        s.append("\t\tint[] shown = ((java.awt.image.DataBufferInt) f.bufferedImage.getRaster().getDataBuffer()).getData();\n");
-        s.append("\t\tif (W == f.bufferedImage.getWidth() && H == f.bufferedImage.getHeight()) System.arraycopy(f.renderPixels, 0, shown, 0, shown.length);\n");
-        s.append("\t\telse {\n");
-        s.append("\t\t\tjava.awt.Graphics2D g = f.bufferedImage.createGraphics();\n");
-        s.append("\t\t\tg.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);\n");
-        s.append("\t\t\tg.drawImage(f.renderImage, 0, 0, f.bufferedImage.getWidth(), f.bufferedImage.getHeight(), null);\n");
-        s.append("\t\t\tg.dispose();\n");
-        s.append("\t\t}\n");
-        s.append("\t\t}\n");
-        s.append("\t}\n\n");
-
-        s.append("\tstatic int shade(int pass, ").append(SHADE_PARAMS_JAVA).append(") {\n");
-        s.append("\t\tswitch (pass) {\n");
-        for (int k = 0; k < passes; k++)
-            s.append("\t\t\tcase ").append(k).append(": return shade_").append(k).append("(px, py, map, pi, pf, prev, texWall, texFloor, texCeil, texFinish);\n");
-        s.append("\t\t\tdefault: return 0;\n\t\t}\n\t}\n\n");
-
-        for (int k = 0; k < passes; k++) {
-            s.append("\tstatic int shade_").append(k).append("(").append(SHADE_PARAMS_JAVA).append(") {\n");
-            for (String line : body(p, k, true)) s.append("\t\t").append(line).append("\n");
-            s.append("\t}\n\n");
-        }
-
-        for (String line : JAVA_PRELUDE) s.append("\t").append(line).append("\n");
-        s.append("\n");
-        if (p.openCl) appendJavaGpu(s);
-        s.append("}\n");
-        return s.toString();
-    }
-
-    private static void appendJavaGpu(StringBuilder s) {
-        s.append("\tprivate static final class Gpu {\n");
-        s.append("\t\tprivate static final GpuProgram[] programs = new GpuProgram[PASSES];\n");
-        s.append("\t\tprivate static GpuProgram.Buffer bOut, bPrev, bMap, bPi, bPf, bWall, bFloor, bCeil, bFinish;\n");
-        s.append("\t\tprivate static boolean disabled;\n\n");
-        s.append("\t\tstatic boolean pass(int k, int W, int H, int[] map, int[] pi, double[] pf, int[] prev,\n");
-        s.append("\t\t\t\t\t\t\tint[] wall, int[] floor, int[] ceil, int[] finish, int[] out) {\n");
-        s.append("\t\t\tsynchronized (GpuRuntime.LOCK) {\n");
-        s.append("\t\t\t\tif (disabled || GpuRuntime.session() == null) return false;\n");
-        s.append("\t\t\t\ttry {\n");
-        s.append("\t\t\t\t\tif (programs[k] == null) programs[k] = new GpuProgram(Kernel.SOURCE, KERNEL_NAMES[k]);\n");
-        s.append("\t\t\t\t\tGpuProgram g = programs[k];\n");
-        s.append("\t\t\t\t\tbOut = ensure(g, bOut, 4L * W * H);\n");
-        s.append("\t\t\t\t\tbPrev = ensure(g, bPrev, 4L * W * H);\n");
-        s.append("\t\t\t\t\tbMap = ensure(g, bMap, 4L * map.length);\n");
-        s.append("\t\t\t\t\tbPi = ensure(g, bPi, 4L * pi.length);\n");
-        s.append("\t\t\t\t\tbPf = ensure(g, bPf, 4L * pf.length);\n");
-        s.append("\t\t\t\t\tbWall = ensure(g, bWall, 4L * wall.length);\n");
-        s.append("\t\t\t\t\tbFloor = ensure(g, bFloor, 4L * floor.length);\n");
-        s.append("\t\t\t\t\tbCeil = ensure(g, bCeil, 4L * ceil.length);\n");
-        s.append("\t\t\t\t\tbFinish = ensure(g, bFinish, 4L * finish.length);\n");
-        s.append("\t\t\t\t\tg.write(bPrev, prev, prev.length);\n");
-        s.append("\t\t\t\t\tg.write(bMap, map, map.length);\n");
-        s.append("\t\t\t\t\tg.write(bPi, pi, pi.length);\n");
-        s.append("\t\t\t\t\tg.write(bPf, pf, pf.length);\n");
-        s.append("\t\t\t\t\tg.write(bWall, wall, wall.length);\n");
-        s.append("\t\t\t\t\tg.write(bFloor, floor, floor.length);\n");
-        s.append("\t\t\t\t\tg.write(bCeil, ceil, ceil.length);\n");
-        s.append("\t\t\t\t\tg.write(bFinish, finish, finish.length);\n");
-        s.append("\t\t\t\t\tg.run(W, H, bOut, bPrev, bMap, bPi, bPf, bWall, bFloor, bCeil, bFinish);\n");
-        s.append("\t\t\t\t\tg.read(bOut, out, W * H);\n");
-        s.append("\t\t\t\t\treturn true;\n");
-        s.append("\t\t\t\t} catch (RuntimeException | Error e) {\n");
-        s.append("\t\t\t\t\tdisabled = true;\n");
-        s.append("\t\t\t\t\tGpuRuntime.reportFailure(ID, String.valueOf(e));\n");
-        s.append("\t\t\t\t\treturn false;\n");
-        s.append("\t\t\t\t}\n");
-        s.append("\t\t\t}\n");
-        s.append("\t\t}\n\n");
-        s.append("\t\tprivate static GpuProgram.Buffer ensure(GpuProgram g, GpuProgram.Buffer current, long bytes) {\n");
-        s.append("\t\t\tlong size = Math.max(4L, bytes);\n");
-        s.append("\t\t\tif (current != null && current.bytes() == size) return current;\n");
-        s.append("\t\t\tif (current != null) g.release(current);\n");
-        s.append("\t\t\treturn g.buffer(size);\n");
-        s.append("\t\t}\n");
-        s.append("\t}\n");
-    }
-
-    static String clSource(EcProject p) {
-        int passes = p.passCount();
-        StringBuilder s = new StringBuilder();
-        s.append("// OpenCL-kernels created by Render Engine Creator automatically.\n");
-        for (String line : C_PRELUDE) s.append(line).append("\n");
-        s.append("\n");
-        for (int k = 0; k < passes; k++) {
-            s.append("int shade_").append(k).append("(").append(SHADE_PARAMS_C).append(") {\n");
-            for (String line : body(p, k, false)) s.append("\t").append(line).append("\n");
-            s.append("}\n\n");
-        }
-        for (int k = 0; k < passes; k++) {
-            s.append("__kernel void ").append(kernelName(p, k)).append("(global int* out, global const int* prev,\n");
-            s.append("\t\tglobal const int* map, global const int* pi, global const float* pf,\n");
-            s.append("\t\tglobal const int* texWall, global const int* texFloor, global const int* texCeil,\n");
-            s.append("\t\tglobal const int* texFinish) {\n");
-            s.append("\tint px = (int)get_global_id(0);\n");
-            s.append("\tint py = (int)get_global_id(1);\n");
-            s.append("\tif (px >= pi[0] || py >= pi[1]) return;\n");
-            s.append("\tout[py * pi[0] + px] = shade_").append(k).append("(px, py, map, pi, pf, prev, texWall, texFloor, texCeil, texFinish);\n");
-            s.append("}\n\n");
-        }
-        return s.toString();
-    }
-
+    //endregion
+    //region Prelude Sources
     private static final List<String> JAVA_PRELUDE = List.of(
             "static double rf_div(double a, double b) { return b == 0.0 ? 0.0 : a / b; }",
             "static double rf_sin(double x) { return Math.sin(x); }",
@@ -319,7 +72,6 @@ public final class CodeGen {
             "\treturn prev[cy * w + cx];",
             "}"
     );
-
     private static final List<String> C_PRELUDE = List.of(
             "inline float rf_div(float a, float b) { return b == 0.0f ? 0.0f : a / b; }",
             "inline float rf_sin(float x) { return sin(x); }",
@@ -374,4 +126,263 @@ public final class CodeGen {
             "\treturn prev[cy * w + cx];",
             "}"
     );
+    //endregion
+    //endregion
+
+    //region Constructors
+    private CodeGen() {}
+    //endregion
+
+    //region Naming
+    static String className(CkProject ckProject) { return "Ext_" + ckProject.name; }
+    static String kernelName(CkProject ckProject, int pass) { return ckProject.name + "_p" + pass; }
+    static String varOf(int node, String port) { return "v" + node + "_" + port; }
+    //endregion
+
+    //region Code Bodies
+    static List<String> body(CkProject ckProject, int pass, boolean java) {
+        List<String> lines = new ArrayList<>();
+        NodeInst out = ckProject.output(pass);
+        List<Integer> order = Graph.order(ckProject, Objects.requireNonNull(out).id);
+        Map<String, Integer> reads = new HashMap<>();
+        for (int id : Objects.requireNonNull(order)) {
+            NodeKind nodeKind = Nodes.get(Objects.requireNonNull(ckProject.node(id)).kind);
+            for (Port port : nodeKind.inputs()) {
+                Link link = ckProject.incoming(id, port.name());
+                if (link != null) reads.merge(varOf(link.from(), link.fromPort()), 1, Integer::sum);
+            }
+        }
+        Map<String, String> inlined = new HashMap<>();
+        for (int id : order) {
+            NodeInst nodeInst = ckProject.node(id);
+            NodeKind nodeKind = Nodes.get(Objects.requireNonNull(nodeInst).kind);
+            String[] in = new String[nodeKind.inputs().size()];
+            for (int i = 0; i < in.length; i++) {
+                Link link = ckProject.incoming(id, nodeKind.inputs().get(i).name());
+                if (link == null) in[i] = "0";
+                else {
+                    String v = varOf(link.from(), link.fromPort());
+                    in[i] = inlined.getOrDefault(v, v);
+                }
+            }
+            String[] outs = new String[nodeKind.outputs().size()];
+            DataType[] types = new DataType[outs.length];
+            for (int i = 0; i < outs.length; i++) {
+                String port = nodeKind.outputs().get(i).name();
+                outs[i] = varOf(id, port);
+                types[i] = Graph.outType(ckProject, id, port, 0);
+            }
+            List<String> tmp = new ArrayList<>();
+            Emit emit = new Emit(java, id, in, outs, types, nodeInst.params, tmp);
+            nodeKind.emitter().emit(emit);
+            if (outs.length == 1 && tmp.size() == 1) {
+                String name = outs[0];
+                String head = emit.typeName(types[0]) + " " + name + " = ";
+                String line = tmp.getFirst();
+                if (line.startsWith(head) && line.endsWith(";")) {
+                    String expr = line.substring(head.length(), line.length() - 1);
+                    int n_ = reads.getOrDefault(name, 0);
+                    if (n_ == 0) continue;
+                    if (expr.length() <= INLINE_ALWAYS || (n_ == 1 && expr.length() <= INLINE_ONCE)) {
+                        inlined.put(name, "(" + expr + ")");
+                        continue;
+                    }
+                }
+            }
+            lines.addAll(tmp);
+        }
+        return lines;
+    }
+    //endregion
+
+    //region Source Generation
+    static String javaSource(CkProject ckProject) {
+        int passes = ckProject.passCount();
+        String cls = className(ckProject);
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("// Made By Render Engine Creator (RCJMS) Automatically.\n");
+        stringBuilder.append("// DO NOT Edit Code: After Next Save Changes Will Be Lost.\n");
+        stringBuilder.append("import Project.Game.RenderEngine;\n");
+        stringBuilder.append("import Project.Game.RenderFrame;\n");
+        stringBuilder.append("import Project.Helpers.MazeGenerator;\n");
+        stringBuilder.append("import Project.Helpers.PortalData;\n");
+        if (ckProject.openCl) stringBuilder.append("import Project.OpenCl.GpuProgram;\nimport Project.OpenCl.GpuRuntime;\n");
+        stringBuilder.append("\npublic final class ").append(cls).append(" implements RenderEngine {\n");
+        stringBuilder.append("\tprivate static final String ID = ").append(Json.quote(ckProject.name)).append(";\n");
+        stringBuilder.append("\tprivate static final String TITLE = ").append(Json.quote(ckProject.title)).append(";\n");
+        stringBuilder.append("\tprivate static final int PASSES = ").append(passes).append(";\n");
+        stringBuilder.append("\tprivate static final boolean HYPERBOLIC = ").append(ckProject.usesHyperbolic()).append(";\n");
+        stringBuilder.append("\tprivate static final int[] PASS_GEOM = {");
+        for (int k = 0; k < passes; k++) {
+            String g = ckProject.geometry(k);
+            stringBuilder.append(k > 0 ? ", " : "").append(CkProject.EUCLID.equals(g) ? 1 : CkProject.HYPER.equals(g) ? 2 : 0);
+        }
+        stringBuilder.append("};\n");
+        stringBuilder.append("\tprivate static final long T0 = System.nanoTime();\n");
+        if (ckProject.openCl) {
+            stringBuilder.append("\tprivate static final class Kernel {\n");
+            stringBuilder.append("\t\tstatic final String SOURCE = Project.OpenCl.KernelSource.load(").append(cls).append(".class);\n");
+            stringBuilder.append("\t}\n");
+            stringBuilder.append("\tprivate static final String[] KERNEL_NAMES = {");
+            for (int k = 0; k < passes; k++) stringBuilder.append(k > 0 ? ", " : "").append(Json.quote(kernelName(ckProject, k)));
+            stringBuilder.append("};\n");
+        }
+        stringBuilder.append("\n");
+        stringBuilder.append("\t@Override public String id() { return ID; }\n");
+        stringBuilder.append("\t@Override public String displayName() { return TITLE; }\n");
+        stringBuilder.append("\t@Override public int order() { return 200; }\n");
+        stringBuilder.append("\t@Override public boolean hasHyperbolicGeometry() { return HYPERBOLIC; }\n");
+        stringBuilder.append("\t@Override public boolean hasOpenCL() { return ").append(ckProject.openCl).append("; }\n\n");
+
+        stringBuilder.append("\t@Override public void render(RenderFrame f) {\n");
+        stringBuilder.append("\t\tfinal int W = f.renderWidth, H = f.renderHeight;\n");
+        stringBuilder.append("\t\tif (W <= 0 || H <= 0 || f.renderPixels == null) return;\n");
+        stringBuilder.append("\t\tfinal int mapH = f.map == null ? 0 : f.map.length;\n");
+        stringBuilder.append("\t\tfinal int mapW = mapH == 0 ? 0 : f.map[0].length;\n");
+        stringBuilder.append("\t\tfinal int[] map = new int[mapW * mapH];\n");
+        stringBuilder.append("\t\tfor (int y = 0; y < mapH; y++) System.arraycopy(f.map[y], 0, map, y * mapW, mapW);\n");
+        stringBuilder.append("\t\tfinal int[] texWall = f.wallTexture.pixels(), texFloor = f.floorTexture.pixels();\n");
+        stringBuilder.append("\t\tfinal int[] texCeil = f.ceilingTexture.pixels(), texFinish = f.finishTexture.pixels();\n");
+        stringBuilder.append("\t\tfinal int[] pi0 = { W, H, f.quality, mapW, mapH,\n");
+        stringBuilder.append("\t\t\t\tf.wallTexture.width(), f.wallTexture.height(),\n");
+        stringBuilder.append("\t\t\t\tf.floorTexture.width(), f.floorTexture.height(),\n");
+        stringBuilder.append("\t\t\t\tf.ceilingTexture.width(), f.ceilingTexture.height(),\n");
+        stringBuilder.append("\t\t\t\tf.finishTexture.width(), f.finishTexture.height(),\n");
+        stringBuilder.append("\t\t\t\tf.geometry == MazeGenerator.GeometryMode.WRONG ? 1 : 0 };\n");
+        // pi[14 + 6*cell ..] holds the portal links (see NodeLibrary.emitRayGridPortal) and stop deleting my comments
+        stringBuilder.append("\t\tfinal int[] pi = java.util.Arrays.copyOf(pi0, 14 + 6 * mapW * mapH);\n");
+        stringBuilder.append("\t\tif (f.portals != null) for (PortalData.Portal p : f.portals.values()) {\n");
+        stringBuilder.append("\t\t\tif (p.x < 0 || p.y < 0 || p.x >= mapW || p.y >= mapH) continue;\n");
+        stringBuilder.append("\t\t\tint b = 14 + 6 * (p.y * mapW + p.x);\n");
+        stringBuilder.append("\t\t\tpi[b] = p.dirX; pi[b + 1] = p.dirY; pi[b + 2] = p.linkedX; pi[b + 3] = p.linkedY;\n");
+        stringBuilder.append("\t\t\tpi[b + 4] = p.linkedDirX; pi[b + 5] = p.linkedDirY;\n");
+        stringBuilder.append("\t\t}\n");
+        stringBuilder.append("\t\tfinal double[] pf = { f.cameraAngle, f.cameraHeight, f.cameraPitch, f.playerX, f.playerY,\n");
+        stringBuilder.append("\t\t\t\tf.curvature, (System.nanoTime() - T0) / 1e9 };\n");
+        stringBuilder.append("\t\tfinal boolean hyp = f.geometry == MazeGenerator.GeometryMode.WRONG;\n");
+        stringBuilder.append("\t\tint active = 0;\n");
+        stringBuilder.append("\t\tfor (int g : PASS_GEOM) if (g == 0 || g == (hyp ? 2 : 1)) active++;\n");
+        stringBuilder.append("\t\tint[] prev = new int[W * H];\n");
+        stringBuilder.append("\t\tfor (int k = 0; k < PASSES; k++) {\n");
+        stringBuilder.append("\t\t\tint g = PASS_GEOM[k];\n");
+        stringBuilder.append("\t\t\tif (active > 0 && g != 0 && g != (hyp ? 2 : 1)) continue;\n");
+        stringBuilder.append("\t\t\tfinal int pass = k;\n");
+        stringBuilder.append("\t\t\tfinal int[] from = prev;\n");
+        stringBuilder.append("\t\t\tfinal int[] out = new int[W * H];\n");
+        if (ckProject.openCl)
+            stringBuilder.append("\t\t\tif (!Gpu.pass(pass, W, H, map, pi, pf, from, texWall, texFloor, texCeil, texFinish, out)) {\n");
+        else
+            stringBuilder.append("\t\t\t{\n");
+        stringBuilder.append("\t\t\t\tjava.util.function.IntConsumer row = py -> {\n");
+        stringBuilder.append("\t\t\t\t\tfor (int px = 0; px < W; px++)\n");
+        stringBuilder.append("\t\t\t\t\t\tout[py * W + px] = shade(pass, px, py, map, pi, pf, from, texWall, texFloor, texCeil, texFinish);\n");
+        stringBuilder.append("\t\t\t\t};\n");
+        stringBuilder.append("\t\t\t\tif (f.renderWorkers != null) f.renderWorkers.execute(0, H, row);\n");
+        stringBuilder.append("\t\t\t\telse for (int py = 0; py < H; py++) row.accept(py);\n");
+        stringBuilder.append("\t\t\t}\n");
+        stringBuilder.append("\t\t\tprev = out;\n");
+        stringBuilder.append("\t\t}\n");
+        stringBuilder.append("\t\tSystem.arraycopy(prev, 0, f.renderPixels, 0, W * H);\n");
+        stringBuilder.append("\t\tif (f.bufferedImage != null) {\n");
+        stringBuilder.append("\t\tint[] shown = ((java.awt.image.DataBufferInt) f.bufferedImage.getRaster().getDataBuffer()).getData();\n");
+        stringBuilder.append("\t\tif (W == f.bufferedImage.getWidth() && H == f.bufferedImage.getHeight()) System.arraycopy(f.renderPixels, 0, shown, 0, shown.length);\n");
+        stringBuilder.append("\t\telse {\n");
+        stringBuilder.append("\t\t\tjava.awt.Graphics2D g = f.bufferedImage.createGraphics();\n");
+        stringBuilder.append("\t\t\tg.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);\n");
+        stringBuilder.append("\t\t\tg.drawImage(f.renderImage, 0, 0, f.bufferedImage.getWidth(), f.bufferedImage.getHeight(), null);\n");
+        stringBuilder.append("\t\t\tg.dispose();\n");
+        stringBuilder.append("\t\t}\n");
+        stringBuilder.append("\t\t}\n");
+        stringBuilder.append("\t}\n\n");
+
+        stringBuilder.append("\tstatic int shade(int pass, ").append(SHADE_PARAMS_JAVA).append(") {\n");
+        stringBuilder.append("\t\tswitch (pass) {\n");
+        for (int k = 0; k < passes; k++)
+            stringBuilder.append("\t\t\tcase ").append(k).append(": return shade_").append(k).append("(px, py, map, pi, pf, prev, texWall, texFloor, texCeil, texFinish);\n");
+        stringBuilder.append("\t\t\tdefault: return 0;\n\t\t}\n\t}\n\n");
+
+        for (int k = 0; k < passes; k++) {
+            stringBuilder.append("\tstatic int shade_").append(k).append("(").append(SHADE_PARAMS_JAVA).append(") {\n");
+            for (String line : body(ckProject, k, true)) stringBuilder.append("\t\t").append(line).append("\n");
+            stringBuilder.append("\t}\n\n");
+        }
+
+        for (String line : JAVA_PRELUDE) stringBuilder.append("\t").append(line).append("\n");
+        stringBuilder.append("\n");
+        if (ckProject.openCl) appendJavaGpu(stringBuilder);
+        stringBuilder.append("}\n");
+        return stringBuilder.toString();
+    }
+    static String clSource(CkProject ckProject) {
+        int passes = ckProject.passCount();
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("// OpenCL-kernels created by Render Engine Creator automatically.\n");
+        for (String line : C_PRELUDE) stringBuilder.append(line).append("\n");
+        stringBuilder.append("\n");
+        for (int k = 0; k < passes; k++) {
+            stringBuilder.append("int shade_").append(k).append("(").append(SHADE_PARAMS_C).append(") {\n");
+            for (String line : body(ckProject, k, false)) stringBuilder.append("\t").append(line).append("\n");
+            stringBuilder.append("}\n\n");
+        }
+        for (int k = 0; k < passes; k++) {
+            stringBuilder.append("__kernel void ").append(kernelName(ckProject, k)).append("(global int* out, global const int* prev,\n");
+            stringBuilder.append("\t\tglobal const int* map, global const int* pi, global const float* pf,\n");
+            stringBuilder.append("\t\tglobal const int* texWall, global const int* texFloor, global const int* texCeil,\n");
+            stringBuilder.append("\t\tglobal const int* texFinish) {\n");
+            stringBuilder.append("\tint px = (int)get_global_id(0);\n");
+            stringBuilder.append("\tint py = (int)get_global_id(1);\n");
+            stringBuilder.append("\tif (px >= pi[0] || py >= pi[1]) return;\n");
+            stringBuilder.append("\tout[py * pi[0] + px] = shade_").append(k).append("(px, py, map, pi, pf, prev, texWall, texFloor, texCeil, texFinish);\n");
+            stringBuilder.append("}\n\n");
+        }
+        return stringBuilder.toString();
+    }
+    private static void appendJavaGpu(StringBuilder stringBuilder) {
+        stringBuilder.append("\tprivate static final class Gpu {\n");
+        stringBuilder.append("\t\tprivate static final GpuProgram[] programs = new GpuProgram[PASSES];\n");
+        stringBuilder.append("\t\tprivate static GpuProgram.Buffer bOut, bPrev, bMap, bPi, bPf, bWall, bFloor, bCeil, bFinish;\n");
+        stringBuilder.append("\t\tprivate static boolean disabled;\n\n");
+        stringBuilder.append("\t\tstatic boolean pass(int k, int W, int H, int[] map, int[] pi, double[] pf, int[] prev,\n");
+        stringBuilder.append("\t\t\t\t\t\t\tint[] wall, int[] floor, int[] ceil, int[] finish, int[] out) {\n");
+        stringBuilder.append("\t\t\tsynchronized (GpuRuntime.LOCK) {\n");
+        stringBuilder.append("\t\t\t\tif (disabled || GpuRuntime.session() == null) return false;\n");
+        stringBuilder.append("\t\t\t\ttry {\n");
+        stringBuilder.append("\t\t\t\t\tif (programs[k] == null) programs[k] = new GpuProgram(Kernel.SOURCE, KERNEL_NAMES[k]);\n");
+        stringBuilder.append("\t\t\t\t\tGpuProgram g = programs[k];\n");
+        stringBuilder.append("\t\t\t\t\tbOut = ensure(g, bOut, 4L * W * H);\n");
+        stringBuilder.append("\t\t\t\t\tbPrev = ensure(g, bPrev, 4L * W * H);\n");
+        stringBuilder.append("\t\t\t\t\tbMap = ensure(g, bMap, 4L * map.length);\n");
+        stringBuilder.append("\t\t\t\t\tbPi = ensure(g, bPi, 4L * pi.length);\n");
+        stringBuilder.append("\t\t\t\t\tbPf = ensure(g, bPf, 4L * pf.length);\n");
+        stringBuilder.append("\t\t\t\t\tbWall = ensure(g, bWall, 4L * wall.length);\n");
+        stringBuilder.append("\t\t\t\t\tbFloor = ensure(g, bFloor, 4L * floor.length);\n");
+        stringBuilder.append("\t\t\t\t\tbCeil = ensure(g, bCeil, 4L * ceil.length);\n");
+        stringBuilder.append("\t\t\t\t\tbFinish = ensure(g, bFinish, 4L * finish.length);\n");
+        stringBuilder.append("\t\t\t\t\tg.write(bPrev, prev, prev.length);\n");
+        stringBuilder.append("\t\t\t\t\tg.write(bMap, map, map.length);\n");
+        stringBuilder.append("\t\t\t\t\tg.write(bPi, pi, pi.length);\n");
+        stringBuilder.append("\t\t\t\t\tg.write(bPf, pf, pf.length);\n");
+        stringBuilder.append("\t\t\t\t\tg.write(bWall, wall, wall.length);\n");
+        stringBuilder.append("\t\t\t\t\tg.write(bFloor, floor, floor.length);\n");
+        stringBuilder.append("\t\t\t\t\tg.write(bCeil, ceil, ceil.length);\n");
+        stringBuilder.append("\t\t\t\t\tg.write(bFinish, finish, finish.length);\n");
+        stringBuilder.append("\t\t\t\t\tg.run(W, H, bOut, bPrev, bMap, bPi, bPf, bWall, bFloor, bCeil, bFinish);\n");
+        stringBuilder.append("\t\t\t\t\tg.read(bOut, out, W * H);\n");
+        stringBuilder.append("\t\t\t\t\treturn true;\n");
+        stringBuilder.append("\t\t\t\t} catch (RuntimeException | Error e) {\n");
+        stringBuilder.append("\t\t\t\t\tdisabled = true;\n");
+        stringBuilder.append("\t\t\t\t\tGpuRuntime.reportFailure(ID, String.valueOf(e));\n");
+        stringBuilder.append("\t\t\t\t\treturn false;\n");
+        stringBuilder.append("\t\t\t\t}\n");
+        stringBuilder.append("\t\t\t}\n");
+        stringBuilder.append("\t\t}\n\n");
+        stringBuilder.append("\t\tprivate static GpuProgram.Buffer ensure(GpuProgram g, GpuProgram.Buffer current, long bytes) {\n");
+        stringBuilder.append("\t\t\tlong size = Math.max(4L, bytes);\n");
+        stringBuilder.append("\t\t\tif (current != null && current.bytes() == size) return current;\n");
+        stringBuilder.append("\t\t\tif (current != null) g.release(current);\n");
+        stringBuilder.append("\t\t\treturn g.buffer(size);\n");
+        stringBuilder.append("\t\t}\n");
+        stringBuilder.append("\t}\n");
+    }
+    //endregion
 }

@@ -1,4 +1,7 @@
 package Project.Helpers;
+import Project.EngineCreator.*;
+import Project.ThemeCreator.*;
+import Project.CreatorKit.*;
 
 public final class HyperbolicMath {
     //region Variables
@@ -9,7 +12,7 @@ public final class HyperbolicMath {
     private HyperbolicMath() {}
     //endregion
 
-    //region Public API
+    //region Distance
     public static double hyperbolicDistance(double flatDistance, double curvature) {
         double r = Math.max(curvature, 0.0001);
         return r * Math.sinh(flatDistance / r);
@@ -19,13 +22,16 @@ public final class HyperbolicMath {
         double x = perceived / r;
         return r * asinh(x);
     }
+    //endregion
+
+    //region Poincare Disk
     public static double poincareRadius(double flatDistance, double curvature) { return Math.tanh(flatDistance / (2.0 * Math.max(curvature, 0.0001))); }
     public static double inversePoincareRadius(double diskRadius, double curvature) { //may be useful in future i guess
         return 2.0 * (Math.max(curvature, 0.0001)) * atanh(Math.clamp(diskRadius, -0.999999, 0.999999));
     }
     //endregion
 
-    //region Helpers
+    //region Math Helpers
     private static double atanh(double x) { return 0.5 * Math.log((1.0 + x) / (1.0 - x)); }
     private static double asinh(double x) { return Math.log(x + Math.sqrt(x * x + 1.0));  }
     //endregion

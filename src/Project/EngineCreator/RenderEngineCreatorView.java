@@ -1,4 +1,5 @@
 package Project.EngineCreator;
+import Project.CreatorKit.*;
 import Project.Helpers.EditorKit;
 
 import Project.Game.RenderEngines;
@@ -15,61 +16,89 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.List;
 
+import static Project.CreatorKit.CkChrome.fieldLabel;
+import static Project.CreatorKit.CkChrome.menuItem;
 import static Project.Helpers.EditorKit.*;
 
 public final class RenderEngineCreatorView extends JPanel {
+    //region Variables
+    //region Layout Sizes
     private static final int LEFT_W = 278, RIGHT_W = 248, INNER_W = 252;
-    /** Node cards: two per row in the palette. */
+    private static final int NOTE_W = RIGHT_W - 32;
+    private static final int COL_W = RIGHT_W - 32;
     private static final int CARD_H = 92, CARD_GAP = 6, CARD_W = (INNER_W - CARD_GAP) / 2;
-    private static final String[] CATEGORIES = {"in", "const", "math", "logic", "conv", "color", "map", "tex", "ray", "geo", "fx", "out"};
-    private static final String[] GEOMETRY_KEYS = {EcProject.BOTH, EcProject.EUCLID, EcProject.HYPER};
-    private static final int HISTORY_LIMIT = 100;
-
-    private final Style style;
-    private final Runnable onExit;
-
-    private EcProject project = Presets.newProject();
+    //endregion
+    //region Node Catalog
+    private static final String[] CATEGORIES = {"in", "const", "math", "logic", "conv", "color", "map", "tex", "ray", "geo", "fx", "out", CustomNodes.CATEGORY};
+    private static final String[] GEOMETRY_KEYS = {CkProject.BOTH, CkProject.EUCLID, CkProject.HYPER};
+    //endregion
+    //region Project State
+    private CkProject project = Presets.newProject();
     private int pass = 0;
-    private final Deque<String> history = new ArrayDeque<>();
-    private final Deque<String> redoHistory = new ArrayDeque<>();
     private boolean dirty = false;
     private boolean syncing = false;
-
+    private static final int HISTORY_LIMIT = 100;
+    //endregion
+    //region Undo History
+    private final Deque<String> history = new ArrayDeque<>();
+    private final Deque<String> redoHistory = new ArrayDeque<>();
+    //endregion
+    //region Inside Editing State
+    private final Deque<Frame> insideStack = new ArrayDeque<>();
+    private JPanel insideBar;
+    private StyledLabel insideLabel;
+    //endregion
+    //region Canvas and Preview
     private final NodeCanvas canvas;
+    private NodePalette nodePalette;
     private final HintBar hint = new HintBar();
-    private final Text dirtyText = new Text(null, 12f, true, WARN, 0);
-    private final StyledComboBox passBox, passGeometry;
-    private final StyledTextField nameField, titleField, curvatureField;
-    private final StyledToggle openClToggle;
-    private final Text propsHead = new Text("ec.ui.cardProps", 13f, true, TEXT, 0);
-    private final Note propsHelp = new Note(INNER_W, 11f, MUTED);
-    private final Column propsBody = new Column();
-    private final Map<String, JComponent> editors = new LinkedHashMap<>();
-    private final DefaultListModel<Issue> issueModel = new DefaultListModel<>();
-    private final JList<Issue> issueList = new JList<>(issueModel);
-    private final Column enginesList = new Column();
-    private Column nodeList;
-    private String nodeCategory = "all", nodeQuery = "";
     private final PreviewPanel preview;
     private JComponent previewSlot;
     private boolean previewShown = false;
+    //endregion
+    //region Controls
+    private final StyledComboBox passBox, passGeometry;
+    private final StyledTextField nameField, titleField, curvatureField;
+    private final StyledToggle openClToggle, backupToggle;
+    private final Text dirtyText = new Text(null, 12f, true, WARN, 0);
+    //endregion
+    //region Properties Panel
+    private final Text propsHead = new Text("ec.ui.cardProps", 13f, true, TEXT, 0);
+    private final Note propsHelp = new Note(NOTE_W, 11f, MUTED);
+    private final Column propsBody = new Column();
+    private final Map<String, JComponent> editors = new LinkedHashMap<>();
+    //endregion
+    //region Issues and Engines Lists
+    private final DefaultListModel<Issue> issueModel = new DefaultListModel<>();
+    private final JList<Issue> issueList = new JList<>(issueModel);
+    private final Column enginesList = new Column();
+    //endregion
+    //region Window
+    private final Style style;
+    private final Runnable onExit;
+    //endregion
+    //endregion
 
+    //region Constructors
     public RenderEngineCreatorView(Style style, Runnable onExit) {
         super(new BorderLayout(10, 8));
         this.style = style;
         this.onExit = onExit;
+        String customError = CustomNodes.load();
         setBackground(BG);
         setOpaque(true);
         setBorder(new EmptyBorder(6, 8, 0, 8));
 
         canvas = new NodeCanvas(project, this::snapshot, this::onCanvasChanged, msg -> hint.flash(Tone.INFO, msg), this::arrange);
         canvas.setStyle(style);
+        canvas.setInsideOpener(this::enterInside);
         passBox = new StyledComboBox(style, new Object[]{"1"});
         passGeometry = new StyledComboBox(style, new Object[]{L.t("ec.o.both"), L.t("ec.o.euclid"), L.t("ec.o.hyperbolic")});
         nameField = new StyledTextField(style, project.name);
         titleField = new StyledTextField(style, project.title);
         curvatureField = new StyledTextField(style, String.valueOf(project.curvature));
         openClToggle = new StyledToggle(style, "ec.ui.openCl");
+        backupToggle = new StyledToggle(style, "ec.ui.backupCustom");
         preview = new PreviewPanel(style, () -> project, msg -> hint.flash(Tone.BAD, msg));
 
         add(header(), BorderLayout.NORTH);
@@ -85,13 +114,16 @@ public final class RenderEngineCreatorView extends JPanel {
         refreshEngines();
         refreshAll();
         hint.setHint(L.t("ec.s.ready"));
+        if (customError != null) hint.flash(Tone.BAD, customError);
     }
+    //endregion
 
+    //region Layout
+    //region Frame Setup
     @Override public void addNotify() {
         super.addNotify();
         SwingUtilities.invokeLater(canvas::requestFocusInWindow);
     }
-
     private JComponent header() {
         ToolButton back = new ToolButton(style, ToolButton.Layout.ROW, Glyph.BACK, "back").tip("back", "Esc").size(104, 36);
         back.onClick(this::exit);
@@ -111,85 +143,46 @@ public final class RenderEngineCreatorView extends JPanel {
         save.onClick(this::save);
         ToolButton help = icon(Glyph.HELP, "ec.ui.helpTip", "F1", this::showHelp);
 
-        List<JComponent> items = new ArrayList<>(List.of(back, title, dirtyText, undo, redo, arrange, delete, previewButton, check, help, save));
-        List<ToolButton> labelled = List.of(previewButton, check, save);
-
-        JPanel toolbar = new JPanel(new BorderLayout(8, 0)) {
-            @Override public void doLayout() {
-                fitToolbar(this, items, labelled);
-                super.doLayout();
-            }
-        };
-        toolbar.setOpaque(false);
-        JPanel leftGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
-        leftGroup.setOpaque(false);
-        JPanel rightGroup = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 6));
-        rightGroup.setOpaque(false);
-        for (JComponent c : List.of(back, title, dirtyText)) leftGroup.add(c);
-        for (JComponent c : List.of(undo, redo, arrange, delete, previewButton, check, help, save)) rightGroup.add(c);
-        toolbar.add(leftGroup, BorderLayout.WEST);
-        toolbar.add(rightGroup, BorderLayout.EAST);
-        return toolbar;
+        return new CkChrome.TopBar(
+                List.of(back, title, dirtyText),
+                List.of(undo, redo, arrange, delete, previewButton, check, help, save),
+                List.of(new CkChrome.Labelled(previewButton, L.t("ec.ui.preview"), 112),
+                        new CkChrome.Labelled(check, L.t("ec.ui.check"), 104),
+                        new CkChrome.Labelled(save, L.t("ec.ui.save"), 140)),
+                List.of(title, dirtyText));
     }
-
-    private Boolean appliedNoLabels, appliedNoTitle;
-
-    private void fitToolbar(JPanel bar, List<JComponent> items, List<ToolButton> labelled) {
-        int w = bar.getWidth();
-        if (w <= 0) return;
-        boolean noLabels = w < 1100;
-        boolean noTitle = w < 880;
-        if (appliedNoLabels != null && appliedNoLabels == noLabels && appliedNoTitle == noTitle) return;
-        appliedNoLabels = noLabels;
-        appliedNoTitle = noTitle;
-
-        String[] keys = {"ec.ui.preview", "ec.ui.check", "ec.ui.save"};
-        int[] fullWidth = {112, 104, 140};
-        for (int i = 0; i < labelled.size(); i++) {
-            ToolButton b = labelled.get(i);
-            b.setLabel(noLabels ? "" : L(keys[i]));
-            b.setPreferredSize(new Dimension(noLabels ? 36 : fullWidth[i], 36));
-        }
-        items.get(1).setVisible(!noTitle);
-        items.get(2).setVisible(!noTitle);
-        bar.revalidate();
-        bar.repaint();
-    }
-
     private ToolButton icon(Glyph glyph, String tipKey, String shortcut, Runnable action) {
-        ToolButton b = new ToolButton(style, ToolButton.Layout.ICON, glyph, null).tip(tipKey, shortcut).size(36, 36);
-        b.onClick(action);
-        return b;
+        return CkChrome.icon(style, glyph, tipKey, shortcut, action);
     }
-
     private JComponent sidebar(Column column, int width) {
-        ScrollBody holder = new ScrollBody();
-        holder.add(column, BorderLayout.NORTH);
-        StyledScrollPane scroll = new StyledScrollPane(holder, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
-                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER, style);
-        scroll.setBorder(BorderFactory.createEmptyBorder());
-        scroll.getVerticalScrollBar().setUnitIncrement(16);
-        scroll.setPreferredSize(new Dimension(width, 100));
-        return scroll;
+        return CkChrome.sidebar(style, column, width);
     }
+    private Note note(String key, Color color) {
+        Note note = new Note(NOTE_W, 11f, color);
+        note.set(null, color, L.t(key));
+        return note;
+    }
+    private static String escape(String s) { return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"); }
+    //endregion
+    //region Left Column
     private Column buildLeft() {
         Column col = new Column();
 
         Fold templates = new Fold("ec.ui.cardTemplates", true);
         templates.body.put(note("ec.ui.templatesHint", MUTED), 0);
-        for (Presets.Preset pr : Presets.ALL) {
-            ToolButton b = new ToolButton(style, ToolButton.Layout.ROW, Glyph.NEW, "ec.pr." + pr.id()).tip("ec.pr." + pr.id() + ".help", null).size(INNER_W, 30);
-            b.onClick(() -> applyPreset(pr.id()));
-            templates.body.put(b, 6);
+        for (Presets.Preset preset : Presets.ALL) {
+            ToolButton toolButton = new ToolButton(style, ToolButton.Layout.ROW, Glyph.NEW, "ec.pr." + preset.id()).tip("ec.pr." + preset.id() + ".help", null).size(INNER_W, 30);
+            toolButton.onClick(() -> applyPreset(preset.id()));
+            templates.body.put(toolButton, 6);
         }
         col.put(templates, 0);
 
         Fold originals = new Fold("ec.ui.cardOriginals", true);
         originals.body.put(note("ec.ui.originalsHint", MUTED), 0);
-        for (OriginalEngines.Original o : OriginalEngines.ALL) {
-            ToolButton b = new ToolButton(style, ToolButton.Layout.ROW, Glyph.PLAY, "ec.og." + o.id()).tip("ec.og." + o.id() + ".help", null).size(INNER_W, 30);
-            b.onClick(() -> loadOriginal(o.id()));
-            originals.body.put(b, 6);
+        for (OriginalEngines.Original original : OriginalEngines.ALL) {
+            ToolButton toolButton = new ToolButton(style, ToolButton.Layout.ROW, Glyph.PLAY, "ec.og." + original.id()).tip("ec.og." + original.id() + ".help", null).size(INNER_W, 30);
+            toolButton.onClick(() -> loadOriginal(original.id()));
+            originals.body.put(toolButton, 6);
         }
         col.put(originals, 12);
 
@@ -197,170 +190,89 @@ public final class RenderEngineCreatorView extends JPanel {
         engines.body.put(note("ec.ui.enginesHint", MUTED), 0);
         StyledButton refresh = new StyledButton(style, "ec.ui.refresh");
         refresh.setPreferredSize(new Dimension(INNER_W, 30));
-        refresh.addActionListener(e -> refreshEngines());
+        refresh.addActionListener(actionEvent -> refreshEngines());
         engines.body.put(refresh, 6);
         engines.body.put(enginesList, 6);
         col.put(engines, 12);
 
         Fold nodes = new Fold("ec.ui.cardNodes", true, true);
         nodes.body.put(note("ec.ui.nodesHint", MUTED), 0);
-        // search, then category filters; "All" keeps the categories as folds, a filter gives one short list
-        StyledTextField search = new StyledTextField(style, "");
-        search.setPreferredSize(new Dimension(INNER_W, 28));
-        search.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { changed(); }
-            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { changed(); }
-            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { changed(); }
-            private void changed() {
-                nodeQuery = search.getText().trim().toLowerCase(Locale.ROOT);
-                refreshNodeList();
-            }
+        nodePalette = new NodePalette(style, List.of(CATEGORIES), Nodes::engineKinds, this::addNode);
+        nodePalette.setCardDecorator((nodeKind, card) -> {
+            if (CustomNodes.isCustom(nodeKind.id())) card.setOnRightClick(point -> showCustomCardMenu(card, nodeKind.id(), point));
         });
-        nodes.body.put(search, 6);
-        JPanel chips = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
-        chips.setOpaque(false);
-        chips.addComponentListener(new ComponentAdapter() { @Override public void componentResized(ComponentEvent e) { chips.revalidate(); } });
-        List<String> filters = new ArrayList<>();
-        filters.add("all");
-        filters.addAll(List.of(CATEGORIES));
-        for (String cat : filters) {
-            String label = L(cat.equals("all") ? "ec.ui.all" : "ec.c." + cat);
-            StyledButton chip = new StyledButton(style, label);
-            int chipW = chip.getFontMetrics(font(11f, false)).stringWidth(label) + 28;
-            chip.setPreferredSize(new Dimension(chipW, 26));
-            chip.setMinimumSize(new Dimension(chipW, 26));
-            chip.addActionListener(e -> {
-                nodeCategory = cat;
-                refreshNodeList();
-            });
-            chips.add(chip);
-        }
-        nodes.body.put(chips, 6);
-        nodeList = new Column();
-        nodes.body.put(nodeList, 6);
-        refreshNodeList();
+        nodes.body.put(nodePalette, 6);
         col.put(nodes, 12);
         return col;
     }
-    private void refreshNodeList() {
-        nodeList.removeAll();
-        boolean flat = !"all".equals(nodeCategory) || !nodeQuery.isEmpty();
-        if (!flat) {
-            for (String cat : CATEGORIES) {
-                Fold group = new Fold("ec.c." + cat, false);
-                JPanel grid = cardGrid();
-                for (NodeKind k : Nodes.ALL) if (k.categoryId().equals(cat)) grid.add(nodeCard(k));
-                group.body.put(grid, 0);
-                nodeList.put(group, 8);
-            }
-        } else {
-            int shown = 0;
-            JPanel grid = cardGrid();
-            for (NodeKind k : Nodes.ALL) {
-                if (!"all".equals(nodeCategory) && !k.categoryId().equals(nodeCategory)) continue;
-                if (!nodeQuery.isEmpty() && !k.title().toLowerCase(Locale.ROOT).contains(nodeQuery)) continue;
-                grid.add(nodeCard(k));
-                shown++;
-            }
-            nodeList.put(grid, 0);
-            if (shown == 0) nodeList.put(note("ec.ui.noNodes", MUTED), 0);
+    private void showCustomCardMenu(Component component, String kind, Point point) {
+        JPopupMenu menu = new JPopupMenu();
+        menu.setBackground(EditorKit.CARD);
+        menu.setBorder(BorderFactory.createLineBorder(EditorKit.CARD_LINE));
+        JMenuItem help = new JMenuItem(L.t("ec.menu.help"));
+        JMenuItem edit = new JMenuItem(L.t("ec.menu.customText"));
+        JMenuItem delete = new JMenuItem(L.t("ec.menu.deleteCustom"));
+        for (JMenuItem menuItem : List.of(help, edit, delete)) {
+            menuItem.setBackground(EditorKit.CARD);
+            menuItem.setForeground(EditorKit.TEXT);
+            menuItem.setFont(EditorKit.font(12f, false));
         }
-        nodeList.revalidate();
-        nodeList.repaint();
-        Container scroll = SwingUtilities.getAncestorOfClass(JScrollPane.class, this);
-        if (scroll != null) scroll.revalidate();
+        help.addActionListener(actionEvent -> NodeHelp.show(component, Nodes.find(kind)));
+        edit.addActionListener(actionEvent -> editCustomTexts(kind));
+        delete.addActionListener(actionEvent -> deleteCustomNode(kind));
+        menu.add(edit);
+        menu.add(delete);
+        menu.show(component, point.x, point.y);
     }
-    private static JPanel cardGrid() {
-        JPanel grid = new JPanel(new GridLayout(0, 2, CARD_GAP, CARD_GAP));
-        grid.setOpaque(false);
-        return grid;
+    private void editCustomTexts(String kind) {
+        CustomNodes.Def def = CustomNodes.def(kind);
+        if (def == null) return;
+        String[] t = CkDialogs.customTexts(this, style, L.t("ec.g.editTitle"), def.title(), def.description());
+        if (t == null) return;
+        try {
+            CustomNodes.updateTexts(kind, t[0], t[1]);
+            hint.flash(Tone.OK, L.f("ec.g.textsSaved", t[0]));
+        } catch (IOException exception) {
+            hint.flash(Tone.BAD, L.f("ec.g.customSaveFailed", exception.getMessage()));
+        }
+        nodePalette.refresh();
+        canvas.repaint();
     }
-    private NodeCard nodeCard(NodeKind k) {
-        String id = k.id();
-        return new NodeCard(k, () -> addNode(id));
+    private void deleteCustomNode(String kind) {
+        String title = CustomNodes.titleOf(kind);
+        if (ask(this, style, "ec.g.deleteTitle", L.f("ec.g.deleteConfirm", title), 0, "ec.g.deleteBtn", "cancel") != 0) return;
+        try {
+            CustomNodes.delete(kind);
+            hint.flash(Tone.INFO, L.f("ec.g.deleted", title));
+        } catch (IOException exception) {
+            hint.flash(Tone.BAD, L.f("ec.g.customSaveFailed", exception.getMessage()));
+        }
+        nodePalette.refresh();
+        canvas.repaint();
     }
-    private static final class NodeCard extends JComponent {
-        private final NodeKind kind;
-        private boolean hover;
-
-        NodeCard(NodeKind kind, Runnable onClick) {
-            this.kind = kind;
-            setPreferredSize(new Dimension(CARD_W, CARD_H));
-            setMinimumSize(new Dimension(CARD_W, CARD_H));
-            setMaximumSize(new Dimension(CARD_W, CARD_H));
-            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            setToolTipText(kind.help());
-            addMouseListener(new MouseAdapter() {
-                @Override public void mouseEntered(MouseEvent e) { hover = true; repaint(); }
-                @Override public void mouseExited(MouseEvent e) { hover = false; repaint(); }
-                @Override public void mouseClicked(MouseEvent e) { onClick.run(); }
-            });
-        }
-        private String summary() {
-            String h = kind.help().trim();
-            int dot = h.indexOf('.');
-            if (dot > 0) h = h.substring(0, dot + 1);
-            return h.length() > 70 ? h.substring(0, 69) + "…" : h;
-        }
-        @Override protected void paintComponent(Graphics g0) {
-            Graphics2D g = smooth(g0);
-            int w = getWidth(), h = getHeight();
-            g.setColor(hover ? CARD_LINE : CARD);
-            g.fillRoundRect(0, 0, w - 1, h - 1, 10, 10);
-            g.setColor(NodeCanvas.categoryColor(kind.categoryId()));
-            g.fillRoundRect(0, 0, w - 1, 6, 4, 4);
-            g.fillRect(0, 3, w - 1, 3);
-            int pad = 8, textW = w - 2 * pad;
-            g.setFont(font(11f, true));
-            g.setColor(TEXT);
-            FontMetrics fm = g.getFontMetrics();
-            g.drawString(ellipsize(kind.title(), fm, textW), pad, 24);
-            g.setFont(font(10f, false));
-            g.setColor(MUTED);
-            fm = g.getFontMetrics();
-            int y = 40;
-            List<String> lines = wrap(summary(), fm, textW);
-            for (String line : lines) { g.drawString(line, pad, y); y += 13; }
-            g.dispose();
-        }
-        private static List<String> wrap(String text, FontMetrics fm, int maxW) {
-            List<String> out = new ArrayList<>();
-            StringBuilder line = new StringBuilder();
-            for (String word : text.split(" ")) {
-                String next = line.isEmpty() ? word : line + " " + word;
-                if (fm.stringWidth(next) <= maxW) { line.setLength(0); line.append(next); continue; }
-                if (!line.isEmpty()) out.add(line.toString());
-                line.setLength(0);
-                line.append(word);
-            }
-            if (!line.isEmpty()) out.add(line.toString());
-            if (out.size() > 3) out = new ArrayList<>(out.subList(0, 3));
-            if (!out.isEmpty()) {
-                int last = out.size() - 1;
-                out.set(last, ellipsize(out.get(last), fm, maxW));
-            }
-            return out;
-        }
-    }
-
+    //endregion
+    //region Right Column
     private Column buildRight() {
         Column col = new Column();
 
         Card proj = new Card("ec.ui.cardProject");
         proj.put(fieldLabel("ec.ui.name"), 0);
-        nameField.setPreferredSize(new Dimension(INNER_W, 30));
+        nameField.setPreferredSize(new Dimension(COL_W, 30));
         proj.put(nameField, 2);
         proj.put(note("ec.ui.nameHint", MUTED), 2);
         proj.put(fieldLabel("ec.ui.displayTitle"), 8);
-        titleField.setPreferredSize(new Dimension(INNER_W, 30));
+        titleField.setPreferredSize(new Dimension(COL_W, 30));
         proj.put(titleField, 2);
         proj.put(fieldLabel("ec.ui.curvature"), 8);
-        curvatureField.setPreferredSize(new Dimension(INNER_W, 30));
+        curvatureField.setPreferredSize(new Dimension(COL_W, 30));
         proj.put(curvatureField, 2);
         proj.put(note("ec.ui.curvatureHint", MUTED), 2);
-        openClToggle.setPreferredSize(new Dimension(INNER_W, 32));
+        openClToggle.setPreferredSize(new Dimension(COL_W, 32));
         proj.put(openClToggle, 8);
         proj.put(note("ec.ui.openClHint", MUTED), 2);
+        backupToggle.setPreferredSize(new Dimension(COL_W, 32));
+        proj.put(backupToggle, 8);
+        proj.put(note("ec.ui.backupHint", MUTED), 2);
         col.put(proj, 0);
 
         Card props = new Card("ec.ui.cardProps");
@@ -370,8 +282,8 @@ public final class RenderEngineCreatorView extends JPanel {
         col.put(props, 12);
 
         Card legend = new Card("ec.ui.cardLegend");
-        for (DataType t : DataType.values())
-            legend.put(new Text("ec.type." + t.name().toLowerCase(Locale.ROOT), 11.5f, true, NodeCanvas.typeColor(t), 0), 3);
+        for (DataType dataType : DataType.values())
+            legend.put(new Text("ec.type." + dataType.name().toLowerCase(Locale.ROOT), 11.5f, true, NodeCanvas.typeColor(dataType), 0), 3);
         col.put(legend, 12);
 
         Card issues = new Card("ec.ui.cardIssues");
@@ -381,32 +293,33 @@ public final class RenderEngineCreatorView extends JPanel {
         issueList.setCellRenderer(new DefaultListCellRenderer() {
             @Override public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected, boolean focus) {
                 super.getListCellRendererComponent(list, value, index, selected, focus);
-                Issue is = (Issue) value;
-                setText("<html><body style='width:" + (INNER_W - 16) + "px'>" + escape(is.text()) + "</body></html>");
-                setForeground(is.error() ? BAD : WARN);
+                Issue issue = (Issue) value;
+                setText("<html><body style='width:" + (NOTE_W - 8) + "px'>" + escape(issue.text()) + "</body></html>");
+                setForeground(issue.error() ? BAD : WARN);
                 setBackground(selected ? CARD_LINE : CARD);
                 setBorder(new EmptyBorder(4, 4, 4, 4));
                 return this;
             }
         });
         issueList.addMouseListener(new MouseAdapter() {
-            @Override public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() != 2) return;
-                Issue is = issueList.getSelectedValue();
-                if (is == null || is.node() <= 0) return;
-                NodeInst n = project.node(is.node());
-                if (n == null) return;
-                if (n.pass != pass) selectPass(n.pass);
-                canvas.selectNode(is.node());
+            @Override public void mouseClicked(MouseEvent mouseEvent) {
+                if (mouseEvent.getClickCount() != 2) return;
+                Issue issue = issueList.getSelectedValue();
+                if (issue == null || issue.node() <= 0) return;
+                NodeInst nodeInst = project.node(issue.node());
+                if (nodeInst == null) return;
+                if (nodeInst.pass != pass) selectPass(nodeInst.pass);
+                canvas.selectNode(issue.node());
             }
         });
         StyledScrollPane issueScroll = new StyledScrollPane(issueList, style);
-        issueScroll.setPreferredSize(new Dimension(INNER_W, 170));
+        issueScroll.setPreferredSize(new Dimension(COL_W, 170));
         issues.put(issueScroll, 6);
         col.put(issues, 12);
         return col;
     }
-
+    //endregion
+    //region Center
     private JComponent buildCenter() {
         JPanel center = new JPanel(new BorderLayout(0, 8));
         center.setOpaque(false);
@@ -419,37 +332,49 @@ public final class RenderEngineCreatorView extends JPanel {
         passGeometry.setPreferredSize(new Dimension(150, 32));
         StyledButton addPass = new StyledButton(style, "ec.ui.addPass");
         addPass.setPreferredSize(new Dimension(92, 32));
-        addPass.addActionListener(e -> addPass());
+        addPass.addActionListener(actionEvent -> addPass());
         StyledButton removePass = new StyledButton(style, "ec.ui.removePass");
         removePass.setPreferredSize(new Dimension(92, 32));
-        removePass.addActionListener(e -> removePass());
+        removePass.addActionListener(actionEvent -> removePass());
         bar.add(passBox);
         bar.add(passGeometry);
         bar.add(addPass);
         bar.add(removePass);
 
-        StyledScrollPane sp = new StyledScrollPane(canvas, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED, style);
-        sp.getViewport().setBackground(EditorKit.CANVAS_BG);
-        sp.getVerticalScrollBar().setUnitIncrement(16);
-        sp.getHorizontalScrollBar().setUnitIncrement(16);
+        insideLabel = new StyledLabel(style, "");
+        insideLabel.setFont(EditorKit.font(12f, true));
+        insideLabel.setForeground(EditorKit.TEXT);
+        StyledButton saveInside = new StyledButton(style, "ec.g.saveInside");
+        saveInside.setPreferredSize(new Dimension(150, 32));
+        saveInside.addActionListener(actionEvent -> saveInside());
+        StyledButton cancelInside = new StyledButton(style, "ec.g.cancelInside");
+        cancelInside.setPreferredSize(new Dimension(150, 32));
+        cancelInside.addActionListener(actionEvent -> cancelInside());
+        insideBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        insideBar.setOpaque(false);
+        insideBar.add(insideLabel);
+        insideBar.add(saveInside);
+        insideBar.add(cancelInside);
+        insideBar.setVisible(false);
+        bar.add(insideBar);
+
+        StyledScrollPane styledScrollPane = new StyledScrollPane(canvas, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED, style);
+        styledScrollPane.getViewport().setBackground(EditorKit.CANVAS_BG);
+        styledScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        styledScrollPane.getHorizontalScrollBar().setUnitIncrement(16);
         previewSlot = new JPanel(new BorderLayout());
         previewSlot.setOpaque(false);
         previewSlot.add(preview, BorderLayout.CENTER);
         previewSlot.setVisible(false);
         center.add(bar, BorderLayout.NORTH);
-        center.add(sp, BorderLayout.CENTER);
+        center.add(styledScrollPane, BorderLayout.CENTER);
         center.add(previewSlot, BorderLayout.SOUTH);
         return center;
     }
+    //endregion
+    //endregion
 
-    private Text fieldLabel(String key) { Text t = new Text(null, 11f, false, MUTED, 0); t.setRaw(L.t(key) + ":"); return t; }
-    private Note note(String key, Color color) {
-        Note n = new Note(INNER_W, 11f, color);
-        n.set(null, color, L.t(key));
-        return n;
-    }
-    private static String escape(String s) { return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"); }
-
+    //region Bindings
     private void bindFields() {
         bindField(nameField, v -> project.name = v.trim());
         bindField(titleField, v -> project.title = v.trim());
@@ -457,17 +382,17 @@ public final class RenderEngineCreatorView extends JPanel {
             try { project.curvature = Double.parseDouble(v.trim()); }
             catch (NumberFormatException ignored) { project.curvature = Double.NaN; }
         });
-        openClToggle.addActionListener(e -> { if (!syncing) applyProjectToggles(); });
-        passGeometry.addActionListener(e -> {
+        openClToggle.addActionListener(actionEvent -> { if (!syncing) applyProjectToggles(); });
+        backupToggle.addActionListener(actionEvent -> { if (!syncing) applyBackupToggle(); });
+        passGeometry.addActionListener(actionEvent -> {
             if (syncing) return;
             snapshot();
             project.setGeometry(pass, GEOMETRY_KEYS[passGeometry.getSelectedIndex()]);
             refreshPassBox();
             refreshAll();
         });
-        passBox.addActionListener(e -> { if (!syncing && passBox.getSelectedIndex() >= 0) selectPass(passBox.getSelectedIndex()); });
+        passBox.addActionListener(actionEvent -> { if (!syncing && passBox.getSelectedIndex() >= 0) selectPass(passBox.getSelectedIndex()); });
     }
-
     private void bindField(JTextField field, java.util.function.Consumer<String> apply) {
         field.getDocument().addDocumentListener(new DocumentListener() {
             void changed() {
@@ -476,43 +401,48 @@ public final class RenderEngineCreatorView extends JPanel {
                 canvas.repaint();
                 refreshIssues();
             }
-            @Override public void insertUpdate(DocumentEvent e) { changed(); }
-            @Override public void removeUpdate(DocumentEvent e) { changed(); }
-            @Override public void changedUpdate(DocumentEvent e) { changed(); }
+            @Override public void insertUpdate(DocumentEvent documentEvent) { changed(); }
+            @Override public void removeUpdate(DocumentEvent documentEvent) { changed(); }
+            @Override public void changedUpdate(DocumentEvent documentEvent) { changed(); }
         });
     }
-
     private void bindKeys() {
-        InputMap in = getInputMap(WHEN_IN_FOCUSED_WINDOW);
-        ActionMap am = getActionMap();
-        bindKey(in, am, "escape", KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), this::exit);
-        bindKey(in, am, "undo", KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK), this::undo);
-        bindKey(in, am, "redo", KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK), this::redo);
-        bindKey(in, am, "redo2", KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK), this::redo);
-        bindKey(in, am, "save", KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK), this::save);
-        bindKey(in, am, "check", KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0), this::check);
-        bindKey(in, am, "preview", KeyStroke.getKeyStroke(KeyEvent.VK_F6, 0), this::togglePreview);
-        bindKey(in, am, "help", KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0), this::showHelp);
-        bindKey(in, am, "delete", KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), canvas::deleteSelected);
-        bindKey(in, am, "copy", KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK), canvas::copySelection);
-        bindKey(in, am, "paste", KeyStroke.getKeyStroke(KeyEvent.VK_V, InputEvent.CTRL_DOWN_MASK), canvas::pasteAtCursor);
-        bindKey(in, am, "duplicate", KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK), canvas::duplicateSelection);
-        bindKey(in, am, "selectAll", KeyStroke.getKeyStroke(KeyEvent.VK_A, InputEvent.CTRL_DOWN_MASK), canvas::selectAll);
+        InputMap inputMap = getInputMap(WHEN_IN_FOCUSED_WINDOW);
+        ActionMap actionMap = getActionMap();
+        bindKey(inputMap, actionMap, "escape", KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), this::exit);
+        bindKey(inputMap, actionMap, "undo", KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK), this::undo);
+        bindKey(inputMap, actionMap, "redo", KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK), this::redo);
+        bindKey(inputMap, actionMap, "redo2", KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK), this::redo);
+        bindKey(inputMap, actionMap, "save", KeyStroke.getKeyStroke(KeyEvent.VK_S, InputEvent.CTRL_DOWN_MASK), this::save);
+        bindKey(inputMap, actionMap, "check", KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0), this::check);
+        bindKey(inputMap, actionMap, "preview", KeyStroke.getKeyStroke(KeyEvent.VK_F6, 0), this::togglePreview);
+        bindKey(inputMap, actionMap, "help", KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0), this::showHelp);
+        bindKey(inputMap, actionMap, "delete", KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), canvas::deleteSelected);
+        bindKey(inputMap, actionMap, "copy", KeyStroke.getKeyStroke(KeyEvent.VK_C, InputEvent.CTRL_DOWN_MASK), canvas::copySelection);
+        bindKey(inputMap, actionMap, "paste", KeyStroke.getKeyStroke(KeyEvent.VK_V, InputEvent.CTRL_DOWN_MASK), canvas::pasteAtCursor);
+        bindKey(inputMap, actionMap, "duplicate", KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK), canvas::duplicateSelection);
+        bindKey(inputMap, actionMap, "selectAll", KeyStroke.getKeyStroke(KeyEvent.VK_A, InputEvent.CTRL_DOWN_MASK), canvas::selectAll);
+        bindKey(inputMap, actionMap, "group", KeyStroke.getKeyStroke(KeyEvent.VK_G, InputEvent.CTRL_DOWN_MASK), canvas::groupSelection);
+        bindKey(inputMap, actionMap, "customNode", KeyStroke.getKeyStroke(KeyEvent.VK_K, InputEvent.CTRL_DOWN_MASK), canvas::makeCustomNode);
     }
-    private static void bindKey(InputMap in, ActionMap am, String name, KeyStroke key, Runnable action) {
-        in.put(key, name);
-        am.put(name, new AbstractAction() { @Override public void actionPerformed(ActionEvent e) { action.run(); } });
+    private static void bindKey(InputMap inputMap, ActionMap actionMap, String name, KeyStroke key, Runnable action) {
+        inputMap.put(key, name);
+        actionMap.put(name, new AbstractAction() { @Override public void actionPerformed(ActionEvent actionEvent) { action.run(); } });
     }
+    //endregion
 
+    //region Project Editing
+    //region Nodes
     private void addNode(String kind) {
         snapshot();
-        int count = (int) project.nodes.stream().filter(x -> x.pass == pass).count();
-        NodeInst added = project.add(kind, 60 + (count % 4) * 200, 60 + (count / 4) * 110, pass);
+        Point point = canvas.viewCentre();
+        int k = (int) project.nodes.stream().filter(nodeInst -> nodeInst.pass == pass).count() % 5;
+        NodeInst added = project.add(kind, Math.max(0, point.x - 40 + k * 24), Math.max(0, point.y - 20 + k * 24), pass);
         canvas.selectNode(added.id);
         hint.flash(Tone.OK, L.f("ec.s.nodeAdded", Nodes.get(kind).title()));
         refreshAll();
+        canvas.revealNode(added);
     }
-
     private void applyPreset(String id) {
         snapshot();
         try {
@@ -520,20 +450,34 @@ public final class RenderEngineCreatorView extends JPanel {
             Layout.arrange(project, used);
             refreshPassBox();
             if (used != pass) selectPass(used);
-            hint.flash(Tone.OK, L.f("ec.s.toolAdded", Presets.ALL.stream().filter(x -> x.id().equals(id)).findFirst().orElseThrow().title()));
-        } catch (IllegalStateException ex) {
+            hint.flash(Tone.OK, L.f("ec.s.toolAdded", Presets.ALL.stream().filter(preset -> preset.id().equals(id)).findFirst().orElseThrow().title()));
+        } catch (IllegalStateException exception) {
             if (!history.isEmpty()) history.pop();
-            hint.flash(Tone.BAD, ex.getMessage());
+            hint.flash(Tone.BAD, exception.getMessage());
         }
         refreshAll();
     }
-
+    private void arrange() {
+        snapshot();
+        Layout.arrange(project, pass);
+        canvas.repaint();
+        hint.flash(Tone.OK, L.t("ec.s.arranged"));
+    }
     private void applyProjectToggles() {
         snapshot();
         project.openCl = openClToggle.isSelected();
         refreshAll();
     }
-
+    /** Backup of custom nodes: when off, the project forgets the parts of its custom nodes. */
+    private void applyBackupToggle() {
+        snapshot();
+        project.backupCustom = backupToggle.isSelected();
+        if (!project.backupCustom) project.backup.clear();
+        hint.flash(Tone.INFO, L.t(project.backupCustom ? "ec.s.backupOn" : "ec.s.backupOff"));
+        refreshAll();
+    }
+    //endregion
+    //region Passes
     private void addPass() {
         snapshot();
         pass = project.passCount();
@@ -558,13 +502,21 @@ public final class RenderEngineCreatorView extends JPanel {
         refreshPassBox();
         refreshAll();
     }
-
-    private void arrange() {
-        snapshot();
-        Layout.arrange(project, pass);
-        canvas.repaint();
-        hint.flash(Tone.OK, L.t("ec.s.arranged"));
+    private void refreshPassBox() {
+        syncing = true;
+        try {
+            passBox.removeAllItems();
+            for (int k = 0; k < project.passCount(); k++) passBox.addItem(L.f("ec.ui.passItem", k + 1));
+            passBox.setSelectedIndex(pass);
+            int g = Arrays.asList(GEOMETRY_KEYS).indexOf(project.geometry(pass));
+            passGeometry.setSelectedIndex(Math.max(0, g));
+        } finally { syncing = false; }
+        canvas.setPass(pass);
     }
+    //endregion
+    //endregion
+
+    //region Undo and Redo
     private void snapshot() {
         history.push(ProjectIO.toJson(project));
         while (history.size() > HISTORY_LIMIT) history.removeLast();
@@ -591,123 +543,99 @@ public final class RenderEngineCreatorView extends JPanel {
             syncFieldsFromProject();
             refreshPassBox();
             refreshAll();
-        } catch (IllegalArgumentException ex) { hint.flash(Tone.BAD, L.f("ec.s.undoFailed", ex.getMessage())); }
+        } catch (IllegalArgumentException exception) { hint.flash(Tone.BAD, L.f("ec.s.undoFailed", exception.getMessage())); }
     }
+    //endregion
 
-    private void check() {
-        EngineBuilder.Result r = EngineBuilder.build(project, false, t -> false);
-        showIssues(r.issues());
-        if (r.hasErrors()) hint.flash(Tone.BAD, L.t("ec.s.checkBad"));
-        else hint.flash(Tone.OK, L.t("ec.s.checkOk"));
+    //region Inside Editing
+    // ---------- editing a custom node from inside ----------
+
+    private boolean inside() { return !insideStack.isEmpty(); }
+    private void enterInside(String kind) {
+        CustomNodes.Def def = CustomNodes.def(kind);
+        if (def == null) { hint.flash(Tone.BAD, L.f("ec.g.notDefined", kind)); return; }
+        CkProject inner;
+        try { inner = CustomNodes.openInner(def); }
+        catch (IllegalArgumentException exception) { hint.flash(Tone.BAD, exception.getMessage()); return; }
+        insideStack.push(new Frame(project, List.copyOf(history), List.copyOf(redoHistory), dirty, kind, def));
+        history.clear();
+        redoHistory.clear();
+        switchProject(inner);
+        setDirty(false);
+        hint.flash(Tone.INFO, L.f("ec.g.entered", def.title()));
+    }private void saveInside() {
+        Frame frame = insideStack.peek();
+        if (frame == null) return;
+        for (NodeInst nodeInst : project.nodes)
+            if (Nodes.find(nodeInst.kind) != null && Nodes.get(nodeInst.kind).isOutput()) { hint.flash(Tone.BAD, L.t("ec.g.noOutput")); return; }
+        CustomNodes.Rebuilt rebuilt;
+        try { rebuilt = CustomNodes.rebuild(project, frame.old(), frame.old().title(), frame.old().description()); }
+        catch (IllegalArgumentException exception) { hint.flash(Tone.BAD, exception.getMessage()); return; }
+        try { CustomNodes.update(rebuilt.def()); }
+        catch (IOException exception) { hint.flash(Tone.BAD, L.f("ec.g.customSaveFailed", exception.getMessage())); }
+
+        insideStack.pop();
+        restoreFrame(frame);
+        snapshot();
+        List<CkProject> followers = new ArrayList<>();
+        followers.add(frame.parent());
+        for (Frame g : insideStack) followers.add(g.parent());
+        for (CkProject ckProject : followers) CustomNodes.migrate(ckProject, frame.old(), rebuilt.def(), rebuilt.oldToNew());
+        setDirty(true);
+        canvas.repaint();
+        refreshAll();
+        hint.flash(Tone.OK, L.f("ec.g.insideSaved", rebuilt.def().title()));
+    }
+    private void cancelInside() {
+        Frame frame = insideStack.peek();
+        if (frame == null) return;
+        insideStack.pop();
+        restoreFrame(frame);
+        hint.flash(Tone.INFO, L.f("ec.g.cancelled", frame.old().title()));
+    }
+    private void restoreFrame(Frame frame) {
+        history.clear();
+        for (String s : frame.history()) history.addLast(s);
+        redoHistory.clear();
+        for (String s : frame.redo()) redoHistory.addLast(s);
+        switchProject(frame.parent());
+        setDirty(frame.dirty());
+    }
+    private record Frame(CkProject parent, List<String> history, List<String> redo, boolean dirty, String kind, CustomNodes.Def old) {
+
+    }
+    //endregion
+
+    //region Project Files
+    private void switchProject(CkProject ckProject) {
+        project = ckProject;
+        canvas.setProject(ckProject);
+        canvas.setPass(0);
+        syncFieldsFromProject();
+        refreshPassBox();
+        if (inside()) insideLabel.setText(L.f("ec.g.insideLabel", insideStack.peek().old().title()));
+        insideBar.setVisible(inside());
+        refreshAll();
     }
     private void save() {
-        EngineBuilder.Result r = EngineBuilder.build(project, true, target ->
+        if (inside()) { hint.flash(Tone.WARN, L.t("ec.g.insideBlocked")); return; }
+        EngineBuilder.Result result = EngineBuilder.build(project, true, target ->
                 ask(this, style, "ec.d.overwriteTitle", L.f("ec.d.overwrite", project.name, target.toString()), 0, "ec.btn.replace", "cancel") == 0);
-        showIssues(r.issues());
-        if (r.saved()) {
+        showIssues(result.issues());
+        if (result.saved()) {
             setDirty(false);
             refreshEngines();
-            hint.flash(Tone.OK, L.f("ec.s.saved", r.file().getFileName().toString()));
+            hint.flash(Tone.OK, L.f("ec.s.saved", result.file().getFileName().toString()));
             inform(this, style, "ec.d.savedTitle", L.f("ec.d.savedText", project.title));
-        } else if (r.hasErrors()) {
-            Issue first = r.issues().stream().filter(Issue::error).findFirst().orElseThrow();
+        } else if (result.hasErrors()) {
+            Issue first = result.issues().stream().filter(Issue::error).findFirst().orElseThrow();
             hint.flash(Tone.BAD, L.t("ec.s.saveFailed") + " " + first.text());
-        } else if (!r.messages().isEmpty()) hint.flash(Tone.WARN, r.messages().getLast());
+        } else if (!result.messages().isEmpty()) hint.flash(Tone.WARN, result.messages().getLast());
     }
-
-    private void togglePreview() {
-        previewShown = !previewShown;
-        previewSlot.setVisible(previewShown);
-        if (previewShown) preview.build();
-        revalidate();
-        repaint();
-    }
-
-    private Path projectsFolder() { return EngineBuilder.folder().resolve(EngineBuilder.PROJECTS); }
-    private void refreshEngines() {
-        enginesList.removeAll();
-        Path dir = projectsFolder();
-        List<Path> files = new ArrayList<>();
-        if (Files.isDirectory(dir)) {
-            try (var stream = Files.list(dir)) { stream.filter(p -> p.getFileName().toString().endsWith(".engine.json")).sorted().forEach(files::add); }
-            catch (Exception ignored) { }
-        }
-        if (files.isEmpty()) enginesList.put(note("ec.ui.noEngines", MUTED), 0);
-        for (Path file : files) {
-            try {
-                EcProject p = ProjectIO.fromJson(Files.readString(file, StandardCharsets.UTF_8));
-                boolean built = Files.exists(EngineBuilder.folder().resolve(CodeGen.className(p) + ".java"));
-                String text = p.name + (built ? "  ●" : "");
-                // the label is raw text: ToolButton treats an unknown key as its own text
-                ToolButton b = new ToolButton(style, ToolButton.Layout.ROW, Glyph.FOLDER, text).size(INNER_W, 28);
-                b.setToolTipText(L.f("ec.ui.engineTip", p.title, p.passCount()));
-                b.onClick(() -> loadProject(file));
-                b.addMouseListener(new MouseAdapter() {
-                    @Override public void mouseReleased(MouseEvent e) {
-                        if (SwingUtilities.isRightMouseButton(e)) showEngineMenu(b, e, file, p);
-                    }
-                });
-                enginesList.put(b, 4);
-            } catch (Exception ex) { enginesList.put(note("ec.ui.engineBroken", BAD), 4); }
-        }
-        enginesList.revalidate();
-        enginesList.repaint();
-    }
-    private void showEngineMenu(Component at, MouseEvent e, Path file, EcProject p) {
-        JPopupMenu menu = new JPopupMenu();
-        menu.setBackground(CARD);
-        menu.setBorder(BorderFactory.createLineBorder(CARD_LINE));
-        menu.add(menuItem(L.t("ec.ui.engMenu.open"), () -> loadProject(file)));
-        menu.add(menuItem(L.t("ec.menu.delete"), () -> deleteEngine(file, p)));
-        menu.show(at, e.getX(), e.getY());
-    }
-    private static JMenuItem menuItem(String text, Runnable action) {
-        JMenuItem it = new JMenuItem(text);
-        it.setBackground(CARD);
-        it.setForeground(TEXT);
-        it.setFont(font(12f, false));
-        it.setBorder(BorderFactory.createEmptyBorder(4, 10, 4, 10));
-        it.addActionListener(ev -> action.run());
-        return it;
-    }
-    private void deleteEngine(Path file, EcProject p) {
-        int answer = ask(this, style, "ec.d.deleteTitle", L.f("ec.d.deleteText", p.name), 1, "ec.btn.delete", "cancel");
-        if (answer != 0) return;
-        String cls = CodeGen.className(p);
-        try {
-            Path dir = EngineBuilder.folder();
-            Files.deleteIfExists(file);
-            Files.deleteIfExists(dir.resolve(cls + ".java"));
-            Files.deleteIfExists(dir.resolve(cls + ".cl"));
-            RenderEngines.reload();
-            refreshEngines();
-            hint.flash(Tone.OK, L.f("ec.s.engineDeleted", p.name));
-        } catch (IOException ex) { hint.flash(Tone.BAD, L.f("ec.s.deleteFailed", ex.getMessage())); }
-    }
-    private void loadOriginal(String id) {
-        if (dirty && project.nodes.size() > 1) {
-            int answer = ask(this, style, "unsaved_title", L.t("unsaved_msg"), 0, "save_and_leave", "leave_without_saving", "keep_editing");
-            if (answer == 0) { save(); if (dirty) return; }
-            else if (answer != 1) return;
-        }
-        try {
-            EcProject built = OriginalEngines.build(id);
-            snapshot();
-            project = built;
-            canvas.setProject(project);
-            pass = 0;
-            syncFieldsFromProject();
-            refreshPassBox();
-            preview.reset();
-            setDirty(true);
-            refreshAll();
-            hint.flash(Tone.OK, L.f("ec.s.loaded", project.name));
-        } catch (IllegalArgumentException ex) { hint.flash(Tone.BAD, ex.getMessage()); }
-    }
-
     private void loadProject(Path file) {
+        if (inside()) { hint.flash(Tone.WARN, L.t("ec.g.insideBlocked")); return; }
         if (dirty && project.nodes.size() > 1) {
-            int answer = ask(this, style, "unsaved_title", L.t("unsaved_msg"), 0, "save_and_leave", "leave_without_saving", "keep_editing");
+            int answer = ask(this, style, "common.unsaved_title", L.t("ec.unsaved_msg"), 0, "common.save_and_leave", "common.leave_without_saving", "common.keep_editing");
             if (answer == 0) { save(); if (dirty) return; }
             else if (answer != 1) return;
         }
@@ -723,59 +651,49 @@ public final class RenderEngineCreatorView extends JPanel {
             setDirty(false);
             refreshAll();
             hint.flash(Tone.OK, L.f("ec.s.loaded", project.name));
-        } catch (Exception ex) { hint.flash(Tone.BAD, L.f("ec.d.openFailed", ex.getMessage())); }
+        } catch (Exception exception) { hint.flash(Tone.BAD, L.f("ec.d.openFailed", exception.getMessage())); }
     }
-    private void exit() {
+    private void loadOriginal(String id) {
+        if (inside()) { hint.flash(Tone.WARN, L.t("ec.g.insideBlocked")); return; }
         if (dirty && project.nodes.size() > 1) {
-            int answer = ask(this, style, "unsaved_title", L.t("unsaved_msg"), 0, "save_and_leave", "leave_without_saving", "keep_editing");
+            int answer = ask(this, style, "common.unsaved_title", L.t("ec.unsaved_msg"), 0, "common.save_and_leave", "common.leave_without_saving", "common.keep_editing");
             if (answer == 0) { save(); if (dirty) return; }
             else if (answer != 1) return;
         }
-        onExit.run();
+        try {
+            CkProject built = OriginalEngines.build(id);
+            snapshot();
+            project = built;
+            canvas.setProject(project);
+            pass = 0;
+            syncFieldsFromProject();
+            refreshPassBox();
+            preview.reset();
+            setDirty(true);
+            refreshAll();
+            hint.flash(Tone.OK, L.f("ec.s.loaded", project.name));
+        } catch (IllegalArgumentException exception) { hint.flash(Tone.BAD, exception.getMessage()); }
     }
-
-    private void showHelp() {
-        String text = String.join("\n\n", L.t("ec.d.help1") + ":", L.t("ec.d.help2"), L.t("ec.d.help3"),
-                L.t("ec.d.help4"), L.t("ec.d.help5"), L.t("ec.d.help6"), L.t("ec.d.help7"), L.t("ec.d.help8"), L.t("ec.d.help9"));
-        inform(this, style, "ec.ui.help", text);
-    }
-
+    private Path projectsFolder() { return EngineBuilder.folder().resolve(EngineBuilder.PROJECTS); }
     private void setDirty(boolean value) {
         dirty = value;
-        if (value) dirtyText.setKey("unsaved");
+        if (value) dirtyText.setKey("common.unsaved");
         else dirtyText.setRaw("");
     }
-    private void onCanvasChanged() {
-        refreshProperties();
-        refreshIssues();
-    }
-    private void refreshAll() {
-        canvas.repaint();
-        refreshProperties();
-        refreshIssues();
-    }
-    private void refreshPassBox() {
-        syncing = true;
-        try {
-            passBox.removeAllItems();
-            for (int k = 0; k < project.passCount(); k++) passBox.addItem(L.f("ec.ui.passItem", k + 1));
-            passBox.setSelectedIndex(pass);
-            int g = Arrays.asList(GEOMETRY_KEYS).indexOf(project.geometry(pass));
-            passGeometry.setSelectedIndex(Math.max(0, g));
-        } finally { syncing = false; }
-        canvas.setPass(pass);
-    }
-    private void syncFieldsFromProject() {
-        syncing = true;
-        try {
-            nameField.setText(project.name);
-            titleField.setText(project.title);
-            curvatureField.setText(Double.isFinite(project.curvature) ? String.valueOf(project.curvature) : "");
-            openClToggle.setSelected(project.openCl);
-        } finally { syncing = false; }
-    }
-    private void refreshIssues() { showIssues(Validator.validate(project)); }
+    //endregion
 
+    //region Validation
+    private void check() {
+        if (inside()) { hint.flash(Tone.WARN, L.t("ec.g.insideBlocked")); return; }
+        EngineBuilder.Result result = EngineBuilder.build(project, false, path -> false);
+        showIssues(result.issues());
+        if (result.hasErrors()) hint.flash(Tone.BAD, L.t("ec.s.checkBad"));
+        else hint.flash(Tone.OK, L.t("ec.s.checkOk"));
+    }
+    private void refreshIssues() {
+        if (inside()) { showIssues(List.of()); return; }
+        showIssues(Validator.validate(project));
+    }
     private void showIssues(List<Issue> issues) {
         Set<Integer> errs = new HashSet<>(), warns = new HashSet<>();
         for (Issue i : issues) {
@@ -789,47 +707,49 @@ public final class RenderEngineCreatorView extends JPanel {
         long w = issues.size() - e;
         hint.setHint(issues.isEmpty() ? L.t("ec.s.correct") : L.f("ec.s.counts", e, w));
     }
+    //endregion
 
+    //region Properties
     private void refreshProperties() {
         Integer id = canvas.selectedNode();
-        NodeInst n = id == null ? null : project.node(id);
-        NodeKind k = n == null ? null : Nodes.find(n.kind);
+        NodeInst nodeInst = id == null ? null : project.node(id);
+        NodeKind nodeKind = nodeInst == null ? null : Nodes.find(nodeInst.kind);
         propsBody.removeAll();
         editors.clear();
         if (canvas.selectedNodes().size() > 1) {
             propsHead.setRaw(L.f("ec.s.selectedCount", canvas.selectedNodes().size()));
             propsHelp.set(null, MUTED, L.t("ec.ui.multiHelp"));
         }
-        else if (k == null) {
+        else if (nodeKind == null) {
             propsHead.setKey("ec.ui.cardProps");
             propsHelp.set(null, MUTED, L.t("ec.ui.noSelection"));
         }
         else {
-            propsHead.setRaw(k.title());
-            propsHelp.set(null, MUTED, k.help());
-            for (Param prm : k.params()) {
+            propsHead.setRaw(nodeKind.title());
+            propsHelp.set(null, MUTED, nodeKind.help());
+            for (Param prm : nodeKind.params()) {
                 propsBody.put(new Text("ec.p." + prm.key(), 11f, false, MUTED, 0), 6);
-                String current = n.params.getOrDefault(prm.key(), prm.def());
+                String current = nodeInst.params.getOrDefault(prm.key(), prm.def());
                 JComponent editor;
                 if (prm.kind() == Param.Kind.CHOICE) {
                     String[] labels = prm.choices().stream().map(prm::choiceLabel).toArray(String[]::new);
                     StyledComboBox box = new StyledComboBox(style, labels);
-                    box.setPreferredSize(new Dimension(INNER_W, 32));
+                    box.setPreferredSize(new Dimension(COL_W, 32));
                     box.setSelectedIndex(Math.max(0, prm.choices().indexOf(current)));
                     editor = box;
                 } else {
                     StyledTextField field = new StyledTextField(style, current);
-                    field.setPreferredSize(new Dimension(INNER_W, 30));
+                    field.setPreferredSize(new Dimension(COL_W, 30));
                     editor = field;
                 }
                 propsBody.put(editor, 2);
                 editors.put(prm.key(), editor);
             }
-            if (k.params().isEmpty()) propsBody.put(note("ec.ui.paramsEmpty", MUTED), 0);
+            if (nodeKind.params().isEmpty()) propsBody.put(note("ec.ui.paramsEmpty", MUTED), 0);
             else {
                 StyledButton apply = new StyledButton(style, "ec.ui.applyProps");
                 int nodeId = id;
-                apply.addActionListener(e -> applyProperties(nodeId));
+                apply.addActionListener(actionEvent -> applyProperties(nodeId));
                 propsBody.put(apply, 10);
             }
         }
@@ -837,70 +757,120 @@ public final class RenderEngineCreatorView extends JPanel {
         propsBody.repaint();
     }
     private void applyProperties(int nodeId) {
-        NodeInst n = project.node(nodeId);
-        NodeKind k = n == null ? null : Nodes.find(n.kind);
-        if (k == null) return;
+        NodeInst nodeInst = project.node(nodeId);
+        NodeKind nodeKind = nodeInst == null ? null : Nodes.find(nodeInst.kind);
+        if (nodeKind == null) return;
         snapshot();
-        for (Param prm : k.params()) {
-            JComponent c = editors.get(prm.key());
-            if (c instanceof StyledComboBox box) {
+        for (Param prm : nodeKind.params()) {
+            JComponent component = editors.get(prm.key());
+            if (component instanceof StyledComboBox box) {
                 int i = box.getSelectedIndex();
-                if (i >= 0) n.params.put(prm.key(), prm.choices().get(i));
+                if (i >= 0) nodeInst.params.put(prm.key(), prm.choices().get(i));
             }
-            else if (c instanceof StyledTextField f) n.params.put(prm.key(), f.getText().trim());
+            else if (component instanceof StyledTextField styledTextField) nodeInst.params.put(prm.key(), styledTextField.getText().trim());
         }
         refreshIssues();
         canvas.repaint();
         hint.flash(Tone.OK, L.t("ec.s.propsApplied"));
     }
-    private static final class Fold extends Column {
-        final Column body = new Column();
-        private final String title;
-        private final boolean card;
-        private boolean open;
+    //endregion
 
-        Fold(String key, boolean card) { this(key, card, false); }
-        Fold(String key, boolean card, boolean startOpen) {
-            this.card = card;
-            this.title = card ? L(key).toUpperCase(Locale.ROOT) : L(key);
-            put(body, 0);
-            addMouseListener(new MouseAdapter() { @Override public void mouseClicked(MouseEvent e) { if (!open || e.getY() < headHeight()) setOpen(!open); } });
-            addMouseMotionListener(new MouseMotionAdapter() {
-                @Override public void mouseMoved(MouseEvent e) {
-                    setCursor(Cursor.getPredefinedCursor(e.getY() < headHeight() ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
-                }
-            });
-            setOpen(startOpen);
-        }
-        private int headHeight() { return card ? 23 : 20; }
-        void setOpen(boolean value) {
-            open = value;
-            body.setVisible(value);
-            setBorder(card ? new EmptyBorder(headHeight(), 8, 7, 8) : new EmptyBorder(headHeight(), 2, 0, 2));
-            revalidate();
-            repaint();
-            Container scroll = SwingUtilities.getAncestorOfClass(JScrollPane.class, this);
-            if (scroll != null) {
-                scroll.revalidate();
-                scroll.repaint();
-            }
-        }
-        @Override protected void paintComponent(Graphics g) {
-            Graphics2D g2 = smooth(g);
-            int w = getWidth(), h = getHeight();
-            if (card) {
-                g2.setColor(CARD);
-                g2.fillRoundRect(0, 0, w - 1, h - 1, 12, 12);
-                g2.setColor(CARD_LINE);
-                g2.drawRoundRect(0, 0, w - 1, h - 1, 12, 12);
-            }
-            g2.setFont(font(10.5f, true));
-            g2.setColor(MUTED);
-            int pad = card ? 10 : 2;
-            int arrowX = w - (card ? 22 : 18);
-            g2.drawString(ellipsize(title, g2.getFontMetrics(), arrowX - pad - 6), pad, card ? 16 : 14);
-            (open ? Glyph.UP : Glyph.DOWN).paint(g2, arrowX, card ? 4 : 2, 14, MUTED);
-            g2.dispose();
-        }
+    //region Sync
+    private void onCanvasChanged() {
+        refreshProperties();
+        refreshIssues();
     }
+    private void refreshAll() {
+        canvas.repaint();
+        refreshProperties();
+        refreshIssues();
+    }
+    private void syncFieldsFromProject() {
+        syncing = true;
+        try {
+            nameField.setText(project.name);
+            titleField.setText(project.title);
+            curvatureField.setText(Double.isFinite(project.curvature) ? String.valueOf(project.curvature) : "");
+            openClToggle.setSelected(project.openCl);
+            backupToggle.setSelected(project.backupCustom);
+        } finally { syncing = false; }
+    }
+    //endregion
+
+    //region Engines
+    private void refreshEngines() {
+        enginesList.removeAll();
+        Path dir = projectsFolder();
+        List<Path> files = new ArrayList<>();
+        if (Files.isDirectory(dir)) {
+            try (var stream = Files.list(dir)) { stream.filter(path -> path.getFileName().toString().endsWith(".engine.json")).sorted().forEach(files::add); }
+            catch (Exception ignored) { }
+        }
+        if (files.isEmpty()) enginesList.put(note("ec.ui.noEngines", MUTED), 0);
+        for (Path file : files) {
+            try {
+                CkProject ckProject = ProjectIO.fromJson(Files.readString(file, StandardCharsets.UTF_8));
+                boolean built = Files.exists(EngineBuilder.folder().resolve(CodeGen.className(ckProject) + ".java"));
+                String text = ckProject.name + (built ? "  ●" : "");
+                ToolButton toolButton = new ToolButton(style, ToolButton.Layout.ROW, Glyph.FOLDER, text).size(INNER_W, 28);
+                toolButton.setToolTipText(L.f("ec.ui.engineTip", ckProject.title, ckProject.passCount()));
+                toolButton.onClick(() -> loadProject(file));
+                toolButton.addMouseListener(new MouseAdapter() {
+                    @Override public void mouseReleased(MouseEvent mouseEvent) {
+                        if (SwingUtilities.isRightMouseButton(mouseEvent)) showEngineMenu(toolButton, mouseEvent, file, ckProject);
+                    }
+                });
+                enginesList.put(toolButton, 4);
+            } catch (Exception exception) { enginesList.put(note("ec.ui.engineBroken", BAD), 4); }
+        }
+        enginesList.revalidate();
+        enginesList.repaint();
+    }
+    private void showEngineMenu(Component component, MouseEvent mouseEvent, Path file, CkProject ckProject) {
+        JPopupMenu menu = new JPopupMenu();
+        menu.setBackground(CARD);
+        menu.setBorder(BorderFactory.createLineBorder(CARD_LINE));
+        menu.add(menuItem(L.t("ec.ui.engMenu.open"), () -> loadProject(file)));
+        menu.add(menuItem(L.t("ec.menu.delete"), () -> deleteEngine(file, ckProject)));
+        menu.show(component, mouseEvent.getX(), mouseEvent.getY());
+    }
+    private void deleteEngine(Path file, CkProject ckProject) {
+        int answer = ask(this, style, "ec.d.deleteTitle", L.f("ec.d.deleteText", ckProject.name), 1, "ec.btn.delete", "cancel");
+        if (answer != 0) return;
+        String cls = CodeGen.className(ckProject);
+        try {
+            Path dir = EngineBuilder.folder();
+            Files.deleteIfExists(file);
+            Files.deleteIfExists(dir.resolve(cls + ".java"));
+            Files.deleteIfExists(dir.resolve(cls + ".cl"));
+            RenderEngines.reload();
+            refreshEngines();
+            hint.flash(Tone.OK, L.f("ec.s.engineDeleted", ckProject.name));
+        } catch (IOException exception) { hint.flash(Tone.BAD, L.f("ec.s.deleteFailed", exception.getMessage())); }
+    }
+    //endregion
+
+    //region Window Actions
+    private void togglePreview() {
+        previewShown = !previewShown;
+        previewSlot.setVisible(previewShown);
+        if (previewShown) preview.build();
+        revalidate();
+        repaint();
+    }
+    private void exit() {
+        if (inside()) { cancelInside(); return; }
+        if (dirty && project.nodes.size() > 1) {
+            int answer = ask(this, style, "common.unsaved_title", L.t("ec.unsaved_msg"), 0, "common.save_and_leave", "common.leave_without_saving", "common.keep_editing");
+            if (answer == 0) { save(); if (dirty) return; }
+            else if (answer != 1) return;
+        }
+        onExit.run();
+    }
+    private void showHelp() {
+        String text = String.join("\n\n", L.t("ec.d.help1") + ":", L.t("ec.d.help2"), L.t("ec.d.help3"),
+                L.t("ec.d.help4"), L.t("ec.d.help5"), L.t("ec.d.help6"), L.t("ec.d.help7"), L.t("ec.d.help8"), L.t("ec.d.help9"));
+        inform(this, style, "ec.ui.help", text);
+    }
+    //endregion
 }
