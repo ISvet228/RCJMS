@@ -1,7 +1,4 @@
 package Project.Helpers;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import Project.Game.RenderEngines;
 import Project.StyleUI.Style;
@@ -59,7 +56,7 @@ public final class SaveData {
                 String line = raw.trim();
                 if (line.isEmpty() || line.startsWith("#")) continue;
                 if (line.startsWith("[") && line.endsWith("]")) {
-                    if (readingMap && !rows.isEmpty() && legacyMapValid) data.map = rows.toArray(new int[0][]);
+                    if (readingMap && !rows.isEmpty()) data.map = rows.toArray(new int[0][]);
                     if (readingFloor && !rows.isEmpty()) floorRows.put(readingFloorIndex, rows.toArray(new int[0][]));
 
                     section = line.substring(1, line.length() - 1).trim().toLowerCase(Locale.ROOT);
@@ -158,7 +155,7 @@ public final class SaveData {
                     } catch (NumberFormatException ignored) { rows.clear(); if (readingMap) legacyMapValid = false; break; }
                 }
             }
-            if (readingMap && !rows.isEmpty() && legacyMapValid) data.map = rows.toArray(new int[0][]);
+            if (readingMap && !rows.isEmpty()) data.map = rows.toArray(new int[0][]);
             if (readingFloor && !rows.isEmpty()) floorRows.put(readingFloorIndex, rows.toArray(new int[0][]));
 
             if (!engineSet) data.renderEngine = "";

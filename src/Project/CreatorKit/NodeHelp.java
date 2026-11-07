@@ -1,6 +1,7 @@
 package Project.CreatorKit;
 
 import Project.Helpers.EditorKit;
+import Project.StyleUI.*;
 
 import javax.swing.*;
 import java.awt.*;
@@ -8,7 +9,7 @@ import java.util.Locale;
 
 public final class NodeHelp {
     //region Variables
-    private static final Color DARK = new Color(14, 14, 17), BAR = new Color(22, 22, 26), HOVER_CLOSE = new Color(170, 60, 60);
+    private static final Color DARK = new Color(14, 14, 17), BAR = new Color(22, 22, 26);
     //endregion
 
     //region Constructors
@@ -16,7 +17,7 @@ public final class NodeHelp {
     //endregion
 
     //region Help Dialog
-    public static void show(Component component, NodeKind nodeKind) {
+    public static void show(Component component, Style style, NodeKind nodeKind) {
         if (nodeKind == null) return;
         Window owner = SwingUtilities.getWindowAncestor(component);
         JDialog dialog = new JDialog(owner, nodeKind.title(), Dialog.ModalityType.APPLICATION_MODAL);
@@ -32,17 +33,13 @@ public final class NodeHelp {
         pane.setEditable(false);
         pane.setBackground(DARK);
         pane.setCaretPosition(0);
-        JScrollPane scroll = new JScrollPane(pane);
+        StyledScrollPane scroll = new StyledScrollPane(pane, style);
         scroll.setBorder(BorderFactory.createEmptyBorder(6, 10, 10, 10));
-        scroll.getViewport().setBackground(DARK);
-        scroll.setBackground(DARK);
-        scroll.getVerticalScrollBar().setUI(new DarkScrollBarUI());
-        scroll.getHorizontalScrollBar().setUI(new DarkScrollBarUI());
 
         JPanel root = new JPanel(new BorderLayout());
         root.setBackground(DARK);
         root.setBorder(BorderFactory.createLineBorder(new Color(48, 48, 56)));
-        root.add(titleBar(dialog, nodeKind.title()), BorderLayout.NORTH);
+        root.add(titleBar(dialog, style, nodeKind.title()), BorderLayout.NORTH);
         root.add(scroll, BorderLayout.CENTER);
         dialog.setContentPane(root);
         dialog.getRootPane().registerKeyboardAction(_ -> dialog.dispose(), KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -51,27 +48,16 @@ public final class NodeHelp {
         dialog.setLocationRelativeTo(owner);
         dialog.setVisible(true);
     }
-    private static JPanel titleBar(JDialog dialog, String title) {
+    private static JPanel titleBar(JDialog dialog, Style style, String title) {
         JPanel bar = new JPanel(new BorderLayout());
         bar.setBackground(BAR);
         bar.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 6));
-        JLabel label = new JLabel(title);
-        label.setForeground(EditorKit.TEXT);
+        StyledLabel label = new StyledLabel(style, title, false, false);
+        label.setTextColor(EditorKit.TEXT);
         label.setFont(EditorKit.font(13f, true));
-        JButton close = new JButton("\u00d7");
-        close.setFont(EditorKit.font(16f, false));
-        close.setForeground(EditorKit.TEXT);
-        close.setBackground(BAR);
-        close.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
-        close.setFocusPainted(false);
-        close.setContentAreaFilled(false);
-        close.setOpaque(true);
-        close.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        close.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override public void mouseEntered(java.awt.event.MouseEvent mouseEvent) { close.setBackground(HOVER_CLOSE); }
-            @Override public void mouseExited(java.awt.event.MouseEvent mouseEvent) { close.setBackground(BAR); }
-        });
-        close.addActionListener(actionEvent -> dialog.dispose());
+        StyledButton close = new StyledButton(style, "×");
+        close.setPreferredSize(new Dimension(36, 36));
+        close.addActionListener(_ -> dialog.dispose());
         bar.add(label, BorderLayout.CENTER);
         bar.add(close, BorderLayout.EAST);
 
@@ -151,22 +137,6 @@ public final class NodeHelp {
     private static String hex(Color color) { return String.format(Locale.ROOT, "#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue()); }
     private static String esc(String s) {
         return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
-    }
-    //endregion
-
-    //region Dark Scroll Bar
-    private static final class DarkScrollBarUI extends javax.swing.plaf.basic.BasicScrollBarUI {
-        @Override protected void configureScrollBarColors() {
-            thumbColor = new Color(70, 70, 80);
-            trackColor = DARK;
-        }
-        @Override protected JButton createDecreaseButton(int orientation) { return zeroButton(); }
-        @Override protected JButton createIncreaseButton(int orientation) { return zeroButton(); }
-        private static JButton zeroButton() {
-            JButton button = new JButton();
-            button.setPreferredSize(new Dimension(0, 0));
-            return button;
-        }
     }
     //endregion
 }

@@ -1,12 +1,7 @@
 package Project.Vulkan;
 
-import java.awt.image.BufferedImage;
-import java.awt.image.DataBufferInt;
-import java.lang.foreign.Arena;
-import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.SymbolLookup;
+import java.awt.image.*;
+import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
 
 import static java.lang.foreign.ValueLayout.*;
@@ -491,7 +486,7 @@ public final class Vk {
         private void releaseBuffer(Buffer buffer) throws Throwable {
             if (buffer == null) return;
             Api.UNMAP.invoke(dev(), buffer.memory);
-            try (Arena a = Arena.ofConfined()) {
+            try (Arena _ = Arena.ofConfined()) {
                 Api.FREE_MEMORY.invoke(dev(), buffer.memory, MemorySegment.NULL);
                 Api.DESTROY_BUFFER.invoke(dev(), buffer.handle, MemorySegment.NULL);
             }
@@ -570,7 +565,7 @@ public final class Vk {
             }
         }
         private void releaseTarget(Target target) throws Throwable {
-            try (Arena a = Arena.ofConfined()) {
+            try (Arena _ = Arena.ofConfined()) {
                 Api.DESTROY_FRAMEBUFFER.invoke(dev(), target.framebuffer, MemorySegment.NULL);
                 Api.DESTROY_VIEW.invoke(dev(), target.msaaView, MemorySegment.NULL);
                 Api.DESTROY_VIEW.invoke(dev(), target.resolveView, MemorySegment.NULL);

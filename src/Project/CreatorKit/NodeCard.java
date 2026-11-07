@@ -16,8 +16,6 @@ public class NodeCard extends JComponent {
     //region Layout
     /** Card size: two per row in the palette (the palette column is 252px wide). */
     static final int CARD_H = 92, CARD_GAP = 6, CARD_W = (252 - CARD_GAP) / 2;
-    //endregion
-    //region Card State
     private final NodeKind kind;
     private boolean hover;
     private java.util.function.Consumer<Point> onRightClick;
@@ -25,7 +23,9 @@ public class NodeCard extends JComponent {
     //endregion
 
     //region Constructors
-    public NodeCard(NodeKind kind, Runnable onClick) {
+    public NodeCard(Style style, NodeKind kind, Runnable onClick) {
+        //endregion
+        //region Card State
         this.kind = kind;
         setPreferredSize(new Dimension(CARD_W, CARD_H));
         setMinimumSize(new Dimension(CARD_W, CARD_H));
@@ -38,7 +38,7 @@ public class NodeCard extends JComponent {
             @Override public void mouseClicked(MouseEvent mouseEvent) {
                 if (!SwingUtilities.isRightMouseButton(mouseEvent)) onClick.run();
                 else if (onRightClick != null) onRightClick.accept(mouseEvent.getPoint());
-                else NodeHelp.show(NodeCard.this, kind);
+                else NodeHelp.show(NodeCard.this, style, kind);
             }
         });
     }

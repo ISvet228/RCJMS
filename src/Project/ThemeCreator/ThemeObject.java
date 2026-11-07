@@ -34,7 +34,6 @@ public final class ThemeObject {
         Object v = props.get(key);
         return v instanceof Number n ? n.doubleValue() : fallback;
     }
-    public boolean hasNum(String key) { return props.get(key) instanceof Number; }
     public String str(String key, String fallback) {
         Object v = props.get(key);
         return v instanceof String s ? s : fallback;

@@ -1,7 +1,4 @@
 package Project.Game;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 public final class AutoRenderController {
     //region Variables

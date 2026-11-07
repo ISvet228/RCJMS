@@ -1,8 +1,6 @@
 package Project.Game;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Modifier;
 import java.net.*;
@@ -54,10 +52,6 @@ public final class RenderEngines {
         }
         return null;
     }
-    public static String defaultId() {
-        List<RenderEngine> list = all();
-        return list.isEmpty() ? "" : list.getFirst().id();
-    }
     public static int indexOf(String id) {
         List<RenderEngine> list = all();
         for (int i = 0; i < list.size(); i++) if (list.get(i).id().equals(id)) return i;
@@ -79,9 +73,8 @@ public final class RenderEngines {
 
     //region Engine Discovery
     private static List<RenderEngine> discover() {
-        String pkgPath = ENGINE_PACKAGE;
         Map<String, RenderEngine> byId = new LinkedHashMap<>();
-        for (String className : moduleClassNames(pkgPath)) {
+        for (String className : moduleClassNames()) {
             try {
                 Class<?> type = Class.forName(className, true, RenderEngines.class.getClassLoader());
                 if (!RenderEngine.class.isAssignableFrom(type)) continue;
@@ -95,21 +88,21 @@ public final class RenderEngines {
         result.sort(Comparator.comparingInt(RenderEngine::order).thenComparing(RenderEngine::displayName));
         return List.copyOf(result);
     }
-    private static List<String> moduleClassNames(String pkgPath) {
+    private static List<String> moduleClassNames() {
         Set<String> names = new TreeSet<>();
-        String pkgName = pkgPath.replace('/', '.');
+        String pkgName = RenderEngines.ENGINE_PACKAGE.replace('/', '.');
         try {
             var codeSource = RenderEngines.class.getProtectionDomain().getCodeSource();
             if (codeSource != null) {
                 Path location = Paths.get(codeSource.getLocation().toURI());
-                if (Files.isDirectory(location)) collectFromDirectory(location.resolve(pkgPath), pkgName, names);
-                else collectFromJar(location.toFile(), pkgPath, pkgName, names);
+                if (Files.isDirectory(location)) collectFromDirectory(location.resolve(RenderEngines.ENGINE_PACKAGE), pkgName, names);
+                else collectFromJar(location.toFile(), pkgName, names);
             } else {
-                Enumeration<URL> roots = RenderEngines.class.getClassLoader().getResources(pkgPath);
+                Enumeration<URL> roots = RenderEngines.class.getClassLoader().getResources(RenderEngines.ENGINE_PACKAGE);
                 while (roots.hasMoreElements()) {
                     URL root = roots.nextElement();
                     if ("file".equals(root.getProtocol())) collectFromDirectory(Paths.get(root.toURI()), pkgName, names);
-                    else if ("jar".equals(root.getProtocol())) collectFromJarUrl(root, pkgPath, pkgName, names);
+                    else if ("jar".equals(root.getProtocol())) collectFromJarUrl(root, pkgName, names);
                 }
             }
         } catch (IOException | java.net.URISyntaxException | RuntimeException exception) { System.err.println("Render engine discovery failed: " + exception); }
@@ -122,23 +115,23 @@ public final class RenderEngines {
                     .forEach(n -> names.add(pkgName + "." + n.substring(0, n.length() - ".class".length())));
         }
     }
-    private static void collectFromJar(java.io.File jarFile, String pkgPath, String pkgName, Set<String> names) throws IOException {
+    private static void collectFromJar(File jarFile, String pkgName, Set<String> names) throws IOException {
         if (!jarFile.isFile()) return;
-        try (JarFile jar = new JarFile(jarFile)) { addJarEntries(jar, pkgPath, pkgName, names); }
+        try (JarFile jar = new JarFile(jarFile)) { addJarEntries(jar, pkgName, names); }
     }
-    private static void collectFromJarUrl(URL root, String pkgPath, String pkgName, Set<String> names) throws IOException {
+    private static void collectFromJarUrl(URL root, String pkgName, Set<String> names) throws IOException {
         JarURLConnection connection = (JarURLConnection) root.openConnection();
         connection.setUseCaches(false);
         try (JarFile jar = connection.getJarFile()) {
-            addJarEntries(jar, pkgPath, pkgName, names);
+            addJarEntries(jar, pkgName, names);
         }
     }
-    private static void addJarEntries(JarFile jar, String pkgPath, String pkgName, Set<String> names) {
+    private static void addJarEntries(JarFile jar, String pkgName, Set<String> names) {
         Enumeration<java.util.jar.JarEntry> entries = jar.entries();
         while (entries.hasMoreElements()) {
             String entry = entries.nextElement().getName();
-            if (!entry.startsWith(pkgPath + "/") || !entry.endsWith(".class")) continue;
-            String simple = entry.substring(pkgPath.length() + 1);
+            if (!entry.startsWith(RenderEngines.ENGINE_PACKAGE + "/") || !entry.endsWith(".class")) continue;
+            String simple = entry.substring(RenderEngines.ENGINE_PACKAGE.length() + 1);
             if (simple.contains("/") || simple.contains("$")) continue;
             names.add(pkgName + "." + simple.substring(0, simple.length() - ".class".length()));
         }

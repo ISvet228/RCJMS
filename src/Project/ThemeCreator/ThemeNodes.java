@@ -295,8 +295,6 @@ public final class ThemeNodes {
         for (String n : names) out.add(new Port(n, dataType));
         return out;
     }
-    private static void add(String id, String cat, List<Port> in, List<Port> out, List<Param> params) {
-        Nodes.registerTheme(new NodeKind(id, cat, in, out, params, emit -> { }));
-    }
+    private static void add(String id, String cat, List<Port> in, List<Port> out, List<Param> params) { Nodes.registerTheme(new NodeKind(id, cat, in, out, params, _ -> { })); }
     //endregion
 }

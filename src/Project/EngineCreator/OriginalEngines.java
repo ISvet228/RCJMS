@@ -56,7 +56,7 @@ public final class OriginalEngines {
     private static int moriarty(B b, Scene scene) {
         int on = qualityAtLeast(b, scene.qualityF(), 1);
         int lz = lightLz(b, scene);
-        int len = lightLen(b, scene, lz);
+        int len = lightLen(b, lz);
         Along along = floorAlong(b, scene), ce = ceilingAlong(b, scene);
 
         int ndlW = bin(b, "div", facing(b, scene), "out", len, "out");
@@ -76,7 +76,7 @@ public final class OriginalEngines {
     }
     private static int raytrace(B b, Scene scene) {
         int lz = lightLz(b, scene);
-        int len = lightLen(b, scene, lz);
+        int len = lightLen(b, lz);
         Along along = floorAlong(b, scene), ce = ceilingAlong(b, scene);
 
         int ndlW = bin(b, "div", facing(b, scene), "out", len, "out");
@@ -148,9 +148,7 @@ public final class OriginalEngines {
 
     //region Scene
     private record Scene(boolean hyper, String dxP, String dyP, int dxN, int dyN, int grid, int P, int scale, int invL, int curv, int r, int z,
-                         int h, int hgt, int isWall, int wallV, int isFinish, int player, int qualityF, boolean marching) {
-
-                         }
+                         int h, int hgt, int isWall, int wallV, int isFinish, int player, int qualityF, boolean marching) { }
     private static double[] marchRadii(String id) {
         return switch (id) {
             case "raymarch" -> new double[]{0.0, 0.06, 48, 96, 160};
@@ -217,13 +215,12 @@ public final class OriginalEngines {
             P = with(b, "hypDistance", t, "out", "t", curv, "out", "k");
         }
 
-        int z = pose;
         int isFinish = bin(b, "equalInt", grid, "cell", b.ci(2), "out");
         int h = sel(b, isFinish, b.c(0.5), b.c(1));
         int rp = bin(b, "mul", r, "out", P, "out");
-        int hgt = bin(b, "add", rp, "out", z, "height");
-        int aboveFloor = bin(b, "greaterEq", rp, "out", un(b, "neg", z, "height"), "out");
-        int belowTop = bin(b, "lessEq", rp, "out", bin(b, "sub", h, "out", z, "height"), "out");
+        int hgt = bin(b, "add", rp, "out", pose, "height");
+        int aboveFloor = bin(b, "greaterEq", rp, "out", un(b, "neg", pose, "height"), "out");
+        int belowTop = bin(b, "lessEq", rp, "out", bin(b, "sub", h, "out", pose, "height"), "out");
         int isWall = bin(b, "and", bin(b, "and", grid, "hit", aboveFloor, "out"), "out", belowTop, "out");
 
         int vWall = bin(b, "div", hgt, "out", h, "out");
@@ -232,7 +229,7 @@ public final class OriginalEngines {
         int qualityNode = b.n("quality");
         b.note(qualityNode, "Render quality 0, 1, 2 from the settings.");
         int qualityF = un(b, "toFloat", qualityNode, "out");
-        return new Scene(hyper, dxP, dyP, dxN, dyN, grid, P, scale, invL, curv, r, z, h, hgt, isWall, wallV, isFinish, pos, qualityF, march != null);
+        return new Scene(hyper, dxP, dyP, dxN, dyN, grid, P, scale, invL, curv, r, pose, h, hgt, isWall, wallV, isFinish, pos, qualityF, march != null);
     }
     private static int normal(B b, Scene scene) {
         if (scene.grid() >= 0 && b.p.nodes.stream().anyMatch(nodeInst -> nodeInst.id == scene.grid() && nodeInst.kind.equals("marchRounded"))) return scene.grid();
@@ -293,9 +290,7 @@ public final class OriginalEngines {
     //endregion
 
     //region Surfaces
-    private record Along(int planeDist, int rayDist) {
-
-    }
+    private record Along(int planeDist, int rayDist) { }
     private static int wallTexture(B b, Scene scene) {
         int wall = with(b, "sampleTexture", scene.grid(), "hitU", "u", scene.wallV(), "out", "v");
         b.note(wall, "Wall texture: u along the wall, v up the wall.");
@@ -341,7 +336,7 @@ public final class OriginalEngines {
 
     //region Lighting
     private static int lightLz(B b, Scene scene) { return bin(b, "sub", b.c(0.18), "out", dirZ(b, scene), "out"); }
-    private static int lightLen(B b, Scene scene, int lz) {
+    private static int lightLen(B b, int lz) {
         return un(b, "sqrt", bin(b, "add", b.c(1), "out", bin(b, "mul", lz, "out", lz, "out"), "out"), "out");
     }
     private static int facing(B b, Scene scene) {
@@ -369,9 +364,7 @@ public final class OriginalEngines {
         int f = with(b, "clamp", bin(b, "sub", b.c(1), "out", q2, "out"), "out", "x", b.c(0), "out", "lo", b.c(1), "out", "hi");
         return bin(b, "mul", f, "out", f, "out");
     }
-    private record Lit(int node) {
-
-    }
+    private record Lit(int node) { }
     private static Lit gameLight(B b, int dist, int ao, int ndl, int ndf, int finish) {
         int x = b.n("gameLight");
         b.note(x, "Game light: ambient, fill and flashlight falloff.");
@@ -402,10 +395,8 @@ public final class OriginalEngines {
     //endregion
 
     //region Reflections
-    private record Reflected(int color, int visible, int dist) {
-
-    }
-    private static Reflected reflectedSurface(B b, Scene scene, int ray, int Pr, int z0, int slope, int ox, int oy, int dxN, String dxP, int dyN, String dyP, int pathD) {
+    private record Reflected(int color, int visible, int dist) { }
+    private static Reflected reflectedSurface(B b, int ray, int Pr, int z0, int slope, int ox, int oy, int dxN, String dxP, int dyN, String dyP, int pathD) {
         int zW = bin(b, "add", z0, "out", bin(b, "mul", slope, "out", Pr, "out"), "out");
         int top = sel(b, bin(b, "equalInt", ray, "cell", b.ci(2), "out"), b.c(0.5), b.c(1));
         int planeValid = bin(b, "greater", un(b, "abs", slope, "out"), "out", b.c(1e-6), "out");
@@ -466,7 +457,7 @@ public final class OriginalEngines {
         int cosRV = bin(b, "add", bin(b, "mul", refl, "rx", scene.dxN(), scene.dxP()), "out", bin(b, "mul", refl, "ry", scene.dyN(), scene.dyP()), "out");
         int facingFade = with(b, "clamp", bin(b, "div", bin(b, "add", cosRV, "out", b.c(0.2), "out"), "out", b.c(0.5), "out"), "out",
                 "x", b.c(0), "out", "lo", b.c(1), "out", "hi");
-        Reflected reflected = reflectedSurface(b, scene, ray, Pr, scene.hgt(), scene.r(), ox, oy, refl, "rx", refl, "ry", scene.P());
+        Reflected reflected = reflectedSurface(b, ray, Pr, scene.hgt(), scene.r(), ox, oy, refl, "rx", refl, "ry", scene.P());
         int selfFade = with(b, "clamp", bin(b, "sub", Pr, "out", b.c(0.6), "out"), "out", "x", b.c(0), "out", "lo", b.c(1), "out", "hi");
         int strength = bin(b, "mul", bin(b, "mul", bin(b, "mul", clampLevel(b, lit), "out", b.c(0.75 * 0.24), "out"), "out", selfFade, "out"), "out", facingFade, "out");
         int mixed = with(b, "mixColor", base, "out", "a", reflected.color(), "out", "b", strength, "out", "t");
@@ -483,7 +474,7 @@ public final class OriginalEngines {
         b.link(scene.dyN(), scene.dyP(), ray, "dirY");
 
         int Pr = perceived(b, scene, ray);
-        Reflected reflected = reflectedSurface(b, scene, ray, Pr, b.c(0), un(b, "neg", scene.r(), "out"), wx, wy, scene.dxN(), scene.dxP(), scene.dyN(), scene.dyP(), along.planeDist());
+        Reflected reflected = reflectedSurface(b, ray, Pr, b.c(0), un(b, "neg", scene.r(), "out"), wx, wy, scene.dxN(), scene.dxP(), scene.dyN(), scene.dyP(), along.planeDist());
         int fade = with(b, "clamp", bin(b, "sub", b.c(1), "out", bin(b, "div", reflected.dist(), "out", b.c(6), "out"), "out"), "out",
                 "x", b.c(0), "out", "lo", b.c(1), "out", "hi");
         int strength = bin(b, "mul", bin(b, "mul", clampLevel(b, lit), "out", b.c(0.75 * 0.12), "out"), "out", fade, "out");

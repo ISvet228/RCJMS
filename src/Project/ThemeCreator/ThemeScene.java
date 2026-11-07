@@ -1,6 +1,4 @@
 package Project.ThemeCreator;
-import Project.EngineCreator.*;
-import Project.CreatorKit.*;
 
 import java.awt.geom.*;
 import java.util.*;
@@ -24,15 +22,12 @@ public final class ThemeScene {
         return inverse(parentWorld(doc, frame, themeObject)).transform(canvas, null);
     }
     private static AffineTransform inverse(AffineTransform affineTransform) {
-        try {
-            return affineTransform.createInverse();
-        } catch (NoninvertibleTransformException exception) {
-            return new AffineTransform();
-        }
+        try { return affineTransform.createInverse(); }
+        catch (NoninvertibleTransformException exception) { return new AffineTransform(); }
     }
-    private static double number(ThemeObject themeObject, String key, double fallback) {
+    private static double number(ThemeObject themeObject, String key) {
         Object v = themeObject.props.get(key);
-        return v instanceof Number n ? n.doubleValue() : fallback;
+        return v instanceof Number n ? n.doubleValue() : (double) 0;
     }
     //endregion
 
@@ -78,7 +73,7 @@ public final class ThemeScene {
     }
     public static double[] placedAt(ThemeDoc doc, ThemeRenderer.Frame frame, ThemeObject themeObject, Point2D canvas) {
         Point2D mid = toParentSpace(doc, frame, themeObject, canvas);
-        double w = number(themeObject, "w", 0), h = number(themeObject, "h", 0);
+        double w = number(themeObject, "w"), h = number(themeObject, "h");
         return switch (themeObject.type) {
             case "rect", "ellipse", "ring", "arc" -> new double[]{mid.getX() - w / 2, mid.getY() - h / 2};
             case "polygon", "polyline" -> new double[]{mid.getX() - 50, mid.getY() - 50};

@@ -50,7 +50,7 @@ public final class ThemeGraph {
     }
     static String format(Object v) {
         if (v instanceof Double d) return d.isNaN() ? "—" : String.format(Locale.ROOT, "%.2f", d);
-        if (v instanceof Boolean b) return b ? "true" : "false";
+        if (v instanceof Boolean b) return b.toString();
         if (v instanceof Color color) return String.format(Locale.ROOT, "#%02X%02X%02X", color.getRed(), color.getGreen(), color.getBlue());
         return null;
     }
@@ -122,23 +122,23 @@ public final class ThemeGraph {
     private static void compute(Plan plan, NodeInst nodeInst, double t, Object[] out,
                                 Slot values, Map<String, Object> overrides) {
         switch (nodeInst.kind) {
-            case "th.time" -> values.put("out", t * num(lit(plan, nodeInst, "speed"), 1));
-            case "th.number" -> values.put("out", num(lit(plan, nodeInst, "value"), 0));
-            case "th.int" -> values.put("out", (double) Math.round(num(lit(plan, nodeInst, "value"), 0)));
-            case "th.bool" -> values.put("out", Boolean.TRUE.equals(lit(plan, nodeInst, "value")));
-            case "th.random" -> values.put("out", new Random((long) num(lit(plan, nodeInst, "seed"), 1)).nextDouble());
-            case "th.dt" -> values.put("out", plan.dt);
+            case "th.time" -> values.put(t * num(lit(plan, nodeInst, "speed"), 1));
+            case "th.number" -> values.put(num(lit(plan, nodeInst, "value"), 0));
+            case "th.int" -> values.put((double) Math.round(num(lit(plan, nodeInst, "value"), 0)));
+            case "th.bool" -> values.put(Boolean.TRUE.equals(lit(plan, nodeInst, "value")));
+            case "th.random" -> values.put(new Random((long) num(lit(plan, nodeInst, "seed"), 1)).nextDouble());
+            case "th.dt" -> values.put(plan.dt);
             case "th.integrate" -> {
                 double[] m = mem(plan, nodeInst, 1);
                 if (Double.isNaN(m[0])) m[0] = 0;
                 m[0] += x(plan, nodeInst, "x", out) * plan.dt;
-                values.put("out", m[0]);
+                values.put(m[0]);
             }
             case "th.edge" -> {
                 double[] m = mem(plan, nodeInst, 1);
                 double now = bool(plan, nodeInst, "in", out) ? 1 : 0;
                 double prev = Double.isNaN(m[0]) ? now : m[0];
-                values.put("out", now > 0.5 && prev <= 0.5);
+                values.put(now > 0.5 && prev <= 0.5);
                 m[0] = now;
             }
             case "th.toggle" -> {
@@ -149,7 +149,7 @@ public final class ThemeGraph {
                 if (now > 0.5 && prev <= 0.5) val = 1 - val;
                 m[0] = val;
                 m[1] = now;
-                values.put("out", val > 0.5);
+                values.put(val > 0.5);
             }
             case "th.counter" -> {
                 double[] m = mem(plan, nodeInst, 2);
@@ -159,7 +159,7 @@ public final class ThemeGraph {
                 if (now > 0.5 && prev <= 0.5) count++;
                 m[0] = count;
                 m[1] = now;
-                values.put("out", count);
+                values.put(count);
             }
             case "th.timeSinceEdge" -> {
                 double[] m = mem(plan, nodeInst, 2);
@@ -168,7 +168,7 @@ public final class ThemeGraph {
                 if (Double.isNaN(m[0])) m[0] = t;
                 if (now > 0.5 && prev <= 0.5) m[0] = t;
                 m[1] = now;
-                values.put("out", t - m[0]);
+                values.put(t - m[0]);
             }
             case "th.randomOnEdge" -> {
                 double[] m = mem(plan, nodeInst, 3);
@@ -182,17 +182,17 @@ public final class ThemeGraph {
                 }
                 m[1] = now;
                 m[2] = count;
-                values.put("out", m[0]);
+                values.put(m[0]);
             }
-            case "th.keyHeld" -> values.put("out", ThemeInput.held(text(plan, nodeInst, "key", "Space")));
+            case "th.keyHeld" -> values.put(ThemeInput.held(text(plan, nodeInst, "key", "Space")));
             case "th.keyPressed" -> {
                 double[] m = mem(plan, nodeInst, 1);
                 double presses = ThemeInput.presses(text(plan, nodeInst, "key", "Space"));
                 if (Double.isNaN(m[0])) {
                     m[0] = presses;
-                    values.put("out", false);
+                    values.put(false);
                 } else {
-                    values.put("out", presses != m[0]);
+                    values.put(presses != m[0]);
                     m[0] = presses;
                 }
             }
@@ -204,127 +204,127 @@ public final class ThemeGraph {
                 double th = Math.atan2(py, px) - ang;
                 double a = th - k * Math.floor(th / k) - k / 2;
                 double reach = r * Math.cos(Math.PI / sides) / Math.cos(a);
-                values.put("out", 1 - smooth01(-soft, soft, Math.hypot(px, py) - reach));
+                values.put(1 - smooth01(-soft, soft, Math.hypot(px, py) - reach));
             }
             case "th.follow" -> {
                 double target = x(plan, nodeInst, "x", out), speed = Math.max(0, x(plan, nodeInst, "speed", out));
-                double[] m = plan.memory.computeIfAbsent(nodeInst.id, k -> new double[]{Double.NaN});
+                double[] m = plan.memory.computeIfAbsent(nodeInst.id, _ -> new double[]{Double.NaN});
                 if (Double.isNaN(m[0])) m[0] = target;
                 else m[0] += (target - m[0]) * (1 - Math.exp(-speed * plan.dt));
-                values.put("out", m[0]);
+                values.put(m[0]);
             }
-            case "th.color" -> values.put("out", color(lit(plan, nodeInst, "color"), Color.WHITE));
+            case "th.color" -> values.put(color(lit(plan, nodeInst, "color"), Color.WHITE));
 
-            case "th.key" -> values.put("out", ThemeInput.down(text(plan, nodeInst, "key", "Space")));
-            case "th.axis" -> values.put("out", (ThemeInput.down(text(plan, nodeInst, "negative", "A")) ? -1.0 : 0.0)
+            case "th.key" -> values.put(ThemeInput.down(text(plan, nodeInst, "key", "Space")));
+            case "th.axis" -> values.put((ThemeInput.down(text(plan, nodeInst, "negative", "A")) ? -1.0 : 0.0)
                     + (ThemeInput.down(text(plan, nodeInst, "positive", "D")) ? 1.0 : 0.0));
-            case "th.mouseX" -> values.put("out", ThemeInput.mouseX());
-            case "th.mouseY" -> values.put("out", ThemeInput.mouseY());
-            case "th.mouseDX" -> values.put("out", ThemeInput.deltaX());
-            case "th.mouseDY" -> values.put("out", ThemeInput.deltaY());
-            case "th.mouseDown" -> values.put("out", ThemeInput.buttonDown(text(plan, nodeInst, "button", "left")));
+            case "th.mouseX" -> values.put(ThemeInput.mouseX());
+            case "th.mouseY" -> values.put(ThemeInput.mouseY());
+            case "th.mouseDX" -> values.put(ThemeInput.deltaX());
+            case "th.mouseDY" -> values.put(ThemeInput.deltaY());
+            case "th.mouseDown" -> values.put(ThemeInput.buttonDown(text(plan, nodeInst, "button", "left")));
 
-            case "th.sin" -> values.put("out", Math.sin(x(plan, nodeInst, "a", out)));
-            case "th.cos" -> values.put("out", Math.cos(x(plan, nodeInst, "a", out)));
-            case "th.table" -> values.put("out", table(text(plan, nodeInst, "values", "0"), num(lit(plan, nodeInst, "period"), 1), x(plan, nodeInst, "a", out)));
-            case "th.abs" -> values.put("out", Math.abs(x(plan, nodeInst, "a", out)));
-            case "th.sign" -> values.put("out", Math.signum(x(plan, nodeInst, "a", out)));
-            case "th.floor" -> values.put("out", Math.floor(x(plan, nodeInst, "a", out)));
-            case "th.ceil" -> values.put("out", Math.ceil(x(plan, nodeInst, "a", out)));
-            case "th.round" -> values.put("out", (double) Math.round(x(plan, nodeInst, "a", out)));
+            case "th.sin" -> values.put(Math.sin(x(plan, nodeInst, "a", out)));
+            case "th.cos" -> values.put(Math.cos(x(plan, nodeInst, "a", out)));
+            case "th.table" -> values.put(table(text(plan, nodeInst, "values", "0"), num(lit(plan, nodeInst, "period"), 1), x(plan, nodeInst, "a", out)));
+            case "th.abs" -> values.put(Math.abs(x(plan, nodeInst, "a", out)));
+            case "th.sign" -> values.put(Math.signum(x(plan, nodeInst, "a", out)));
+            case "th.floor" -> values.put(Math.floor(x(plan, nodeInst, "a", out)));
+            case "th.ceil" -> values.put(Math.ceil(x(plan, nodeInst, "a", out)));
+            case "th.round" -> values.put((double) Math.round(x(plan, nodeInst, "a", out)));
             case "th.fract" -> {
                 double a = x(plan, nodeInst, "a", out);
-                values.put("out", a - Math.floor(a));
+                values.put(a - Math.floor(a));
             }
-            case "th.sqrt" -> values.put("out", Math.sqrt(Math.max(0, x(plan, nodeInst, "a", out))));
-            case "th.exp" -> values.put("out", Math.exp(x(plan, nodeInst, "a", out)));
-            case "th.log" -> values.put("out", Math.log(Math.max(1e-12, x(plan, nodeInst, "a", out))));
+            case "th.sqrt" -> values.put(Math.sqrt(Math.max(0, x(plan, nodeInst, "a", out))));
+            case "th.exp" -> values.put(Math.exp(x(plan, nodeInst, "a", out)));
+            case "th.log" -> values.put(Math.log(Math.max(1e-12, x(plan, nodeInst, "a", out))));
             case "th.tri" -> {
                 double a = x(plan, nodeInst, "a", out);
-                values.put("out", Math.abs((a - Math.floor(a)) * 2 - 1));
+                values.put(Math.abs((a - Math.floor(a)) * 2 - 1));
             }
             case "th.ease" -> {
                 double a = clamp01(x(plan, nodeInst, "a", out));
-                values.put("out", a * a * (3 - 2 * a));
+                values.put(a * a * (3 - 2 * a));
             }
-            case "th.deg" -> values.put("out", x(plan, nodeInst, "a", out) * Math.PI / 180);
-            case "th.rad" -> values.put("out", x(plan, nodeInst, "a", out) * 180 / Math.PI);
+            case "th.deg" -> values.put(x(plan, nodeInst, "a", out) * Math.PI / 180);
+            case "th.rad" -> values.put(x(plan, nodeInst, "a", out) * 180 / Math.PI);
 
-            case "th.add" -> values.put("out", x(plan, nodeInst, "a", out) + x(plan, nodeInst, "b", out));
-            case "th.sub" -> values.put("out", x(plan, nodeInst, "a", out) - x(plan, nodeInst, "b", out));
-            case "th.mul" -> values.put("out", x(plan, nodeInst, "a", out) * x(plan, nodeInst, "b", out));
+            case "th.add" -> values.put(x(plan, nodeInst, "a", out) + x(plan, nodeInst, "b", out));
+            case "th.sub" -> values.put(x(plan, nodeInst, "a", out) - x(plan, nodeInst, "b", out));
+            case "th.mul" -> values.put(x(plan, nodeInst, "a", out) * x(plan, nodeInst, "b", out));
             case "th.div" -> {
                 double b = x(plan, nodeInst, "b", out);
-                values.put("out", b == 0 ? 0.0 : x(plan, nodeInst, "a", out) / b);
+                values.put(b == 0 ? 0.0 : x(plan, nodeInst, "a", out) / b);
             }
             case "th.mod" -> {
                 double a = x(plan, nodeInst, "a", out), b = x(plan, nodeInst, "b", out);
-                values.put("out", b == 0 ? 0.0 : a - b * Math.floor(a / b));
+                values.put(b == 0 ? 0.0 : a - b * Math.floor(a / b));
             }
-            case "th.pow" -> values.put("out", Math.pow(x(plan, nodeInst, "a", out), x(plan, nodeInst, "b", out)));
-            case "th.min" -> values.put("out", Math.min(x(plan, nodeInst, "a", out), x(plan, nodeInst, "b", out)));
-            case "th.max" -> values.put("out", Math.max(x(plan, nodeInst, "a", out), x(plan, nodeInst, "b", out)));
-            case "th.atan2" -> values.put("out", Math.atan2(x(plan, nodeInst, "a", out), x(plan, nodeInst, "b", out)));
+            case "th.pow" -> values.put(Math.pow(x(plan, nodeInst, "a", out), x(plan, nodeInst, "b", out)));
+            case "th.min" -> values.put(Math.min(x(plan, nodeInst, "a", out), x(plan, nodeInst, "b", out)));
+            case "th.max" -> values.put(Math.max(x(plan, nodeInst, "a", out), x(plan, nodeInst, "b", out)));
+            case "th.atan2" -> values.put(Math.atan2(x(plan, nodeInst, "a", out), x(plan, nodeInst, "b", out)));
 
             case "th.lerp" -> {
                 double a = x(plan, nodeInst, "a", out), b = x(plan, nodeInst, "b", out), k = x(plan, nodeInst, "t", out);
-                values.put("out", a + (b - a) * k);
+                values.put(a + (b - a) * k);
             }
             case "th.clamp" -> {
                 double a = x(plan, nodeInst, "a", out), lo = x(plan, nodeInst, "lo", out), hi = x(plan, nodeInst, "hi", out);
-                values.put("out", Math.max(lo, Math.min(hi, a)));
+                values.put(Math.max(lo, Math.min(hi, a)));
             }
             case "th.smooth" -> {
                 double a = x(plan, nodeInst, "a", out), lo = x(plan, nodeInst, "lo", out), hi = x(plan, nodeInst, "hi", out);
                 double k = hi == lo ? (a >= hi ? 1 : 0) : clamp01((a - lo) / (hi - lo));
-                values.put("out", k * k * (3 - 2 * k));
+                values.put(k * k * (3 - 2 * k));
             }
             case "th.smootherstep" -> {
                 double a = x(plan, nodeInst, "a", out), lo = x(plan, nodeInst, "lo", out), hi = x(plan, nodeInst, "hi", out);
                 double k = hi == lo ? (a >= hi ? 1 : 0) : clamp01((a - lo) / (hi - lo));
-                values.put("out", k * k * k * (k * (k * 6 - 15) + 10));
+                values.put(k * k * k * (k * (k * 6 - 15) + 10));
             }
             case "th.inverseLerp" -> {
                 double a = x(plan, nodeInst, "a", out), lo = x(plan, nodeInst, "lo", out), hi = x(plan, nodeInst, "hi", out);
-                values.put("out", hi == lo ? 0 : (a - lo) / (hi - lo));
+                values.put(hi == lo ? 0 : (a - lo) / (hi - lo));
             }
             case "th.remap" -> {
                 double a = x(plan, nodeInst, "a", out), inLo = x(plan, nodeInst, "inLo", out), inHi = x(plan, nodeInst, "inHi", out);
                 double outLo = x(plan, nodeInst, "outLo", out), outHi = x(plan, nodeInst, "outHi", out);
-                values.put("out", inHi == inLo ? outLo : outLo + (a - inLo) / (inHi - inLo) * (outHi - outLo));
+                values.put(inHi == inLo ? outLo : outLo + (a - inLo) / (inHi - inLo) * (outHi - outLo));
             }
 
-            case "th.gt" -> values.put("out", x(plan, nodeInst, "a", out) > x(plan, nodeInst, "b", out));
-            case "th.lt" -> values.put("out", x(plan, nodeInst, "a", out) < x(plan, nodeInst, "b", out));
-            case "th.ge" -> values.put("out", x(plan, nodeInst, "a", out) >= x(plan, nodeInst, "b", out));
-            case "th.le" -> values.put("out", x(plan, nodeInst, "a", out) <= x(plan, nodeInst, "b", out));
-            case "th.eq" -> values.put("out", Math.abs(x(plan, nodeInst, "a", out) - x(plan, nodeInst, "b", out)) < 1e-9);
-            case "th.and" -> values.put("out", bool(plan, nodeInst, "a", out) && bool(plan, nodeInst, "b", out));
-            case "th.or" -> values.put("out", bool(plan, nodeInst, "a", out) || bool(plan, nodeInst, "b", out));
-            case "th.not" -> values.put("out", !bool(plan, nodeInst, "a", out));
-            case "th.select" -> values.put("out", x(plan, nodeInst, bool(plan, nodeInst, "cond", out) ? "a" : "b", out));
+            case "th.gt" -> values.put(x(plan, nodeInst, "a", out) > x(plan, nodeInst, "b", out));
+            case "th.lt" -> values.put(x(plan, nodeInst, "a", out) < x(plan, nodeInst, "b", out));
+            case "th.ge" -> values.put(x(plan, nodeInst, "a", out) >= x(plan, nodeInst, "b", out));
+            case "th.le" -> values.put(x(plan, nodeInst, "a", out) <= x(plan, nodeInst, "b", out));
+            case "th.eq" -> values.put(Math.abs(x(plan, nodeInst, "a", out) - x(plan, nodeInst, "b", out)) < 1e-9);
+            case "th.and" -> values.put(bool(plan, nodeInst, "a", out) && bool(plan, nodeInst, "b", out));
+            case "th.or" -> values.put(bool(plan, nodeInst, "a", out) || bool(plan, nodeInst, "b", out));
+            case "th.not" -> values.put(!bool(plan, nodeInst, "a", out));
+            case "th.select" -> values.put(x(plan, nodeInst, bool(plan, nodeInst, "cond", out) ? "a" : "b", out));
 
-            case "th.rgb" -> values.put("out", new Color(channel(x(plan, nodeInst, "r", out)), channel(x(plan, nodeInst, "g", out)),
+            case "th.rgb" -> values.put(new Color(channel(x(plan, nodeInst, "r", out)), channel(x(plan, nodeInst, "g", out)),
                     channel(x(plan, nodeInst, "b", out)), alphaByte(x(plan, nodeInst, "a", out))));
             case "th.hsv" -> {
                 double h = x(plan, nodeInst, "h", out);
-                values.put("out", Color.getHSBColor((float) (h - Math.floor(h)), (float) clamp01(x(plan, nodeInst, "s", out)),
+                values.put(Color.getHSBColor((float) (h - Math.floor(h)), (float) clamp01(x(plan, nodeInst, "s", out)),
                         (float) clamp01(x(plan, nodeInst, "v", out))));
             }
             case "th.mix" -> {
                 Color a = color(in(plan, nodeInst, "a", out), Color.BLACK), b = color(in(plan, nodeInst, "b", out), Color.WHITE);
                 double k = clamp01(x(plan, nodeInst, "t", out));
-                values.put("out", new Color(mixChannel(a.getRed(), b.getRed(), k), mixChannel(a.getGreen(), b.getGreen(), k),
+                values.put(new Color(mixChannel(a.getRed(), b.getRed(), k), mixChannel(a.getGreen(), b.getGreen(), k),
                         mixChannel(a.getBlue(), b.getBlue(), k), mixChannel(a.getAlpha(), b.getAlpha(), k)));
             }
             case "th.alpha" -> {
                 Color c = color(in(plan, nodeInst, "color", out), Color.WHITE);
-                values.put("out", new Color(c.getRed(), c.getGreen(), c.getBlue(), alphaByte(x(plan, nodeInst, "a", out))));
+                values.put(new Color(c.getRed(), c.getGreen(), c.getBlue(), alphaByte(x(plan, nodeInst, "a", out))));
             }
             case "th.bright" -> {
                 Color c = color(in(plan, nodeInst, "color", out), Color.WHITE);
                 double k = Math.max(0, x(plan, nodeInst, "k", out));
-                values.put("out", new Color(channel(c.getRed() * k), channel(c.getGreen() * k), channel(c.getBlue() * k), c.getAlpha()));
+                values.put(new Color(channel(c.getRed() * k), channel(c.getGreen() * k), channel(c.getBlue() * k), c.getAlpha()));
             }
 
             case "th.setPosition" -> {
@@ -369,23 +369,29 @@ public final class ThemeGraph {
                 overrides.put(name, x(plan, nodeInst, name, out));
             return;
         }
-        if (key == null && pureNode(plan, nodeInst, t, out, values)) return;
+        if (key == null && pureNode(plan, nodeInst, out, values)) return;
         if (key == null) {
-            if (nodeInst.kind.equals("th.beat")) values.put("out", t * Math.max(0, num(lit(plan, nodeInst, "bpm"), 120)) / 60.0 % 1.0);
-            else if (nodeInst.kind.equals("th.step")) values.put("out", x(plan, nodeInst, "a", out) >= x(plan, nodeInst, "edge", out) ? 1.0 : 0.0);
-            else if (nodeInst.kind.equals("th.pulse")) {
-                double a = x(plan, nodeInst, "a", out);
-                values.put("out", a - Math.floor(a) < clamp01(x(plan, nodeInst, "duty", out)) ? 1.0 : 0.0);
-            }
-            else if (nodeInst.kind.equals("th.noise")) values.put("out", noise(x(plan, nodeInst, "a", out), (long) num(lit(plan, nodeInst, "seed"), 1)));
-            else if (nodeInst.kind.equals("th.hypot")) values.put("out", Math.hypot(x(plan, nodeInst, "a", out), x(plan, nodeInst, "b", out)));
-            else if (nodeInst.kind.equals("th.xor")) values.put("out", bool(plan, nodeInst, "a", out) ^ bool(plan, nodeInst, "b", out));
-            else if (nodeInst.kind.equals("th.gray")) {
-                Color c = color(in(plan, nodeInst, "color", out), Color.WHITE);
-                values.put("out", (0.2126 * c.getRed() + 0.7152 * c.getGreen() + 0.0722 * c.getBlue()) / 255.0);
-            } else if (nodeInst.kind.equals("th.invert")) {
-                Color c = color(in(plan, nodeInst, "color", out), Color.WHITE);
-                values.put("out", new Color(255 - c.getRed(), 255 - c.getGreen(), 255 - c.getBlue(), c.getAlpha()));
+            switch (nodeInst.kind) {
+                case "th.beat" -> values.put(t * Math.max(0, num(lit(plan, nodeInst, "bpm"), 120)) / 60.0 % 1.0);
+                case "th.step" ->
+                        values.put(x(plan, nodeInst, "a", out) >= x(plan, nodeInst, "edge", out) ? 1.0 : 0.0);
+                case "th.pulse" -> {
+                    double a = x(plan, nodeInst, "a", out);
+                    values.put(a - Math.floor(a) < clamp01(x(plan, nodeInst, "duty", out)) ? 1.0 : 0.0);
+                }
+                case "th.noise" ->
+                        values.put(noise(x(plan, nodeInst, "a", out), (long) num(lit(plan, nodeInst, "seed"), 1)));
+                case "th.hypot" ->
+                        values.put(Math.hypot(x(plan, nodeInst, "a", out), x(plan, nodeInst, "b", out)));
+                case "th.xor" -> values.put(bool(plan, nodeInst, "a", out) ^ bool(plan, nodeInst, "b", out));
+                case "th.gray" -> {
+                    Color c = color(in(plan, nodeInst, "color", out), Color.WHITE);
+                    values.put((0.2126 * c.getRed() + 0.7152 * c.getGreen() + 0.0722 * c.getBlue()) / 255.0);
+                }
+                case "th.invert" -> {
+                    Color c = color(in(plan, nodeInst, "color", out), Color.WHITE);
+                    values.put(new Color(255 - c.getRed(), 255 - c.getGreen(), 255 - c.getBlue(), c.getAlpha()));
+                }
             }
             return;
         }
@@ -394,26 +400,26 @@ public final class ThemeGraph {
         else if (key.equals("layer")) overrides.put(key, ThemeDoc.clampLayer((int) Math.round(x(plan, nodeInst, "v", out))));
         else overrides.put(key, x(plan, nodeInst, "v", out));
     }
-    private static boolean pureNode(Plan plan, NodeInst nodeInst, double t, Object[] out, Slot values) {
+    private static boolean pureNode(Plan plan, NodeInst nodeInst, Object[] out, Slot values) {
         switch (nodeInst.kind) {
-            case "th.mouseSpeed" -> values.put("out", ThemeInput.speed());
-            case "th.neg" -> values.put("out", -x(plan, nodeInst, "a", out));
-            case "th.tan" -> values.put("out", Math.tan(x(plan, nodeInst, "a", out)));
-            case "th.distance" -> values.put("out", Math.hypot(x(plan, nodeInst, "x2", out) - x(plan, nodeInst, "x1", out), x(plan, nodeInst, "y2", out) - x(plan, nodeInst, "y1", out)));
+            case "th.mouseSpeed" -> values.put(ThemeInput.speed());
+            case "th.neg" -> values.put(-x(plan, nodeInst, "a", out));
+            case "th.tan" -> values.put(Math.tan(x(plan, nodeInst, "a", out)));
+            case "th.distance" -> values.put(Math.hypot(x(plan, nodeInst, "x2", out) - x(plan, nodeInst, "x1", out), x(plan, nodeInst, "y2", out) - x(plan, nodeInst, "y1", out)));
             case "th.wave" -> {
                 double v = x(plan, nodeInst, "x", out), f = v - Math.floor(v);
                 String shape = text(plan, nodeInst, "shape", "sine");
-                values.put("out", switch (shape) {
+                values.put(switch (shape) {
                     case "triangle" -> 4 * Math.abs(f - 0.5) - 1;
                     case "saw" -> 2 * f - 1;
                     case "square" -> f < 0.5 ? 1 : -1;
                     default -> Math.sin(2 * Math.PI * v);
                 });
             }
-            case "th.equal" -> values.put("out", Math.abs(x(plan, nodeInst, "a", out) - x(plan, nodeInst, "b", out)) <= Math.max(0, x(plan, nodeInst, "tolerance", out)));
-            case "th.noise2" -> values.put("out", noise2(x(plan, nodeInst, "x", out), x(plan, nodeInst, "y", out), (long) num(lit(plan, nodeInst, "seed"), 1)));
+            case "th.equal" -> values.put(Math.abs(x(plan, nodeInst, "a", out) - x(plan, nodeInst, "b", out)) <= Math.max(0, x(plan, nodeInst, "tolerance", out)));
+            case "th.noise2" -> values.put(noise2(x(plan, nodeInst, "x", out), x(plan, nodeInst, "y", out), (long) num(lit(plan, nodeInst, "seed"), 1)));
             case "th.fbm" -> {
-                int octaves = (int) Math.clamp(Math.round(x(plan, nodeInst, "octaves", out)), 1, 8);
+                int octaves = Math.clamp(Math.round(x(plan, nodeInst, "octaves", out)), 1, 8);
                 double sum = 0, amp = 0.5, fr = 1, norm = 0, px = x(plan, nodeInst, "x", out), py = x(plan, nodeInst, "y", out);
                 for (int k = 0; k < octaves; k++) {
                     sum += amp * noise2(px * fr, py * fr, 1);
@@ -421,109 +427,109 @@ public final class ThemeGraph {
                     amp *= 0.5;
                     fr *= 2;
                 }
-                values.put("out", norm == 0 ? 0 : sum / norm);
+                values.put(norm == 0 ? 0 : sum / norm);
             }
             case "th.checker" -> {
                 long cells = (long) Math.floor(x(plan, nodeInst, "x", out) * x(plan, nodeInst, "scale", out)) + (long) Math.floor(x(plan, nodeInst, "y", out) * x(plan, nodeInst, "scale", out));
-                values.put("out", Math.floorMod(cells, 2L) == 0 ? 0.0 : 1.0);
+                values.put(Math.floorMod(cells, 2L) == 0 ? 0.0 : 1.0);
             }
             case "th.stripes" -> {
                 double period = x(plan, nodeInst, "period", out);
                 double q = period == 0 ? 0 : x(plan, nodeInst, "x", out) / period;
-                values.put("out", q - Math.floor(q));
+                values.put(q - Math.floor(q));
             }
             case "th.grid" -> {
                 double cell = x(plan, nodeInst, "cell", out);
-                if (cell == 0) { values.put("out", 0.0); break; }
+                if (cell == 0) { values.put(0.0); break; }
                 double fx = x(plan, nodeInst, "x", out) / cell, fy = x(plan, nodeInst, "y", out) / cell;
                 double lw = x(plan, nodeInst, "line", out) / cell;
-                values.put("out", fx - Math.floor(fx) < lw || fy - Math.floor(fy) < lw ? 1.0 : 0.0);
+                values.put(fx - Math.floor(fx) < lw || fy - Math.floor(fy) < lw ? 1.0 : 0.0);
             }
-            case "th.sdfCircle" -> values.put("out", Math.hypot(x(plan, nodeInst, "x", out), x(plan, nodeInst, "y", out)) - x(plan, nodeInst, "radius", out));
-            case "th.sdfBox" -> values.put("out", sdfBox(x(plan, nodeInst, "x", out), x(plan, nodeInst, "y", out), x(plan, nodeInst, "halfWidth", out), x(plan, nodeInst, "halfHeight", out)));
+            case "th.sdfCircle" -> values.put(Math.hypot(x(plan, nodeInst, "x", out), x(plan, nodeInst, "y", out)) - x(plan, nodeInst, "radius", out));
+            case "th.sdfBox" -> values.put(sdfBox(x(plan, nodeInst, "x", out), x(plan, nodeInst, "y", out), x(plan, nodeInst, "halfWidth", out), x(plan, nodeInst, "halfHeight", out)));
             case "th.circleMask" -> {
                 double s = Math.max(0, x(plan, nodeInst, "softness", out));
-                values.put("out", 1 - smooth01(-s, s, Math.hypot(x(plan, nodeInst, "x", out), x(plan, nodeInst, "y", out)) - x(plan, nodeInst, "radius", out)));
+                values.put(1 - smooth01(-s, s, Math.hypot(x(plan, nodeInst, "x", out), x(plan, nodeInst, "y", out)) - x(plan, nodeInst, "radius", out)));
             }
             case "th.boxMask" -> {
                 double s = Math.max(0, x(plan, nodeInst, "softness", out));
-                values.put("out", 1 - smooth01(-s, s, sdfBox(x(plan, nodeInst, "x", out), x(plan, nodeInst, "y", out), x(plan, nodeInst, "halfWidth", out), x(plan, nodeInst, "halfHeight", out))));
+                values.put(1 - smooth01(-s, s, sdfBox(x(plan, nodeInst, "x", out), x(plan, nodeInst, "y", out), x(plan, nodeInst, "halfWidth", out), x(plan, nodeInst, "halfHeight", out))));
             }
             case "th.ringMask" -> {
                 double s = Math.max(0, x(plan, nodeInst, "softness", out));
                 double ring = Math.abs(Math.hypot(x(plan, nodeInst, "x", out), x(plan, nodeInst, "y", out)) - x(plan, nodeInst, "radius", out)) - x(plan, nodeInst, "thickness", out) / 2;
-                values.put("out", 1 - smooth01(-s, s, ring));
+                values.put(1 - smooth01(-s, s, ring));
             }
-            case "th.toNumber" -> values.put("out", bool(plan, nodeInst, "a", out) ? 1.0 : 0.0);
-            case "th.toBool" -> values.put("out", x(plan, nodeInst, "a", out) > 0.5);
+            case "th.toNumber" -> values.put(bool(plan, nodeInst, "a", out) ? 1.0 : 0.0);
+            case "th.toBool" -> values.put(x(plan, nodeInst, "a", out) > 0.5);
             case "th.grayColor" -> {
                 int g = channel(clamp01(x(plan, nodeInst, "v", out)) * 255);
-                values.put("out", new Color(g, g, g));
+                values.put(new Color(g, g, g));
             }
             case "th.channel" -> {
                 Color c = color(in(plan, nodeInst, "color", out), Color.WHITE);
-                values.put("out", switch (text(plan, nodeInst, "channel", "r")) {
+                values.put(switch (text(plan, nodeInst, "channel", "r")) {
                     case "g" -> c.getGreen() / 255.0;
                     case "b" -> c.getBlue() / 255.0;
                     case "a" -> c.getAlpha() / 255.0;
                     default -> c.getRed() / 255.0;
                 });
             }
-            case "th.easeIn" -> { double v = clamp01(x(plan, nodeInst, "x", out)); values.put("out", v * v * v); }
-            case "th.easeOut" -> { double v = clamp01(x(plan, nodeInst, "x", out)); values.put("out", 1 - Math.pow(1 - v, 3)); }
+            case "th.easeIn" -> { double v = clamp01(x(plan, nodeInst, "x", out)); values.put(v * v * v); }
+            case "th.easeOut" -> { double v = clamp01(x(plan, nodeInst, "x", out)); values.put(1 - Math.pow(1 - v, 3)); }
             case "th.easeInOut" -> {
                 double v = clamp01(x(plan, nodeInst, "x", out));
-                values.put("out", v < 0.5 ? 4 * v * v * v : 1 - Math.pow(-2 * v + 2, 3) / 2);
+                values.put(v < 0.5 ? 4 * v * v * v : 1 - Math.pow(-2 * v + 2, 3) / 2);
             }
             case "th.pingPong" -> {
                 double h = x(plan, nodeInst, "x", out) / 2;
-                values.put("out", 1 - Math.abs(2 * (h - Math.floor(h)) - 1));
+                values.put(1 - Math.abs(2 * (h - Math.floor(h)) - 1));
             }
             case "th.quantize" -> {
                 double steps = x(plan, nodeInst, "steps", out);
-                values.put("out", steps <= 0 ? 0 : Math.floor(clamp01(x(plan, nodeInst, "x", out)) * steps) / steps);
+                values.put(steps <= 0 ? 0 : Math.floor(clamp01(x(plan, nodeInst, "x", out)) * steps) / steps);
             }
             case "th.keys4" -> {
                 double v = clamp01(x(plan, nodeInst, "x", out)) * 3;
                 int seg = Math.min(2, (int) Math.floor(v));
                 double f = v - seg;
                 double a = x(plan, nodeInst, "v" + seg, out), b = x(plan, nodeInst, "v" + (seg + 1), out);
-                values.put("out", a + (b - a) * f);
+                values.put(a + (b - a) * f);
             }
-            case "th.select4" -> values.put("out", x(plan, nodeInst, "v" + Math.floorMod((int) Math.floor(x(plan, nodeInst, "index", out)), 4), out));
+            case "th.select4" -> values.put(x(plan, nodeInst, "v" + Math.floorMod((int) Math.floor(x(plan, nodeInst, "index", out)), 4), out));
             case "th.loop" -> {
                 double period = x(plan, nodeInst, "period", out);
                 double q = period == 0 ? 0 : x(plan, nodeInst, "time", out) / period;
-                values.put("out", q - Math.floor(q));
+                values.put(q - Math.floor(q));
             }
             case "th.frameIndex" -> {
                 long frames = Math.max(1, Math.round(x(plan, nodeInst, "frames", out)));
-                values.put("out", (double) Math.floorMod((long) Math.floor(x(plan, nodeInst, "time", out) * x(plan, nodeInst, "fps", out)), frames));
+                values.put((double) Math.floorMod((long) Math.floor(x(plan, nodeInst, "time", out) * x(plan, nodeInst, "fps", out)), frames));
             }
             case "th.frameRandom" -> {
                 double fps = x(plan, nodeInst, "fps", out);
-                values.put("out", hash(Math.floor(x(plan, nodeInst, "time", out) * fps) + 0.5, 0));
+                values.put(hash(Math.floor(x(plan, nodeInst, "time", out) * fps) + 0.5, 0));
             }
             case "th.hashStep" -> {
                 double period = x(plan, nodeInst, "period", out);
-                values.put("out", period <= 0 ? 0 : hash(Math.floor(x(plan, nodeInst, "time", out) / period) + 0.5, 0));
+                values.put(period <= 0 ? 0 : hash(Math.floor(x(plan, nodeInst, "time", out) / period) + 0.5, 0));
             }
             case "th.selectColor" -> {
                 boolean on = bool(plan, nodeInst, "cond", out);
-                values.put("out", color(in(plan, nodeInst, on ? "a" : "b", out), Color.WHITE));
+                values.put(color(in(plan, nodeInst, on ? "a" : "b", out), Color.WHITE));
             }
             case "th.scaleColor" -> {
                 Color c = color(in(plan, nodeInst, "color", out), Color.WHITE);
                 double k = Math.max(0, x(plan, nodeInst, "factor", out));
-                values.put("out", new Color(channel(c.getRed() * k), channel(c.getGreen() * k), channel(c.getBlue() * k), c.getAlpha()));
+                values.put(new Color(channel(c.getRed() * k), channel(c.getGreen() * k), channel(c.getBlue() * k), c.getAlpha()));
             }
             case "th.addColor" -> {
                 Color a = color(in(plan, nodeInst, "a", out), Color.BLACK), b = color(in(plan, nodeInst, "b", out), Color.BLACK);
-                values.put("out", new Color(channel(a.getRed() + b.getRed()), channel(a.getGreen() + b.getGreen()), channel(a.getBlue() + b.getBlue()), a.getAlpha()));
+                values.put(new Color(channel(a.getRed() + b.getRed()), channel(a.getGreen() + b.getGreen()), channel(a.getBlue() + b.getBlue()), a.getAlpha()));
             }
             case "th.multiplyColor" -> {
                 Color a = color(in(plan, nodeInst, "a", out), Color.WHITE), b = color(in(plan, nodeInst, "b", out), Color.WHITE);
-                values.put("out", new Color(channel(a.getRed() * b.getRed() / 255.0), channel(a.getGreen() * b.getGreen() / 255.0),
+                values.put(new Color(channel(a.getRed() * b.getRed() / 255.0), channel(a.getGreen() * b.getGreen() / 255.0),
                         channel(a.getBlue() * b.getBlue() / 255.0), a.getAlpha()));
             }
             default -> { return false; }
@@ -533,7 +539,7 @@ public final class ThemeGraph {
     private static final class Slot {
         Object value;
 
-        void put(String port, Object v) { value = v; }
+        void put(Object v) { value = v; }
     }
     //endregion
 
@@ -544,12 +550,8 @@ public final class ThemeGraph {
         if (link != null) return "out".equals(link.fromPort()) && link.from() < out.length ? out[link.from()] : null;
         return lit(plan, nodeInst, port);
     }
-    private static double x(Plan plan, NodeInst nodeInst, String port, Object[] out) {
-        return num(in(plan, nodeInst, port, out), 0);
-    }
-    private static boolean bool(Plan plan, NodeInst nodeInst, String port, Object[] out) {
-        return in(plan, nodeInst, port, out) instanceof Boolean b && b;
-    }
+    private static double x(Plan plan, NodeInst nodeInst, String port, Object[] out) { return num(in(plan, nodeInst, port, out), 0); }
+    private static boolean bool(Plan plan, NodeInst nodeInst, String port, Object[] out) { return in(plan, nodeInst, port, out) instanceof Boolean b && b; }
     public static double num(Object v, double fallback) {
         if (v instanceof Boolean b) return b ? 1 : 0;
         return v instanceof Number n ? n.doubleValue() : fallback;
@@ -570,18 +572,15 @@ public final class ThemeGraph {
         String s = raw.strip();
         if (s.equals("true") || s.equals("false")) return Boolean.parseBoolean(s);
         if (s.startsWith("#") && (Param.normalizeHex(s) != null || s.matches("#[0-9A-Fa-f]{8}"))) return parseColor(s, Color.WHITE);
-        try {
-            return Double.parseDouble(s);
-        } catch (NumberFormatException exception) {
-            return s;
-        }
+        try { return Double.parseDouble(s); }
+        catch (NumberFormatException exception) { return s; }
     }
     private static String text(Plan plan, NodeInst nodeInst, String key, String fallback) {
         Object v = lit(plan, nodeInst, key);
         return v instanceof String s && !s.isEmpty() ? s : fallback;
     }
     private static double[] mem(Plan plan, NodeInst nodeInst, int size) {
-        return plan.memory.computeIfAbsent(nodeInst.id, k -> {
+        return plan.memory.computeIfAbsent(nodeInst.id, _ -> {
             double[] m = new double[size];
             Arrays.fill(m, Double.NaN);
             return m;
@@ -622,7 +621,7 @@ public final class ThemeGraph {
         h ^= h >>> 29;
         return (h >>> 11) * 0x1.0p-53;
     }
-    private static double clamp01(double v) { return Math.max(0, Math.min(1, v)); }
+    private static double clamp01(double v) { return Math.clamp(v, 0, 1); }
     //endregion
 
     //region Tables
@@ -639,7 +638,8 @@ public final class ThemeGraph {
         String[] parts = s.trim().split("[,\\s]+");
         double[] out = new double[parts.length];
         for (int i = 0; i < parts.length; i++) {
-            try { out[i] = Double.parseDouble(parts[i]); } catch (NumberFormatException exception) { out[i] = 0; }
+            try { out[i] = Double.parseDouble(parts[i]); }
+            catch (NumberFormatException exception) { out[i] = 0; }
         }
         return out;
     }
@@ -660,8 +660,8 @@ public final class ThemeGraph {
     private static Color color(Object v, Color fallback) {
         return v instanceof Color color ? color : fallback;
     }
-    private static int channel(double v) { return (int) Math.max(0, Math.min(255, Math.round(v))); }
-    private static int alphaByte(double a) { return (int) Math.max(0, Math.min(255, Math.round(255 * clamp01(a)))); }
+    private static int channel(double v) { return Math.clamp(Math.round(v), 0, 255); }
+    private static int alphaByte(double a) { return Math.clamp(Math.round(255 * clamp01(a)), 0, 255); }
     private static int mixChannel(int a, int b, double k) { return (int) Math.round(a + (b - a) * k); }
     //endregion
 }

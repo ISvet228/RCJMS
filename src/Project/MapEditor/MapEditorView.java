@@ -1,7 +1,6 @@
 package Project.MapEditor;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
+
+import Project.Helpers.FontCache;
 import Project.Game.GameView;
 import Project.MainMenu.MainMenuView;
 import Project.RCJMS;
@@ -67,7 +66,7 @@ public class MapEditorView extends JPanel {
     private final Text hoverText = new Text(null, 12f, true, TEXT, 2);
     private final Text dirtyText = new Text(null, 12f, true, WARN, 0);
     private final Note checkNote = new Note(RIGHT_WIDTH - 32, 12f, MUTED);
-    private final javax.swing.Timer checkTimer = new javax.swing.Timer(250, actionEvent -> runCheck());
+    private final javax.swing.Timer checkTimer = new javax.swing.Timer(250, _ -> runCheck());
     //endregion
     //region Toolbar Controls
     private final ToolButton undoButton = new ToolButton(currentStyle, ToolButton.Layout.ICON, Glyph.UNDO, null).tip("undo", "Ctrl+Z");
@@ -180,7 +179,7 @@ public class MapEditorView extends JPanel {
         tools.put(toolRow, 0);
         sizeSlider.setPreferredSize(new Dimension(100, 22));
         sizeSlider.setOpaque(false);
-        sizeSlider.addChangeListener(changeEvent -> {
+        sizeSlider.addChangeListener(_ -> {
             if (updatingControls) return;
             if (currentTool == Tool.ERASER) eraserSize = sizeSlider.getValue(); else brushSize = sizeSlider.getValue();
             sizeValue.setRaw(String.valueOf(sizeSlider.getValue()));
@@ -197,7 +196,6 @@ public class MapEditorView extends JPanel {
         column.put(tools, 0);
 
         Card blocks = new Card("me.block");
-        Color dark = new Color(20, 20, 26);
         Object[][] defs = {
                 {PATH_COLOR, Glyph.PATH, new Color(150, 150, 160), "me.name_path", "1", "me.tip_path"},
                 {WALL_COLOR, null, null, "me.name_wall", "2", "me.tip_wall"},
@@ -227,8 +225,8 @@ public class MapEditorView extends JPanel {
         column.setBorder(new EmptyBorder(0, 6, 0, 0));
 
         Card size = new Card("me.map_size");
-        size.put(stepperRow("width", widthField, -2), 0);
-        size.put(stepperRow("height", heightField, -2), 3);
+        size.put(stepperRow("width", widthField), 0);
+        size.put(stepperRow("height", heightField), 3);
         JPanel presets = new JPanel(new GridLayout(1, SIZE_PRESETS.length, 3, 0));
         presets.setOpaque(false);
         presets.setPreferredSize(new Dimension(100, 26));
@@ -272,7 +270,7 @@ public class MapEditorView extends JPanel {
         column.put(test, 4);
         return column;
     }
-    private JComponent stepperRow(String labelKey, StyledTextField field, int ignored) {
+    private JComponent stepperRow(String labelKey, StyledTextField field) {
         JPanel row = new JPanel(new BorderLayout(6, 0));
         row.setOpaque(false);
         row.setPreferredSize(new Dimension(100, 24));
@@ -286,7 +284,7 @@ public class MapEditorView extends JPanel {
         plus.onClick(() -> resizeMap(isWidth ? mapWidth + 2 : mapWidth, isWidth ? mapHeight : mapHeight + 2));
         field.setHorizontalAlignment(JTextField.CENTER);
         field.limitInput(3, c -> c >= '0' && c <= '9');
-        field.addActionListener(actionEvent -> applyFields());
+        field.addActionListener(_ -> applyFields());
         field.addFocusListener(new FocusAdapter() { @Override public void focusLost(FocusEvent focusEvent) { applyFields(); } });
         JPanel middle = new JPanel(new BorderLayout(4, 0));
         middle.setOpaque(false);
@@ -594,7 +592,7 @@ public class MapEditorView extends JPanel {
         if (currentFloorIndex == 0 && x == START_X && y == START_Y) return false;
         int old = map[y][x];
         if (old == value) return false;
-        if (old == PORTAL && value != PORTAL) clearPortalAt(currentFloorIndex, x, y);
+        if (old == PORTAL) clearPortalAt(currentFloorIndex, x, y);
         map[y][x] = value;
         return true;
     }
@@ -772,11 +770,11 @@ public class MapEditorView extends JPanel {
     //region Save And Load
     private Style loadTheme() { return SaveData.load().theme; }
     private static boolean hasSavedMap() {
-        try { return !readMap(AppPaths.SAVE_FILE).isEmpty(); }
+        try { return !readMap().isEmpty(); }
         catch (IOException exception) { return false; }
     }
     private void updateLoadButton() { loadButton.setEnabled(hasSavedMap()); }
-    public static java.util.List<int[][]> readMap(Path file) throws IOException {
+    public static java.util.List<int[][]> readMap() throws IOException {
         SaveData.Data data = SaveData.load();
         int[][][] floors = data.mapFloors;
         if (floors == null || floors.length == 0) return new ArrayList<>();
@@ -804,7 +802,7 @@ public class MapEditorView extends JPanel {
         java.util.List<int[][]> floors;
         SaveData.Data data;
         try {
-            floors = readMap(AppPaths.SAVE_FILE);
+            floors = readMap();
             data = SaveData.load();
         } catch (IOException exception) {
             inform(this, currentStyle, "common.load_error", L("me.could_not_load_map") + ":\n" + exception.getMessage());
@@ -841,12 +839,12 @@ public class MapEditorView extends JPanel {
         updateAll();
         hintBar.flash(Tone.OK, L("me.map_loaded"));
     }
-    private void writeMap(Path file, int geometryIndex) throws IOException {
+    private void writeMap(int geometryIndex) throws IOException {
         SaveData.saveMap(floorMaps.toArray(new int[0][][]), portalLinks, geometryIndex, NSLocalizedString.getLanguage(), currentStyle, GameView.getRenderScale());
     }
     private void saveMapOnly() {
         try {
-            writeMap(AppPaths.SAVE_FILE, wrongGeometryToggle.isSelected() ? GEOMETRY_WRONG : GEOMETRY_EUCLIDEAN);
+            writeMap(wrongGeometryToggle.isSelected() ? GEOMETRY_WRONG : GEOMETRY_EUCLIDEAN);
             dirty = false;
             updateDirtyText();
             updateLoadButton();
@@ -888,7 +886,7 @@ public class MapEditorView extends JPanel {
         try {
             int geometryIndex = wrongGeometryToggle.isSelected() ? GEOMETRY_WRONG : GEOMETRY_EUCLIDEAN;
             Files.createDirectories(AppPaths.DATA_DIR);
-            writeMap(AppPaths.SAVE_FILE, geometryIndex);
+            writeMap(geometryIndex);
             dirty = false;
             int[][][] floorsArray = floorMaps.toArray(new int[0][][]);
             PortalData[] portalsPerFloor = buildPortalDataPerFloor();
@@ -1020,7 +1018,6 @@ public class MapEditorView extends JPanel {
             if (mouseEvent.isAltDown() && !right) { pickBlockFromCell(x, y); return; }
             if (!right && (currentTool == Tool.PORTAL || currentTool == Tool.PORTAL_ONE)) { handlePortalClick(x, y, currentTool == Tool.PORTAL_ONE); return; }
             Tool tool = right ? Tool.ERASER : currentTool;
-            if (tool == Tool.PORTAL || tool == Tool.PORTAL_ONE) tool = Tool.ERASER;
             int value = tool == Tool.ERASER ? PATH : selectedBlock;
             switch (tool) {
                 case BRUSH, ERASER -> {
@@ -1029,7 +1026,7 @@ public class MapEditorView extends JPanel {
                     strokeSize = tool == Tool.BRUSH ? brushSize : (right && portalToolActive() ? 1 : eraserSize);
                     if (stamp(x, y, strokeSize, value)) touch();
                 }
-                case BOX -> { boxing = true; boxErase = right; boxX0 = boxX1 = x; boxY0 = boxY1 = y; repaint(); }
+                case BOX -> { boxing = true; boxErase = false; boxX0 = boxX1 = x; boxY0 = boxY1 = y; repaint(); }
                 case FILL -> { beginStroke(); if (floodFill(x, y, value)) touch(); }
                 default -> { }
             }
@@ -1159,7 +1156,7 @@ public class MapEditorView extends JPanel {
         }
         private void drawFloorTag(Graphics2D g2d, int x, int y, int otherFloor) {
             if (cell < 12) return;
-            g2d.setFont(g2d.getFont().deriveFont(Font.BOLD, (float) Math.max(9f, cell * 0.38f)));
+            g2d.setFont(FontCache.get(g2d.getFont().getName(), Font.BOLD, (float) Math.max(9f, cell * 0.38f)));
             String text = String.valueOf(otherFloor + 1);
             g2d.setColor(new Color(15, 15, 18));
             g2d.drawString(text, (float) (originX + x * cell + 3), (float) (originY + y * cell + g2d.getFontMetrics().getAscent() + 1));

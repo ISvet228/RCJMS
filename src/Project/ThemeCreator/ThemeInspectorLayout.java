@@ -39,9 +39,8 @@ public final class ThemeInspectorLayout {
                 done.addAll(group.members());
                 if (group.linearOnly() && !linear) continue;
                 List<Cell> cells = new ArrayList<>();
-                for (int i = 0; i < group.members().size(); i++) {
+                for (int i = 0; i < group.members().size(); i++)
                     cells.add(new Cell(group.members().get(i), group.labels().get(i), Kind.NUMBER, null));
-                }
                 rows.add(new Row(group.titleKey(), cells));
                 continue;
             }

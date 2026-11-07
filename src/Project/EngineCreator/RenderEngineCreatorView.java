@@ -26,7 +26,6 @@ public final class RenderEngineCreatorView extends JPanel {
     private static final int LEFT_W = 278, RIGHT_W = 248, INNER_W = 252;
     private static final int NOTE_W = RIGHT_W - 32;
     private static final int COL_W = RIGHT_W - 32;
-    private static final int CARD_H = 92, CARD_GAP = 6, CARD_W = (INNER_W - CARD_GAP) / 2;
     //endregion
     //region Node Catalog
     private static final String[] CATEGORIES = {"in", "const", "math", "logic", "conv", "color", "map", "tex", "ray", "geo", "fx", "out", CustomNodes.CATEGORY};
@@ -190,7 +189,7 @@ public final class RenderEngineCreatorView extends JPanel {
         engines.body.put(note("ec.ui.enginesHint", MUTED), 0);
         StyledButton refresh = new StyledButton(style, "ec.ui.refresh");
         refresh.setPreferredSize(new Dimension(INNER_W, 30));
-        refresh.addActionListener(actionEvent -> refreshEngines());
+        refresh.addActionListener(_ -> refreshEngines());
         engines.body.put(refresh, 6);
         engines.body.put(enginesList, 6);
         col.put(engines, 12);
@@ -209,17 +208,17 @@ public final class RenderEngineCreatorView extends JPanel {
         JPopupMenu menu = new JPopupMenu();
         menu.setBackground(EditorKit.CARD);
         menu.setBorder(BorderFactory.createLineBorder(EditorKit.CARD_LINE));
-        JMenuItem help = new JMenuItem(L.t("ec.menu.help"));
-        JMenuItem edit = new JMenuItem(L.t("ec.menu.customText"));
-        JMenuItem delete = new JMenuItem(L.t("ec.menu.deleteCustom"));
+        JMenuItem help = new JMenuItem("ec.menu.help");
+        JMenuItem edit = new JMenuItem("ec.menu.customText");
+        JMenuItem delete = new JMenuItem("ec.menu.deleteCustom");
         for (JMenuItem menuItem : List.of(help, edit, delete)) {
             menuItem.setBackground(EditorKit.CARD);
             menuItem.setForeground(EditorKit.TEXT);
             menuItem.setFont(EditorKit.font(12f, false));
         }
-        help.addActionListener(actionEvent -> NodeHelp.show(component, Nodes.find(kind)));
-        edit.addActionListener(actionEvent -> editCustomTexts(kind));
-        delete.addActionListener(actionEvent -> deleteCustomNode(kind));
+        help.addActionListener(_ -> NodeHelp.show(component, style, Nodes.find(kind)));
+        edit.addActionListener(_ -> editCustomTexts(kind));
+        delete.addActionListener(_ -> deleteCustomNode(kind));
         menu.add(edit);
         menu.add(delete);
         menu.show(component, point.x, point.y);
@@ -227,14 +226,12 @@ public final class RenderEngineCreatorView extends JPanel {
     private void editCustomTexts(String kind) {
         CustomNodes.Def def = CustomNodes.def(kind);
         if (def == null) return;
-        String[] t = CkDialogs.customTexts(this, style, L.t("ec.g.editTitle"), def.title(), def.description());
+        String[] t = CkDialogs.customTexts(this, style, "ec.g.editTitle", def.title(), def.description());
         if (t == null) return;
         try {
             CustomNodes.updateTexts(kind, t[0], t[1]);
             hint.flash(Tone.OK, L.f("ec.g.textsSaved", t[0]));
-        } catch (IOException exception) {
-            hint.flash(Tone.BAD, L.f("ec.g.customSaveFailed", exception.getMessage()));
-        }
+        } catch (IOException exception) { hint.flash(Tone.BAD, L.f("ec.g.customSaveFailed", exception.getMessage())); }
         nodePalette.refresh();
         canvas.repaint();
     }
@@ -244,9 +241,7 @@ public final class RenderEngineCreatorView extends JPanel {
         try {
             CustomNodes.delete(kind);
             hint.flash(Tone.INFO, L.f("ec.g.deleted", title));
-        } catch (IOException exception) {
-            hint.flash(Tone.BAD, L.f("ec.g.customSaveFailed", exception.getMessage()));
-        }
+        } catch (IOException exception) { hint.flash(Tone.BAD, L.f("ec.g.customSaveFailed", exception.getMessage())); }
         nodePalette.refresh();
         canvas.repaint();
     }
@@ -332,10 +327,10 @@ public final class RenderEngineCreatorView extends JPanel {
         passGeometry.setPreferredSize(new Dimension(150, 32));
         StyledButton addPass = new StyledButton(style, "ec.ui.addPass");
         addPass.setPreferredSize(new Dimension(92, 32));
-        addPass.addActionListener(actionEvent -> addPass());
+        addPass.addActionListener(_ -> addPass());
         StyledButton removePass = new StyledButton(style, "ec.ui.removePass");
         removePass.setPreferredSize(new Dimension(92, 32));
-        removePass.addActionListener(actionEvent -> removePass());
+        removePass.addActionListener(_ -> removePass());
         bar.add(passBox);
         bar.add(passGeometry);
         bar.add(addPass);
@@ -346,10 +341,10 @@ public final class RenderEngineCreatorView extends JPanel {
         insideLabel.setForeground(EditorKit.TEXT);
         StyledButton saveInside = new StyledButton(style, "ec.g.saveInside");
         saveInside.setPreferredSize(new Dimension(150, 32));
-        saveInside.addActionListener(actionEvent -> saveInside());
+        saveInside.addActionListener(_ -> saveInside());
         StyledButton cancelInside = new StyledButton(style, "ec.g.cancelInside");
         cancelInside.setPreferredSize(new Dimension(150, 32));
-        cancelInside.addActionListener(actionEvent -> cancelInside());
+        cancelInside.addActionListener(_ -> cancelInside());
         insideBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         insideBar.setOpaque(false);
         insideBar.add(insideLabel);
@@ -382,16 +377,16 @@ public final class RenderEngineCreatorView extends JPanel {
             try { project.curvature = Double.parseDouble(v.trim()); }
             catch (NumberFormatException ignored) { project.curvature = Double.NaN; }
         });
-        openClToggle.addActionListener(actionEvent -> { if (!syncing) applyProjectToggles(); });
-        backupToggle.addActionListener(actionEvent -> { if (!syncing) applyBackupToggle(); });
-        passGeometry.addActionListener(actionEvent -> {
+        openClToggle.addActionListener(_ -> { if (!syncing) applyProjectToggles(); });
+        backupToggle.addActionListener(_ -> { if (!syncing) applyBackupToggle(); });
+        passGeometry.addActionListener(_ -> {
             if (syncing) return;
             snapshot();
             project.setGeometry(pass, GEOMETRY_KEYS[passGeometry.getSelectedIndex()]);
             refreshPassBox();
             refreshAll();
         });
-        passBox.addActionListener(actionEvent -> { if (!syncing && passBox.getSelectedIndex() >= 0) selectPass(passBox.getSelectedIndex()); });
+        passBox.addActionListener(_ -> { if (!syncing && passBox.getSelectedIndex() >= 0) selectPass(passBox.getSelectedIndex()); });
     }
     private void bindField(JTextField field, java.util.function.Consumer<String> apply) {
         field.getDocument().addDocumentListener(new DocumentListener() {
@@ -601,9 +596,7 @@ public final class RenderEngineCreatorView extends JPanel {
         switchProject(frame.parent());
         setDirty(frame.dirty());
     }
-    private record Frame(CkProject parent, List<String> history, List<String> redo, boolean dirty, String kind, CustomNodes.Def old) {
-
-    }
+    private record Frame(CkProject parent, List<String> history, List<String> redo, boolean dirty, String kind, CustomNodes.Def old) { }
     //endregion
 
     //region Project Files
@@ -613,7 +606,10 @@ public final class RenderEngineCreatorView extends JPanel {
         canvas.setPass(0);
         syncFieldsFromProject();
         refreshPassBox();
-        if (inside()) insideLabel.setText(L.f("ec.g.insideLabel", insideStack.peek().old().title()));
+        if (inside()) {
+            assert insideStack.peek() != null;
+            insideLabel.setText(L.f("ec.g.insideLabel", insideStack.peek().old().title()));
+        }
         insideBar.setVisible(inside());
         refreshAll();
     }
@@ -627,7 +623,8 @@ public final class RenderEngineCreatorView extends JPanel {
             refreshEngines();
             hint.flash(Tone.OK, L.f("ec.s.saved", result.file().getFileName().toString()));
             inform(this, style, "ec.d.savedTitle", L.f("ec.d.savedText", project.title));
-        } else if (result.hasErrors()) {
+        }
+        else if (result.hasErrors()) {
             Issue first = result.issues().stream().filter(Issue::error).findFirst().orElseThrow();
             hint.flash(Tone.BAD, L.t("ec.s.saveFailed") + " " + first.text());
         } else if (!result.messages().isEmpty()) hint.flash(Tone.WARN, result.messages().getLast());
@@ -685,7 +682,7 @@ public final class RenderEngineCreatorView extends JPanel {
     //region Validation
     private void check() {
         if (inside()) { hint.flash(Tone.WARN, L.t("ec.g.insideBlocked")); return; }
-        EngineBuilder.Result result = EngineBuilder.build(project, false, path -> false);
+        EngineBuilder.Result result = EngineBuilder.build(project, false, _ -> false);
         showIssues(result.issues());
         if (result.hasErrors()) hint.flash(Tone.BAD, L.t("ec.s.checkBad"));
         else hint.flash(Tone.OK, L.t("ec.s.checkOk"));
@@ -749,7 +746,7 @@ public final class RenderEngineCreatorView extends JPanel {
             else {
                 StyledButton apply = new StyledButton(style, "ec.ui.applyProps");
                 int nodeId = id;
-                apply.addActionListener(actionEvent -> applyProperties(nodeId));
+                apply.addActionListener(_ -> applyProperties(nodeId));
                 propsBody.put(apply, 10);
             }
         }
@@ -830,8 +827,8 @@ public final class RenderEngineCreatorView extends JPanel {
         JPopupMenu menu = new JPopupMenu();
         menu.setBackground(CARD);
         menu.setBorder(BorderFactory.createLineBorder(CARD_LINE));
-        menu.add(menuItem(L.t("ec.ui.engMenu.open"), () -> loadProject(file)));
-        menu.add(menuItem(L.t("ec.menu.delete"), () -> deleteEngine(file, ckProject)));
+        menu.add(menuItem("ec.ui.engMenu.open", () -> loadProject(file)));
+        menu.add(menuItem("ec.menu.delete", () -> deleteEngine(file, ckProject)));
         menu.show(component, mouseEvent.getX(), mouseEvent.getY());
     }
     private void deleteEngine(Path file, CkProject ckProject) {

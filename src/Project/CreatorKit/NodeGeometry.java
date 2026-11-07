@@ -1,5 +1,6 @@
 package Project.CreatorKit;
 
+import Project.Helpers.FontCache;
 import Project.EngineCreator.NodeGroup;
 
 import java.awt.*;
@@ -16,12 +17,12 @@ public final class NodeGeometry {
     public static final int COMMENT_MAX = 60;
     public static final int COMMENT_LINES = 3;
     public static final int COMMENT_LINE = 14;
-    private static final Font COMMENT_FONT = new Font(Font.SANS_SERIF, Font.ITALIC, 11);
+    private static final Font COMMENT_FONT = FontCache.get(Font.SANS_SERIF, Font.ITALIC, 11);
     //endregion
     //region Text Measuring
     private static final Graphics2D g2d = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB).createGraphics();
-    private static final Font TITLE_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 12);
-    private static final Font BODY_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 11);
+    private static final Font TITLE_FONT = FontCache.get(Font.SANS_SERIF, Font.BOLD, 12);
+    private static final Font BODY_FONT = FontCache.get(Font.SANS_SERIF, Font.PLAIN, 11);
     //endregion
     //endregion
 
@@ -38,9 +39,7 @@ public final class NodeGeometry {
         g2d.setFont(BODY_FONT);
         return g2d.getFontMetrics().stringWidth(text);
     }
-    public static int rows(NodeKind nodeKind) {
-        return Math.max(1, Math.max(nodeKind.inputs().size(), nodeKind.outputs().size()));
-    }
+    public static int rows(NodeKind nodeKind) { return Math.max(1, Math.max(nodeKind.inputs().size(), nodeKind.outputs().size())); }
     public static String paramText(NodeInst nodeInst, Param prm) {
         String value = nodeInst.params.getOrDefault(prm.key(), "");
         if (prm.kind() == Param.Kind.CHOICE) value = prm.choiceLabel(value);

@@ -27,19 +27,19 @@ public final class Nodes {
     //region Built-in Nodes
     static {
         // ---- inputs ----
-        pure("pixelX", CAT_IN, List.of(), I, emit -> "px");
-        pure("pixelY", CAT_IN, List.of(), I, emit -> "py");
+        pure("pixelX", CAT_IN, List.of(), I, _ -> "px");
+        pure("pixelY", CAT_IN, List.of(), I, _ -> "py");
         pure("screenX", CAT_IN, List.of(), F, emit -> "(2.0f * ((" + emit.ft() + ")px + 0.5f) / (" + emit.ft() + ")pi[0] - 1.0f)");
         pure("screenY", CAT_IN, List.of(), F, emit -> "(1.0f - 2.0f * ((" + emit.ft() + ")py + 0.5f) / (" + emit.ft() + ")pi[1])");
-        pure("width", CAT_IN, List.of(), I, emit -> "pi[0]");
-        pure("height", CAT_IN, List.of(), I, emit -> "pi[1]");
-        pure("quality", CAT_IN, List.of(), I, emit -> "pi[2]");
-        pure("cameraAngle", CAT_IN, List.of(), F, emit -> "pf[0]");
-        pure("cameraHeight", CAT_IN, List.of(), F, emit -> "pf[1]");
-        pure("cameraPitch", CAT_IN, List.of(), F, emit -> "pf[2]");
-        pure("playerX", CAT_IN, List.of(), F, emit -> "pf[3]");
-        pure("playerY", CAT_IN, List.of(), F, emit -> "pf[4]");
-        pure("time", CAT_IN, List.of(), F, emit -> "pf[6]");
+        pure("width", CAT_IN, List.of(), I, _ -> "pi[0]");
+        pure("height", CAT_IN, List.of(), I, _ -> "pi[1]");
+        pure("quality", CAT_IN, List.of(), I, _ -> "pi[2]");
+        pure("cameraAngle", CAT_IN, List.of(), F, _ -> "pf[0]");
+        pure("cameraHeight", CAT_IN, List.of(), F, _ -> "pf[1]");
+        pure("cameraPitch", CAT_IN, List.of(), F, _ -> "pf[2]");
+        pure("playerX", CAT_IN, List.of(), F, _ -> "pf[3]");
+        pure("playerY", CAT_IN, List.of(), F, _ -> "pf[4]");
+        pure("time", CAT_IN, List.of(), F, _ -> "pf[6]");
         custom("cameraPose", CAT_IN, List.of(), List.of(p("angle", F), p("height", F), p("pitch", F)), emit -> {
             emit.decl(0, "pf[0]");
             emit.decl(1, "pf[1]");
@@ -63,16 +63,16 @@ public final class Nodes {
         op2("mul", CAT_MATH, F, F, "*");
         pure("div", CAT_MATH, List.of(p("a", F), p("b", F)), F, emit -> "rf_div(" + emit.in(0) + ", " + emit.in(1) + ")");
         pure("neg", CAT_MATH, List.of(p("a", F)), F, emit -> "(-" + emit.in(0) + ")");
-        fn1("sin", CAT_MATH, "rf_sin");
-        fn1("cos", CAT_MATH, "rf_cos");
-        fn1("tan", CAT_MATH, "rf_tan");
-        fn1("atan", CAT_MATH, "rf_atan");
-        fn1("sqrt", CAT_MATH, "rf_sqrt");
-        fn1("abs", CAT_MATH, "rf_abs");
-        fn1("floor", CAT_MATH, "rf_floor");
-        fn1("fract", CAT_MATH, "rf_fract");
-        fn1("exp", CAT_MATH, "rf_exp");
-        fn1("asinh", CAT_MATH, "rf_asinh");
+        fn1("sin", "rf_sin");
+        fn1("cos", "rf_cos");
+        fn1("tan", "rf_tan");
+        fn1("atan", "rf_atan");
+        fn1("sqrt", "rf_sqrt");
+        fn1("abs", "rf_abs");
+        fn1("floor", "rf_floor");
+        fn1("fract", "rf_fract");
+        fn1("exp", "rf_exp");
+        fn1("asinh", "rf_asinh");
         pure("pow", CAT_MATH, List.of(p("a", F), p("b", F)), F, emit -> "rf_pow(" + emit.in(0) + ", " + emit.in(1) + ")");
         pure("min", CAT_MATH, List.of(p("a", F), p("b", F)), F, emit -> "rf_min(" + emit.in(0) + ", " + emit.in(1) + ")");
         pure("max", CAT_MATH, List.of(p("a", F), p("b", F)), F, emit -> "rf_max(" + emit.in(0) + ", " + emit.in(1) + ")");
@@ -120,8 +120,8 @@ public final class Nodes {
                 Nodes::emitRayGridPortal, Param.whole("maxSteps", 128, 1, 2000));
 
         // ---- geometry ----
-        pure("curvature", CAT_GEO, List.of(), F, emit -> "pf[5]");
-        pure("hyperbolic", CAT_GEO, List.of(), B, emit -> "(pi[13] != 0)");
+        pure("curvature", CAT_GEO, List.of(), F, _ -> "pf[5]");
+        pure("hyperbolic", CAT_GEO, List.of(), B, _ -> "(pi[13] != 0)");
         pure("hypDistance", CAT_GEO, List.of(p("t", F), p("k", F)), F,
                 emit -> "rf_hypd(" + emit.in(0) + ", " + emit.in(1) + ")");
 
@@ -267,7 +267,7 @@ String of(Emit emit);
     private static void op2(String id, String cat, DataType inT, DataType outT, String op) {
         pure(id, cat, List.of(p("a", inT), p("b", inT)), outT, emit -> "(" + emit.in(0) + " " + op + " " + emit.in(1) + ")");
     }
-    private static void fn1(String id, String cat, String fn) { pure(id, cat, List.of(p("a", F)), F, emit -> fn + "(" + emit.in(0) + ")"); }
+    private static void fn1(String id, String fn) { pure(id, Nodes.CAT_MATH, List.of(p("a", F)), F, emit -> fn + "(" + emit.in(0) + ")"); }
     //endregion
     //region Lookup
     public static NodeKind find(String id) { return BY_ID.get(id); }
@@ -280,11 +280,6 @@ String of(Emit emit);
     public static List<NodeKind> engineKinds() {
         List<NodeKind> out = new ArrayList<>();
         for (NodeKind nodeKind : ALL) if (!isTheme(nodeKind.id())) out.add(nodeKind);
-        return out;
-    }
-    public static List<NodeKind> themeKinds() {
-        List<NodeKind> out = new ArrayList<>();
-        for (NodeKind nodeKind : ALL) if (isTheme(nodeKind.id())) out.add(nodeKind);
         return out;
     }
     //endregion

@@ -1,8 +1,5 @@
 package Project.EngineCreator;
-import Project.CreatorKit.CkProject;
-import Project.CreatorKit.Link;
-import Project.CreatorKit.NodeGeometry;
-import Project.CreatorKit.NodeInst;
+import Project.CreatorKit.*;
 
 import java.util.*;
 

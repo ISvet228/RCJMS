@@ -1,7 +1,4 @@
 package Project.Helpers;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import javax.swing.*;
 import javax.swing.text.JTextComponent;
@@ -29,7 +26,7 @@ public final class NSLocalizedString {
     private static final Pattern LINE_PATTERN = Pattern.compile("^\\s*\"((?:\\\\.|[^\"])*)\"\\s*=\\s*\"((?:\\\\.|[^\"])*)\"\\s*;?\\s*(?://.*)?$");
     private static final Map<String, String> strings = new LinkedHashMap<>();
     private static String language = Locale.getDefault().getLanguage();
-    private static Path baseDirectory = Paths.get(".");
+    private static final Path baseDirectory = Paths.get(".");
     //endregion
     //region Binding State
     private static final Map<Object, Binding> bindings = Collections.synchronizedMap(new WeakHashMap<>());
@@ -83,11 +80,6 @@ public final class NSLocalizedString {
     public static void setLanguage(String newLanguage) {
         if (newLanguage == null || newLanguage.isBlank()) return;
         language = newLanguage.trim();
-        reload();
-        refreshAll();
-    }
-    public static void setBaseDirectory(Path directory) {
-        baseDirectory = directory == null ? Paths.get(".") : directory;
         reload();
         refreshAll();
     }
@@ -212,11 +204,11 @@ public final class NSLocalizedString {
     public static boolean bind(Component component, String key) {
         if (component == null || key == null || hasKey(key)) return false;
         switch (component) {
-            case JLabel label -> { bind((JLabel) label, key); return true; }
-            case AbstractButton button -> { bind((AbstractButton) button, key); return true; }
-            case JTextComponent textComponent -> { bind((JTextComponent) textComponent, key); return true; }
-            case JFrame frame -> { bind((JFrame) frame, key); return true; }
-            case JDialog dialog -> { bind((JDialog) dialog, key); return true; }
+            case JLabel label -> { bind(label, key); return true; }
+            case AbstractButton button -> { bind(button, key); return true; }
+            case JTextComponent textComponent -> { bind(textComponent, key); return true; }
+            case JFrame frame -> { bind(frame, key); return true; }
+            case JDialog dialog -> { bind(dialog, key); return true; }
             default -> {}
         }
         try {
@@ -388,8 +380,6 @@ public final class NSLocalizedString {
 
         @Override public String toString() { return get(); }
     }
-    private record Binding(Runnable refresh) {
-
-    }
+    private record Binding(Runnable refresh) { }
     //endregion
 }

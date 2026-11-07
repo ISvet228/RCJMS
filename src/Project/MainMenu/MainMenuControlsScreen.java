@@ -1,7 +1,4 @@
 package Project.MainMenu;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import Project.StyleUI.*;
 
@@ -21,12 +18,12 @@ public final class MainMenuControlsScreen extends MainMenuPanel {
     //endregion
 
     //region Constructors
-    public MainMenuControlsScreen(MainMenuHost menu) {
+    public MainMenuControlsScreen(MainMenuView menu) {
         super(menu);
         heading = label("controls", MainMenuCanvas.ACCENT);
         for (int i = 0; i < LINE_KEYS.length; i++) lines[i] = label(LINE_KEYS[i], MainMenuCanvas.TEXT);
         backButton = button("mm.back");
-        backButton.addActionListener(actionEvent -> menu.showMain());
+        backButton.addActionListener(_ -> menu.showMain());
 
         add(heading);
         for (StyledLabel line : lines) add(line);

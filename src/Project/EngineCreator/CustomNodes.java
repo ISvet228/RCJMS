@@ -462,23 +462,11 @@ public final class CustomNodes {
     //endregion
 
     //region Node Types
-    public record Inner(String kind, int x, int y, Map<String, String> params, String comment) {
-
-    }
-    public record InnerLink(int from, String fromPort, int to, String toPort) {
-
-    }
-    public record Exposed(String name, DataType type, int node, String port) {
-
-    }
-    public record Def(String kind, String title, String description, List<Inner> inner, List<InnerLink> links, List<Exposed> inputs, List<Exposed> outputs) {
-
-    }
-    public record Rebuilt(Def def, Map<Integer, Integer> oldToNew) {
-
-    }
-    private record Feed(Link link, String name) {
-
-    }
+    public record Inner(String kind, int x, int y, Map<String, String> params, String comment) { }
+    public record InnerLink(int from, String fromPort, int to, String toPort) { }
+    public record Exposed(String name, DataType type, int node, String port) { }
+    public record Def(String kind, String title, String description, List<Inner> inner, List<InnerLink> links, List<Exposed> inputs, List<Exposed> outputs) { }
+    public record Rebuilt(Def def, Map<Integer, Integer> oldToNew) { }
+    private record Feed(Link link, String name) { }
     //endregion
 }

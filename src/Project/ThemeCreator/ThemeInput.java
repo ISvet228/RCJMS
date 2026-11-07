@@ -22,9 +22,7 @@ public final class ThemeInput {
     //endregion
 
     //region Keyboard
-    public static synchronized void keyDown(String key) {
-        if (KEYS.add(name(key))) PRESSES.merge(name(key), 1, Integer::sum);
-    }
+    public static synchronized void keyDown(String key) { if (KEYS.add(name(key))) PRESSES.merge(name(key), 1, Integer::sum); }
     public static synchronized void keyUp(String key) { KEYS.remove(name(key)); }
     public static synchronized boolean down(String key) { return KEYS.contains(name(key)); }
     public static synchronized boolean held(String key) { return down(key); }
@@ -33,9 +31,7 @@ public final class ThemeInput {
     //endregion
 
     //region Mouse
-    public static synchronized void button(int which, boolean down) {
-        if (which >= 1 && which <= 3) BUTTONS[which] = down;
-    }
+    public static synchronized void button(int which, boolean down) { if (which >= 1 && which <= 3) BUTTONS[which] = down; }
     public static synchronized boolean buttonDown(String name) {
         return switch (name == null ? "" : name.toLowerCase(Locale.ROOT)) {
             case "middle" -> BUTTONS[2];

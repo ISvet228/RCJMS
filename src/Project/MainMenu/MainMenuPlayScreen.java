@@ -1,13 +1,9 @@
 package Project.MainMenu;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 import Project.Helpers.*;
 import Project.StyleUI.*;
 
 import javax.swing.*;
 import javax.swing.event.*;
-import java.awt.*;
 import java.awt.event.*;
 import java.io.IOException;
 
@@ -45,7 +41,7 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
     //endregion
 
     //region Constructors
-    public MainMenuPlayScreen(MainMenuHost menu) {
+    public MainMenuPlayScreen(MainMenuView menu) {
         super(menu);
         Style style = menu.style();
 
@@ -186,7 +182,7 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
 
     //region Maze Settings
     public void saveMazeSettings() {
-        clampFields(true);
+        clampFields();
         SaveData.Data saved = SaveData.load();
         try {
             SaveData.saveMazeSettings(parseOr(xField.getText(), saved.mazeWidth), parseOr(yField.getText(), saved.mazeHeight),
@@ -271,20 +267,20 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
     private void attachListeners() {
         for (int i = 0; i < presetButtons.length; i++) {
             int index = i;
-            presetButtons[i].addActionListener(actionEvent -> choosePreset(index));
+            presetButtons[i].addActionListener(_ -> choosePreset(index));
         }
-        advancedToggle.addActionListener(actionEvent -> setAdvancedOpen(advancedToggle.isSelected()));
-        mode3DToggle.addActionListener(actionEvent -> {
+        advancedToggle.addActionListener(_ -> setAdvancedOpen(advancedToggle.isSelected()));
+        mode3DToggle.addActionListener(_ -> {
             applyAdvancedVisibility();
             saveMazeSettings();
             updateSummary();
         });
-        fogToggle.addActionListener(actionEvent -> saveMazeSettings());
-        finishBox.addActionListener(actionEvent -> saveMazeSettings());
-        geometryBox.addActionListener(actionEvent -> saveMazeSettings());
-        seedField.addActionListener(actionEvent -> menu.startGame());
-        backButton.addActionListener(actionEvent -> menu.showMain());
-        startButton.addActionListener(actionEvent -> menu.startGame());
+        fogToggle.addActionListener(_ -> saveMazeSettings());
+        finishBox.addActionListener(_ -> saveMazeSettings());
+        geometryBox.addActionListener(_ -> saveMazeSettings());
+        seedField.addActionListener(_ -> menu.startGame());
+        backButton.addActionListener(_ -> menu.showMain());
+        startButton.addActionListener(_ -> menu.startGame());
         FocusAdapter saveOnLeave = new FocusAdapter() {
             @Override public void focusLost(FocusEvent focusEvent) {
                 saveMazeSettings();
@@ -303,7 +299,7 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
             @Override public void insertUpdate(DocumentEvent documentEvent) { changed(); }
             @Override public void removeUpdate(DocumentEvent documentEvent) { changed(); }
             @Override public void changedUpdate(DocumentEvent documentEvent) { changed(); }
-            private void changed() { SwingUtilities.invokeLater(() -> { clampField(floorsField, MIN_FLOORS, MAX_FLOORS, false); updateSummary(); }); }
+            private void changed() { SwingUtilities.invokeLater(() -> { clampField(floorsField, false); updateSummary(); }); }
         };
         floorsField.getDocument().addDocumentListener(listener);
     }
@@ -312,9 +308,7 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
             @Override public void mousePressed(MouseEvent mouseEvent) { if (SwingUtilities.isMiddleMouseButton(mouseEvent)) wheelHeld = true; }
             @Override public void mouseReleased(MouseEvent mouseEvent) { if (SwingUtilities.isMiddleMouseButton(mouseEvent)) wheelHeld = false; }
         });
-        field.addFocusListener(new FocusAdapter() {
-            @Override public void focusLost(FocusEvent focusEvent) { wheelHeld = false; }
-        });
+        field.addFocusListener(new FocusAdapter() { @Override public void focusLost(FocusEvent focusEvent) { wheelHeld = false; } });
         field.getDocument().addDocumentListener(new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent documentEvent) { changed(); }
             @Override public void removeUpdate(DocumentEvent documentEvent) { changed(); }
@@ -328,10 +322,10 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
             }
         });
     }
-    private void clampFields(boolean commit) {
-        clampSizeField(xField, commit);
-        clampSizeField(yField, commit);
-        clampField(floorsField, MIN_FLOORS, MAX_FLOORS, commit);
+    private void clampFields() {
+        clampSizeField(xField, true);
+        clampSizeField(yField, true);
+        clampField(floorsField, true);
     }
     private void clampSizeField(StyledTextField field, boolean commit) {
         Integer value = parseInteger(field.getText());
@@ -345,10 +339,10 @@ public final class MainMenuPlayScreen extends MainMenuPanel {
         try { field.setText(String.valueOf(value)); }
         finally { loadingValues = false; }
     }
-    private static void clampField(StyledTextField field, int min, int max, boolean commit) {
+    private static void clampField(StyledTextField field, boolean commit) {
         Integer value = parseInteger(field.getText());
         if (value == null) return;
-        int clamped = value > max ? max : commit && value < min ? min : value;
+        int clamped = value > MainMenuPlayScreen.MAX_FLOORS ? MainMenuPlayScreen.MAX_FLOORS : commit && value < MainMenuPlayScreen.MIN_FLOORS ? MainMenuPlayScreen.MIN_FLOORS : value;
         if (clamped != value) field.setText(String.valueOf(clamped));
     }
     private static Integer parseInteger(String text) {

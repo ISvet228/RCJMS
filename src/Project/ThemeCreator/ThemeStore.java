@@ -1,6 +1,4 @@
 package Project.ThemeCreator;
-import Project.EngineCreator.*;
-import Project.CreatorKit.*;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -31,15 +29,11 @@ public final class ThemeStore {
                 String name = path.getFileName().toString();
                 out.add(name.substring(0, name.length() - EXT.length()));
             }
-        } catch (IOException exception) {
-            return out;
-        }
+        } catch (IOException exception) { return out; }
         Collections.sort(out);
         return out;
     }
-    public static ThemeDoc load(String id) throws IOException {
-        return ThemeIO.fromJson(Files.readString(file(id), StandardCharsets.UTF_8));
-    }
+    public static ThemeDoc load(String id) throws IOException { return ThemeIO.fromJson(Files.readString(file(id), StandardCharsets.UTF_8)); }
     public static void save(ThemeDoc doc) throws IOException {
         Files.createDirectories(folder());
         Path target = file(doc.id);
@@ -51,8 +45,6 @@ public final class ThemeStore {
         String s = name == null ? "" : name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-+|-+$", "");
         return s.isEmpty() ? "theme" : s;
     }
-    public static void delete(String id) throws IOException {
-        Files.deleteIfExists(file(id));
-    }
+    public static void delete(String id) throws IOException { Files.deleteIfExists(file(id)); }
     //endregion
 }

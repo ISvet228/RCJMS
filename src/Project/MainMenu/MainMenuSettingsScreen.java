@@ -1,7 +1,4 @@
 package Project.MainMenu;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 import Project.Game.*;
 import Project.Helpers.*;
 import Project.StyleUI.*;
@@ -67,15 +64,15 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     //endregion
     //region Status And Timers
     private final StatusDot openClDot = new StatusDot();
-    private final javax.swing.Timer probeWatcher = new javax.swing.Timer(400, actionEvent -> updateOpenClState());
-    private final javax.swing.Timer previewAnimator = new javax.swing.Timer(40, actionEvent -> repaintBackgroundPreviews());
+    private final javax.swing.Timer probeWatcher = new javax.swing.Timer(400, _ -> updateOpenClState());
+    private final javax.swing.Timer previewAnimator = new javax.swing.Timer(40, _ -> repaintBackgroundPreviews());
     private boolean syncing;
     private final StyledButton backButton;
     //endregion
     //endregion
 
     //region Constructors
-    public MainMenuSettingsScreen(MainMenuHost menu) {
+    public MainMenuSettingsScreen(MainMenuView menu) {
         super(menu);
         Style style = menu.style();
 
@@ -247,7 +244,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         canvas.place(backButton, 690, 448, 120, 38);
     }
     @Override protected void paintDecorations(Graphics graphics) {
-        canvas.paintDivider(graphics, menu.style(), 480, 134, 428);
+        canvas.paintDivider(graphics, menu.style());
         StyledToggleButton active = page == Page.INTERFACE ? interfaceTab : page == Page.GAMEPLAY ? gameplayTab : displayTab;
         graphics.setColor(MainMenuCanvas.ACCENT);
         graphics.fillRect(active.getX(), active.getY() + active.getHeight() + 3, active.getWidth(), Math.max(2, Math.round(3 * (float) canvas.scale())));
@@ -291,45 +288,45 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         super.removeNotify();
     }
     private void attachListeners() {
-        interfaceTab.addActionListener(actionEvent -> showPage(Page.INTERFACE));
-        displayTab.addActionListener(actionEvent -> showPage(Page.DISPLAY));
-        gameplayTab.addActionListener(actionEvent -> showPage(Page.GAMEPLAY));
-        doomMovementToggle.addActionListener(actionEvent -> saveGameplay(() -> GameView.setDoomMovement(doomMovementToggle.isSelected())));
-        noCeilingToggle.addActionListener(actionEvent -> saveGameplay(() -> GameView.setNoCeiling(noCeilingToggle.isSelected())));
-        textModeToggle.addActionListener(actionEvent -> saveGameplay(() -> GameView.setTextMode(textModeToggle.isSelected())));
-        languageBox.addActionListener(actionEvent -> {
+        interfaceTab.addActionListener(_ -> showPage(Page.INTERFACE));
+        displayTab.addActionListener(_ -> showPage(Page.DISPLAY));
+        gameplayTab.addActionListener(_ -> showPage(Page.GAMEPLAY));
+        doomMovementToggle.addActionListener(_ -> saveGameplay(() -> GameView.setDoomMovement(doomMovementToggle.isSelected())));
+        noCeilingToggle.addActionListener(_ -> saveGameplay(() -> GameView.setNoCeiling(noCeilingToggle.isSelected())));
+        textModeToggle.addActionListener(_ -> saveGameplay(() -> GameView.setTextMode(textModeToggle.isSelected())));
+        languageBox.addActionListener(_ -> {
             int index = languageBox.getSelectedIndex();
             if (!syncing && index >= 0 && index < LANGUAGE_CODES.length) menu.changeLanguage(LANGUAGE_CODES[index]);
         });
         for (int i = 0; i < THEMES.length; i++) {
             int index = i;
-            themeButtons[i].addActionListener(actionEvent -> menu.changeStyle(THEMES[index]));
+            themeButtons[i].addActionListener(_ -> menu.changeStyle(THEMES[index]));
         }
-        fullscreenToggle.addActionListener(actionEvent -> {
+        fullscreenToggle.addActionListener(_ -> {
             menu.applyFullscreen(fullscreenToggle.isSelected());
             menu.saveSettings();
         });
-        vsyncToggle.addActionListener(actionEvent -> {
+        vsyncToggle.addActionListener(_ -> {
             menu.setVSyncEnabled(vsyncToggle.isSelected());
             menu.saveSettings();
         });
-        openClToggle.addActionListener(actionEvent -> {
+        openClToggle.addActionListener(_ -> {
             menu.setOpenClAcceleration(openClToggle.isSelected());
             menu.saveSettings();
             updateOpenClState();
         });
-        resolutionBox.addActionListener(actionEvent -> {
+        resolutionBox.addActionListener(_ -> {
             int index = resolutionBox.getSelectedIndex();
             if (!syncing && index >= 0 && index < resolutions.length) menu.setWindowSize(resolutions[index][0], resolutions[index][1]);
         });
-        renderScaleBox.addActionListener(actionEvent -> {
+        renderScaleBox.addActionListener(_ -> {
             int index = renderScaleBox.getSelectedIndex();
             if (!syncing && index >= 0 && index < RENDER_SCALES.length) {
                 menu.setRenderScale(RENDER_SCALES[index]);
                 menu.saveSettings();
             }
         });
-        engineBox.addActionListener(actionEvent -> {
+        engineBox.addActionListener(_ -> {
             int index = engineBox.getSelectedIndex();
             if (!syncing && index >= 0 && index < engineNames.length && !RenderEngines.all().isEmpty()) {
                 menu.setRenderEngine(index);
@@ -338,7 +335,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
                 menu.saveSettings();
             }
         });
-        qualityBox.addActionListener(actionEvent -> {
+        qualityBox.addActionListener(_ -> {
             int index = qualityBox.getSelectedIndex();
             if (!syncing && index >= 0 && index < QUALITY_KEYS.length) {
                 menu.setRenderEngineQuality(index);
@@ -346,7 +343,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
                 menu.saveSettings();
             }
         });
-        backButton.addActionListener(actionEvent -> menu.showMain());
+        backButton.addActionListener(_ -> menu.showMain());
     }
     //endregion
 
@@ -387,17 +384,13 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             syncBackgroundSelection();
         } finally { syncing = false; }
     }
-    public void syncFullscreen(boolean value) {
-        fullscreenToggle.setSelected(value);
-    }
+    public void syncFullscreen(boolean value) { fullscreenToggle.setSelected(value); }
     private void saveGameplay(Runnable apply) {
         if (syncing) return;
         apply.run();
         try {
             SaveData.saveGameplay(GameView.isDoomMovement(), GameView.isNoCeiling(), GameView.isTextMode());
-        } catch (java.io.IOException exception) {
-            System.err.println("[Settings] gameplay not saved: " + exception.getMessage());
-        }
+        } catch (java.io.IOException exception) { System.err.println("[Settings] gameplay not saved: " + exception.getMessage()); }
     }
     private void updateEngineHints(int engine) {
         if (engine >= 0 && engine < engineHintKeys.length && engineHintKeys[engine] != null) {

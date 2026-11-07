@@ -7,6 +7,7 @@ import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -36,8 +37,6 @@ final class ThemeGpu {
     //endregion
 
     //region Lifecycle
-    static void setEnabled(boolean on) { enabled = on; }
-    static boolean isEnabled() { return enabled && !failed; }
     static void warmUp() {
         if (!enabled) return;
         Thread t = new Thread(Vk::gpu, "vulkan-init");
@@ -66,18 +65,16 @@ final class ThemeGpu {
         }
         return out;
     }
-    static List<double[]> circle(double cx, double cy, double r, int n) {
-        return ellipse(cx, cy, r, r, 0, 360, n);
-    }
+    static List<double[]> circle(double cx, double cy, double r) { return ellipse(cx, cy, r, r, 0, 360, ThemeGpu.SEGMENTS); }
     static List<double[]> convex(double[][] corners) {
         List<double[]> pts = new ArrayList<>();
-        for (double[] c : corners) pts.add(c);
+        Collections.addAll(pts, corners);
         return convex(pts);
     }
     static List<double[]> convex(List<double[]> pts) {
         List<double[]> tri = new ArrayList<>();
         for (int i = 1; i + 1 < pts.size(); i++) {
-            tri.add(pts.get(0));
+            tri.add(pts.getFirst());
             tri.add(pts.get(i));
             tri.add(pts.get(i + 1));
         }
@@ -162,12 +159,10 @@ final class ThemeGpu {
         }
         return out;
     }
-    private static double orient(double[] a, double[] b, double[] c) {
-        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-    }
-    private static double[] tf(AffineTransform affineTransform, double x, double y) {
+    private static double orient(double[] a, double[] b, double[] c) { return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]); }
+    private static double[] tf(AffineTransform affineTransform) {
         double[] out = new double[2];
-        affineTransform.transform(new double[]{x, y}, 0, out, 0, 1);
+        affineTransform.transform(new double[]{(double) 0, (double) 0}, 0, out, 0, 1);
         return out;
     }
     static final class Triangles {
@@ -195,7 +190,7 @@ final class ThemeGpu {
     //endregion
 
     //region Object Drawing
-    private static boolean paintOnGpu(Graphics2D g2d, ThemeRenderer.Frame frame, int w, int h) throws Throwable {
+    private static boolean paintOnGpu(Graphics2D g2d, ThemeRenderer.Frame frame, int w, int h) {
         AffineTransform base = g2d.getTransform();
         if (base.getShearX() != 0 || base.getShearY() != 0 || base.getScaleX() <= 0 || base.getScaleY() <= 0) return false;
         int ox = (int) Math.floor(base.getTranslateX()), oy = (int) Math.floor(base.getTranslateY());
@@ -303,13 +298,13 @@ final class ThemeGpu {
         double radius = ThemeRenderer.d(p, "radius", 100);
         Color color = ThemeRenderer.c(p, "color", Color.WHITE);
         int a = alphaByte(ThemeRenderer.d(p, "alpha", 1));
-        double[] centre = tf(affineTransform, 0, 0);
+        double[] centre = tf(affineTransform);
         double r = Math.max(0.01, radius * Math.sqrt(Math.abs(affineTransform.getDeterminant())));
         Color inner = new Color(color.getRed(), color.getGreen(), color.getBlue(), a);
         Color mid = new Color(color.getRed(), color.getGreen(), color.getBlue(), a * 3 / 4);
         Color clear = new Color(color.getRed(), color.getGreen(), color.getBlue(), 0);
-        List<double[]> r1 = circle(centre[0], centre[1], r / 2, SEGMENTS);
-        List<double[]> r2 = circle(centre[0], centre[1], r, SEGMENTS);
+        List<double[]> r1 = circle(centre[0], centre[1], r / 2);
+        List<double[]> r2 = circle(centre[0], centre[1], r);
         for (int i = 0; i < SEGMENTS; i++) {
             int j = (i + 1) % SEGMENTS;
             triangles.addDevice(centre, premult(inner));
@@ -348,46 +343,38 @@ final class ThemeGpu {
         for (int p : px) if (p != first) return false;
         return true;
     }
-    private static int alphaByte(double a) { return (int) Math.round(255 * Math.max(0, Math.min(1, a))); }
-    private static final class Gradient {
-        final double y0, y1, at;
-        final Color first, second, third;
+    private static int alphaByte(double a) { return (int) Math.round(255 * Math.clamp(a, 0, 1)); }
 
-        private Gradient(double y0, double y1, double at, Color first, Color second, Color third) {
-            this.y0 = y0;
-            this.y1 = y1;
-            this.at = at;
-            this.first = first;
-            this.second = second;
-            this.third = third;
-        }
-
+    private record Gradient(double y0, double y1, double at, Color first, Color second, Color third) {
         static Gradient of(Map<String, Object> p) {
-            if (!"linear".equals(ThemeRenderer.s(p, "fill", "solid"))) return null;
-            Color second = ThemeRenderer.c(p, "color2", null);
-            if (second == null) return null;
-            double a1 = ThemeRenderer.d(p, "alpha", 1);
-            Color first = ThemeRenderer.withAlpha(ThemeRenderer.c(p, "color", Color.WHITE), a1);
-            double y0 = ThemeRenderer.d(p, "gradY0", 0), y1 = ThemeRenderer.d(p, "gradY1", ThemeRenderer.d(p, "h", 100));
-            if (y1 == y0) y1 = y0 + 1;
-            Color color = ThemeRenderer.withAlpha(second, ThemeRenderer.d(p, "alpha2", a1));
-            Color third = ThemeRenderer.c(p, "color3", null);
-            if (third == null) return new Gradient(y0, y1, 1, first, color, null);
-            double at = Math.max(0.001, Math.min(0.999, ThemeRenderer.d(p, "midAt", 0.5)));
-            Color k3 = ThemeRenderer.withAlpha(third, ThemeRenderer.d(p, "alpha3", a1));
-            return new Gradient(y0, y1, at, first, color, k3);
+                if (!"linear".equals(ThemeRenderer.s(p, "fill", "solid"))) return null;
+                Color second = ThemeRenderer.c(p, "color2", null);
+                if (second == null) return null;
+                double a1 = ThemeRenderer.d(p, "alpha", 1);
+                Color first = ThemeRenderer.withAlpha(ThemeRenderer.c(p, "color", Color.WHITE), a1);
+                double y0 = ThemeRenderer.d(p, "gradY0", 0), y1 = ThemeRenderer.d(p, "gradY1", ThemeRenderer.d(p, "h", 100));
+                if (y1 == y0) y1 = y0 + 1;
+                Color color = ThemeRenderer.withAlpha(second, ThemeRenderer.d(p, "alpha2", a1));
+                Color third = ThemeRenderer.c(p, "color3", null);
+                if (third == null) return new Gradient(y0, y1, 1, first, color, null);
+                double at = Math.clamp(ThemeRenderer.d(p, "midAt", 0.5), 0.001, 0.999);
+                Color k3 = ThemeRenderer.withAlpha(third, ThemeRenderer.d(p, "alpha3", a1));
+                return new Gradient(y0, y1, at, first, color, k3);
         }
+
         double[] lines() {
-            return third == null ? new double[]{y0, y1} : new double[]{y0, y0 + at * (y1 - y0), y1};
-        }
+                return third == null ? new double[]{y0, y1} : new double[]{y0, y0 + at * (y1 - y0), y1};
+            }
+
         Color at(double y) {
-            double t = Math.max(0, Math.min(1, (y - y0) / (y1 - y0)));
-            if (third == null) return mix(first, second, t);
-            return t <= at ? mix(first, second, t / at) : mix(second, third, (t - at) / (1 - at));
+                double t = Math.clamp((y - y0) / (y1 - y0), 0, 1);
+                if (third == null) return mix(first, second, t);
+                return t <= at ? mix(first, second, t / at) : mix(second, third, (t - at) / (1 - at));
         }
+
         private static Color mix(Color color, Color b, double t) {
-            return new Color(lerp(color.getRed(), b.getRed(), t), lerp(color.getGreen(), b.getGreen(), t),
-                    lerp(color.getBlue(), b.getBlue(), t), lerp(color.getAlpha(), b.getAlpha(), t));
+                return new Color(lerp(color.getRed(), b.getRed(), t), lerp(color.getGreen(), b.getGreen(), t),
+                        lerp(color.getBlue(), b.getBlue(), t), lerp(color.getAlpha(), b.getAlpha(), t));
         }
         private static int lerp(int a, int b, double t) { return (int) Math.round(a + (b - a) * t); }
     }

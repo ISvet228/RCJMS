@@ -1,7 +1,6 @@
 package Project.Victory;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
+
+import Project.Helpers.FontCache;
 import Project.Game.GameView;
 import Project.MainMenu.MainMenuView;
 import Project.RCJMS;
@@ -86,12 +85,12 @@ public class VictoryView extends JPanel {
         title.setDepthColor(new Color(90, 255, 214, 90));
         add(title);
 
-        restartButton.addActionListener(actionEvent -> RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu"));
+        restartButton.addActionListener(_ -> RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu"));
         add(restartButton);
-        exitButton.addActionListener(actionEvent -> System.exit(0));
+        exitButton.addActionListener(_ -> System.exit(0));
         add(exitButton);
 
-        animationTimer = new Timer(16, actionEvent -> { tick(); repaint(); });
+        animationTimer = new Timer(16, _ -> { tick(); repaint(); });
         animationTimer.start();
 
         if (keysEnabled) {
@@ -288,10 +287,10 @@ public class VictoryView extends JPanel {
         long h = elapsedSeconds / 3600;
         long m = (elapsedSeconds % 3600) / 60;
         long s = elapsedSeconds % 60;
-        drawCentered(g2d, String.format("%02d:%02d:%02d", h, m, s), new Font(Font.SANS_SERIF, Font.BOLD, 46),
+        drawCentered(g2d, String.format("%02d:%02d:%02d", h, m, s), FontCache.get(Font.SANS_SERIF, Font.BOLD, 46),
                 new Color(220, 255, 250), CARD_Y + 62);
         String caption = String.format(NSLocalizedString.value("vv.victory_time"), h, m, s);
-        drawCentered(g2d, caption, new Font(Font.SANS_SERIF, Font.PLAIN, 15), new Color(200, 230, 235), CARD_Y + 94);
+        drawCentered(g2d, caption, FontCache.get(Font.SANS_SERIF, Font.PLAIN, 15), new Color(200, 230, 235), CARD_Y + 94);
     }
     private void paintVignette(Graphics2D g2d) {
         g2d.setPaint(new RadialGradientPaint(new Point2D.Double(480, 270), 640f,

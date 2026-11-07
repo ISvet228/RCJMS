@@ -1,8 +1,4 @@
 package Project.Game;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
-
 import javax.tools.*;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

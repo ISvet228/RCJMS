@@ -1,7 +1,4 @@
 package Project.Game;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import java.util.function.IntConsumer;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -26,7 +23,7 @@ public final class RenderWorkers {
     public RenderWorkers(int count) {
         workers = new Worker[count];
         for (int i = 0; i < count; i++) {
-            workers[i] = new Worker("EngineRenderWorker-" + i, i);
+            workers[i] = new Worker("EngineRenderWorker-" + i);
             workers[i].start();
         }
     }
@@ -74,9 +71,8 @@ public final class RenderWorkers {
     //region Worker Threads
     private final class Worker extends Thread {
         private long seenGeneration;
-        private final int index;
 
-        Worker(String name, int index) { super(name); this.index = index; setDaemon(true); }
+        Worker(String name) { super(name); setDaemon(true); }
 
         @Override public void run() {
             while (true) {

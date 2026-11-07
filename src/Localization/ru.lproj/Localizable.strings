@@ -151,6 +151,10 @@
 "cv.bfs" = "Поиск в Ширину aka BFS";
 "cv.credits" = "Авторы";
 "cv.fungun" = "fUnGuN — помощь со StyleUI";
+"cv.fungun1" = "fUnGuN:";
+"cv.fungun2" = "StyleUI, Редакторы/креаторы, Идеи, Редизайн,";
+"cv.fungun3" = "Совместная Реализация Moriarty Engine И Ещё Много Другой Помощи";
+"cv.fungun4" = "fUnGuN-а Сбил К Слову Грузовик-кун Пока Он Работал Над Проектом";
 "cv.hyperbolic_geometry" = "Гиперболическая Геометрия ака Сломанная Геометрия";
 "cv.ljubo" = "Ljubo — за исправление коллизий и улучшения передвижения";
 "cv.main_designer" = "Главный дизайнер";
@@ -306,7 +310,7 @@
 "ld.title" = "Строим лабиринт";
 
 // ---------- RENDER ENGINE CREATOR (ec.) ----------
-"ec.menu" = "RENDER ENGINE CREATOR";
+"ec.menu" = "РЕДАКТОР ДВИЖКОВ РЕНДЕРА";
 "ec.unsaved_msg" = "В этом движке есть несохранённые изменения. Сохранить перед выходом?";
 
 // ---------- RENDER ENGINE CREATOR — INTERFACE (ec.ui.) ----------

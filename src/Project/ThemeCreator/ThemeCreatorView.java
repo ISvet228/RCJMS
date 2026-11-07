@@ -1,14 +1,6 @@
 package Project.ThemeCreator;
 import Project.CreatorKit.*;
 
-import Project.Helpers.EditorKit.Card;
-import Project.Helpers.EditorKit.Column;
-import Project.Helpers.EditorKit.Glyph;
-import Project.Helpers.EditorKit.HintBar;
-import Project.Helpers.EditorKit.Note;
-import Project.Helpers.EditorKit.Text;
-import Project.Helpers.EditorKit.ToolButton;
-import Project.Helpers.EditorKit.Tone;
 import Project.StyleUI.*;
 
 import javax.swing.*;
@@ -24,8 +16,7 @@ import java.util.*;
 import java.util.List;
 import java.util.function.Consumer;
 
-import static Project.CreatorKit.CkChrome.fieldLabel;
-import static Project.CreatorKit.CkChrome.menuItem;
+import static Project.CreatorKit.CkChrome.*;
 import static Project.Helpers.EditorKit.*;
 
 public final class ThemeCreatorView extends JPanel {
@@ -149,7 +140,7 @@ public final class ThemeCreatorView extends JPanel {
         add(hint, BorderLayout.SOUTH);
 
         bindInspector();
-        clock = new javax.swing.Timer(33, actionEvent -> tick());
+        clock = new javax.swing.Timer(33, _ -> tick());
         clock.start();
         open(blankScene(), null, false);
         hint.setHint(L.t("tc.ready"));
@@ -214,15 +205,10 @@ public final class ThemeCreatorView extends JPanel {
     }
     private void quiet(Runnable r) {
         quiet++;
-        try {
-            r.run();
-        } finally {
-            quiet--;
-        }
+        try { r.run(); }
+        finally { quiet--; }
     }
-    private void refreshDirty() {
-        dirtyText.setRaw(doc != null && dirty() ? L.t("tc.unsaved") : "");
-    }
+    private void refreshDirty() { dirtyText.setRaw(doc != null && dirty() ? L.t("tc.unsaved") : ""); }
     private void refreshSaved() {
         savedBox.removeAll();
         for (String id : ThemeStore.ids()) {
@@ -427,22 +413,22 @@ public final class ThemeCreatorView extends JPanel {
     }
     private JPopupMenu savedMenu(String id) {
         JPopupMenu menu = popup();
-        menu.add(menuItem(L.t("tc.menuOpen"), () -> openSaved(id)));
-        menu.add(menuItem(L.t("tc.menuDelete"), () -> deleteSaved(id)));
+        menu.add(menuItem("tc.menuOpen", () -> openSaved(id)));
+        menu.add(menuItem("tc.menuDelete", () -> deleteSaved(id)));
         return menu;
     }
     private JPopupMenu contextMenu(Point2D point2D, ThemeObject target, boolean inTree) {
         JPopupMenu popupMenu = popup();
         if (target != null) {
-            if (inTree) popupMenu.add(menuItem(L.t("tc.menuRename"), () -> renameInDialog(target)));
-            popupMenu.add(menuItem(L.t("tc.menuDeleteObject"), this::deleteSelected));
+            if (inTree) popupMenu.add(menuItem("tc.menuRename", () -> renameInDialog(target)));
+            popupMenu.add(menuItem("tc.menuDeleteObject", this::deleteSelected));
             popupMenu.addSeparator();
         }
-        popupMenu.add(typeMenu(L.t("tc.menuNewObject"), type -> addObject(type, 0, point2D)));
-        if (target != null) popupMenu.add(typeMenu(L.t("tc.menuNewChild"), type -> addObject(type, target.id, point2D)));
+        popupMenu.add(typeMenu("tc.menuNewObject", type -> addObject(type, 0, point2D)));
+        if (target != null) popupMenu.add(typeMenu("tc.menuNewChild", type -> addObject(type, target.id, point2D)));
         popupMenu.addSeparator();
-        if (target != null) popupMenu.add(menuItem(L.t("tc.menuCopy"), this::copySelection));
-        popupMenu.add(menuItem(L.t("tc.menuPaste"), () -> pasteInto(target == null ? 0 : target.id, point2D)));
+        if (target != null) popupMenu.add(menuItem("tc.menuCopy", this::copySelection));
+        popupMenu.add(menuItem("tc.menuPaste", () -> pasteInto(target == null ? 0 : target.id, point2D)));
         return popupMenu;
     }
     private void treeMenu(MouseEvent mouseEvent) {
@@ -463,9 +449,8 @@ public final class ThemeCreatorView extends JPanel {
                 return true;
             }
             if (!typing) ThemeInput.keyDown(KeyEvent.getKeyText(e.getKeyCode()));
-        } else if (e.getID() == KeyEvent.KEY_RELEASED && !typing) {
-            ThemeInput.keyUp(KeyEvent.getKeyText(e.getKeyCode()));
         }
+        else if (e.getID() == KeyEvent.KEY_RELEASED && !typing) ThemeInput.keyUp(KeyEvent.getKeyText(e.getKeyCode()));
         return false;
     }
     private boolean shortcut(KeyEvent keyEvent, Component owner, boolean typing) {
@@ -478,7 +463,8 @@ public final class ThemeCreatorView extends JPanel {
             if (now - lastEscape < ESCAPE_TWICE_MS) {
                 lastEscape = 0;
                 exit();
-            } else {
+            }
+            else {
                 lastEscape = now;
                 escape(owner);
                 hint.flash(Tone.INFO, L.t("tc.escAgain"));
@@ -535,7 +521,7 @@ public final class ThemeCreatorView extends JPanel {
             Point origin = scene.getLocationOnScreen();
             Point2D point2D = scene.toDoc(new Point(screen.x - origin.x, screen.y - origin.y));
             ThemeInput.pointer(point2D.getX(), point2D.getY());
-        } catch (java.awt.IllegalComponentStateException exception) { }
+        } catch (java.awt.IllegalComponentStateException _) { }
     }
     private enum Tool { HAND, MOVE, ROTATE, SCALE, RECT }
     //endregion
@@ -595,23 +581,17 @@ public final class ThemeCreatorView extends JPanel {
                                 startDrag(h, f, point2D);
                                 return;
                             }
-                        } else if (startGesture(sel, f, point2D)) {
-                            return;
                         }
+                        else if (startGesture(sel, f, point2D)) return;
+
                     }
                     ThemeObject hit = ThemeScene.pick(doc, f, point2D, PICK_PX / scale);
                     boolean toggle = mouseEvent.isControlDown() || mouseEvent.isMetaDown();
-                    if (hit == null) {
-                        if (!toggle && !mouseEvent.isShiftDown()) selectObject(0);
-                    } else if (toggle) {
-                        toggleSelection(hit.id);
-                    } else if (mouseEvent.isShiftDown()) {
-                        addToSelection(hit.id);
-                    } else if (selection.contains(hit.id) && selection.size() > 1) {
-                        pendingSingle = hit.id;
-                    } else {
-                        selectObject(hit.id);
-                    }
+                    if (hit == null) { if (!toggle && !mouseEvent.isShiftDown()) selectObject(0); }
+                    else if (toggle) { toggleSelection(hit.id); }
+                    else if (mouseEvent.isShiftDown()) { addToSelection(hit.id); }
+                    else if (selection.contains(hit.id) && selection.size() > 1) { pendingSingle = hit.id; }
+                    else { selectObject(hit.id); }
                 }
                 @Override public void mouseMoved(MouseEvent mouseEvent) {
                     Point2D point2D = toDoc(mouseEvent.getPoint());
@@ -671,7 +651,7 @@ public final class ThemeCreatorView extends JPanel {
                 JScrollPane pane = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, tree);
                 if (pane == null) return;
                 JScrollBar bar = pane.getVerticalScrollBar();
-                bar.setValue(bar.getValue() + (int) Math.round(wheel.getUnitsToScroll() * bar.getUnitIncrement()));
+                bar.setValue(bar.getValue() + wheel.getUnitsToScroll() * bar.getUnitIncrement());
             });
         }
         void setTool(Tool next) {
@@ -760,11 +740,8 @@ public final class ThemeCreatorView extends JPanel {
                 case RECT -> {
                     double w0 = ThemeRenderer.d(s, "w", 100), h0 = ThemeRenderer.d(s, "h", 100);
                     Point2D lp;
-                    try {
-                        lp = g.world().createInverse().transform(p, null);
-                    } catch (NoninvertibleTransformException e) {
-                        return;
-                    }
+                    try { lp = g.world().createInverse().transform(p, null); }
+                    catch (NoninvertibleTransformException e) { return; }
                     double shiftX = 0, shiftY = 0, nw = w0, nh = h0;
                     if (g.ex() > 0) nw = Math.max(1, lp.getX());
                     else if (g.ex() < 0) {
@@ -792,9 +769,7 @@ public final class ThemeCreatorView extends JPanel {
             }
         }
         private enum Part { ROTATE, SCALE, RECT }
-        private record Drag(ThemeObject o, Point2D startLocal, double x0, double y0) {
-
-        }
+        private record Drag(ThemeObject o, Point2D startLocal, double x0, double y0) { }
         private record Gesture(Part part, char axis, int ex, int ey, ThemeObject o, Map<String, Object> start, AffineTransform world, Point2D startDoc, Point2D startLocal) { }
 
         private void fit() {
@@ -839,14 +814,12 @@ public final class ThemeCreatorView extends JPanel {
                 g2d.scale(scale, scale);
                 g2d.clipRect(0, 0, W, H);
                 frame = ThemeRenderer.frame(doc, time);
-                ThemeRenderer.paint(g2d, doc, frame, W, H);
+                ThemeRenderer.paint(g2d, frame, W, H);
                 g2d.setStroke(new BasicStroke((float) (1 / scale)));
                 g2d.setColor(CARD_LINE);
                 g2d.drawRect(0, 0, W, H);
                 drawSelection(g2d);
-            } finally {
-                g2d.dispose();
-            }
+            } finally { g2d.dispose(); }
         }
         private void drawSelection(Graphics2D g2d) {
             if (frame == null) return;
@@ -1003,7 +976,7 @@ public final class ThemeCreatorView extends JPanel {
             themeObject.props.put("y", round(xy[1] + PASTE_STEP * i));
         }
         List<Integer> pasted = new ArrayList<>(ids.values());
-        setSelection(pasted, roots.isEmpty() ? 0 : roots.get(0).id);
+        setSelection(pasted, roots.isEmpty() ? 0 : roots.getFirst().id);
         refreshAll();
         hint.flash(Tone.OK, L.f("tc.pasted", pasted.size()));
     }
@@ -1053,9 +1026,8 @@ public final class ThemeCreatorView extends JPanel {
     }
     private void toggleSelection(int id) {
         List<Integer> ids = new ArrayList<>(selection);
-        if (ids.remove((Integer) id)) {
-            setSelection(ids, ids.isEmpty() ? 0 : ids.get(ids.size() - 1));
-        } else {
+        if (ids.remove((Integer) id)) setSelection(ids, ids.isEmpty() ? 0 : ids.getLast());
+        else {
             ids.add(id);
             setSelection(ids, id);
         }
@@ -1092,7 +1064,7 @@ public final class ThemeCreatorView extends JPanel {
             layerField.setText(String.valueOf(themeObject.layer));
             Set<String> driven = drivenKeys(themeObject);
             visibleToggle.setSelected(liveValue(themeObject, "visible") instanceof Boolean b ? b : themeObject.visible);
-            visibleToggle.setEnabled(on && !driven.contains("visible"));
+            visibleToggle.setEnabled(!driven.contains("visible"));
             String key = (selection.size() > 1 ? "multi" : "one") + "|" + themeObject.type + "|" + new TreeSet<>(driven)
                     + "|" + ThemeInspectorLayout.signature(ThemeInspectorLayout.rows(themeObject.type, themeObject.props));
             if (themeObject == inspected && key.equals(inspectedKey)) {
@@ -1110,9 +1082,8 @@ public final class ThemeCreatorView extends JPanel {
         } else {
             if (selection.size() > 1) propsBody.put(note(NOTE_W, 11f, L.f("tc.multiNote", selection.size())), 0);
             propsBody.put(new Text("tc.props", 12f, true, TEXT, 0), 8);
-            for (ThemeInspectorLayout.Row row : ThemeInspectorLayout.rows(themeObject.type, themeObject.props)) {
+            for (ThemeInspectorLayout.Row row : ThemeInspectorLayout.rows(themeObject.type, themeObject.props))
                 propsBody.put(inspectorRow(themeObject, row, driven), 8);
-            }
         }
         inspected = themeObject;
         inspectedKey = key;
@@ -1145,22 +1116,17 @@ public final class ThemeCreatorView extends JPanel {
         line.setOpaque(false);
         line.setAlignmentX(Component.LEFT_ALIGNMENT);
         line.setMaximumSize(new Dimension(COL_W, 30));
-        for (ThemeInspectorLayout.Cell cell : layoutRow.cells()) {
+        for (ThemeInspectorLayout.Cell cell : layoutRow.cells())
             line.add(cellView(themeObject, cell, driven, L.t(layoutRow.titleKey())));
-        }
         block.add(line);
         return block;
     }
     private void bindInspector() {
-        objectName.addActionListener(actionEvent -> renameSelected());
-        objectName.addFocusListener(new FocusAdapter() {
-            @Override public void focusLost(FocusEvent focusEvent) { renameSelected(); }
-        });
-        layerField.addActionListener(actionEvent -> applyLayer());
-        layerField.addFocusListener(new FocusAdapter() {
-            @Override public void focusLost(FocusEvent focusEvent) { applyLayer(); }
-        });
-        visibleToggle.addActionListener(actionEvent -> {
+        objectName.addActionListener(_ -> renameSelected());
+        objectName.addFocusListener(new FocusAdapter() { @Override public void focusLost(FocusEvent focusEvent) { renameSelected(); } });
+        layerField.addActionListener(_ -> applyLayer());
+        layerField.addFocusListener(new FocusAdapter() { @Override public void focusLost(FocusEvent focusEvent) { applyLayer(); } });
+        visibleToggle.addActionListener(_ -> {
             if (quiet > 0 || selectedObject() == null) return;
             boolean on = visibleToggle.isSelected();
             if (selectedObjects().stream().allMatch(themeObject -> themeObject.visible == on)) return;
@@ -1168,23 +1134,17 @@ public final class ThemeCreatorView extends JPanel {
             for (ThemeObject themeObject : selectedObjects()) themeObject.visible = on;
             refreshAll();
         });
-        themeName.addActionListener(actionEvent -> { applyName(); refreshAll(); });
-        themeName.addFocusListener(new FocusAdapter() {
-            @Override public void focusLost(FocusEvent focusEvent) { if (quiet == 0) { applyName(); refreshAll(); } }
-        });
+        themeName.addActionListener(_ -> { applyName(); refreshAll(); });
+        themeName.addFocusListener(new FocusAdapter() { @Override public void focusLost(FocusEvent focusEvent) { if (quiet == 0) { applyName(); refreshAll(); } } });
     }
-    private static double prop(Map<String, Object> p, String key) {
-        return p != null && p.get(key) instanceof Number n ? n.doubleValue() : 0;
-    }
+    private static double prop(Map<String, Object> p, String key) { return p != null && p.get(key) instanceof Number n ? n.doubleValue() : 0; }
     private void setProp(ThemeObject themeObject, String key, Object value) {
         if (Objects.equals(themeObject.props.get(key), value)) return;
         snapshot();
         if (value == null) themeObject.props.remove(key); else themeObject.props.put(key, value);
         refreshAll();
     }
-    private void setProps(ThemeObject themeObject, Map<String, Object> changes) {
-        setProps(themeObject, changes, true);
-    }
+    private void setProps(ThemeObject themeObject, Map<String, Object> changes) { setProps(themeObject, changes, true); }
     private void setProps(ThemeObject themeObject, Map<String, Object> changes, boolean undoStep) {
         boolean changed = false;
         for (Map.Entry<String, Object> change : changes.entrySet()) {
@@ -1227,17 +1187,14 @@ public final class ThemeCreatorView extends JPanel {
             if (quiet > 0) return;
             if (!field.getText().equals(valueOf(themeObject, spec))) applyText(themeObject, spec, field.getText());
         };
-        field.addActionListener(actionEvent -> apply.run());
-        field.addFocusListener(new FocusAdapter() {
-            @Override public void focusLost(FocusEvent focusEvent) { apply.run(); }
-        });
+        field.addActionListener(_ -> apply.run());
+        field.addFocusListener(new FocusAdapter() { @Override public void focusLost(FocusEvent focusEvent) { apply.run(); } });
         inspectorSync.add(() -> {
             String now = valueOf(themeObject, spec);
             if (!field.isFocusOwner() && !field.getText().equals(now)) field.setText(now);
         });
         String name = cell.label() == null ? title : title + " " + cell.label();
-        return labelled(cell.label(), field, driven || spec.kind() != ThemeTypes.Kind.NUM ? null : scrubber(themeObject, spec),
-                driven ? name + "  " + L.t("tc.driven") : name);
+        return labelled(style, cell.label(), field, driven || spec.kind() != ThemeTypes.Kind.NUM ? null : scrubber(themeObject, spec), driven ? name + "  " + L.t("tc.driven") : name);
     }
     private JComponent choiceCell(ThemeObject themeObject, ThemeInspectorLayout.Cell cell) {
         ThemeTypes.Spec spec = specOf(themeObject, cell.key());
@@ -1248,7 +1205,7 @@ public final class ThemeCreatorView extends JPanel {
         box.setAlignmentX(Component.LEFT_ALIGNMENT);
         Object current = themeObject.props.containsKey(spec.key()) ? themeObject.props.get(spec.key()) : spec.def();
         box.setSelectedIndex(Math.max(0, spec.choices().indexOf(String.valueOf(current))));
-        box.addActionListener(actionEvent -> {
+        box.addActionListener(_ -> {
             if (quiet > 0 || box.getSelectedIndex() < 0) return;
             setProp(themeObject, spec.key(), spec.choices().get(box.getSelectedIndex()));
         });
@@ -1291,7 +1248,7 @@ public final class ThemeCreatorView extends JPanel {
             if (quiet > 0) return;
             if (!hexField.getText().equals(rgbaText(themeObject, colorKey, alphaKey))) applyRgba(themeObject, colorKey, alphaKey, hexField.getText());
         };
-        hexField.addActionListener(actionEvent -> apply.run());
+        hexField.addActionListener(_ -> apply.run());
         hexField.addFocusListener(new FocusAdapter() {
             @Override public void focusLost(FocusEvent focusEvent) { apply.run(); }
         });
@@ -1315,7 +1272,8 @@ public final class ThemeCreatorView extends JPanel {
     private void openColorMenu(ThemeObject themeObject, String colorKey, String alphaKey, JComponent anchor) {
         Color c = colorOf(themeObject, colorKey, alphaKey);
         boolean[] undoStepTaken = {false};
-        RgbaPopup popup = new RgbaPopup(c.getRGB() & 0xFFFFFF, alphaOf(themeObject, alphaKey), (rgb, alpha) -> {
+        assert c != null;
+        RgbaPopup popup = new RgbaPopup(style, c.getRGB() & 0xFFFFFF, alphaOf(themeObject, alphaKey), (rgb, alpha) -> {
             if (!undoStepTaken[0]) {
                 snapshot();
                 undoStepTaken[0] = true;
@@ -1327,19 +1285,19 @@ public final class ThemeCreatorView extends JPanel {
         });
         popup.show(anchor, 0, anchor.getHeight() + 4);
     }
-    private static JComponent labelled(String label, JComponent field, MouseAdapter scrub, String tip) {
+    private static JComponent labelled(Style style, String label, JComponent field, MouseAdapter scrub, String tip) {
         JPanel panel = new JPanel(new BorderLayout(4, 0));
         panel.setOpaque(false);
         if (label != null) {
             String text = label.startsWith("tc.") ? L.t(label) : label;
-            JLabel tag = new JLabel(text);
-            tag.setForeground(switch (text) {
+            StyledLabel tag = new StyledLabel(style, text, false, false);
+            tag.setTextColor(switch (text) {
                 case "X" -> X_AXIS;
                 case "Y" -> Y_AXIS;
                 case "Z" -> new Color(100, 150, 245);
                 default -> MUTED;
             });
-            tag.setFont(tag.getFont().deriveFont(Font.BOLD, 11f));
+            tag.setFont(font(11f, true));
             tag.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 2));
             if (tip != null) tag.setToolTipText(tip);
             if (scrub != null) {
@@ -1388,9 +1346,8 @@ public final class ThemeCreatorView extends JPanel {
         }
         switch (spec.kind()) {
             case NUM -> {
-                try {
-                    setProp(themeObject, spec.key(), Double.parseDouble(value));
-                } catch (NumberFormatException exception) {
+                try { setProp(themeObject, spec.key(), Double.parseDouble(value)); }
+                catch (NumberFormatException exception) {
                     hint.flash(Tone.BAD, L.f("tc.badNumber", value));
                     refreshInspector();
                 }
@@ -1436,9 +1393,7 @@ public final class ThemeCreatorView extends JPanel {
                 cleared.put(colorKey, null);
                 if (alphaKey != null) cleared.put(alphaKey, null);
                 setProps(themeObject, cleared);
-            } else {
-                refreshInspector();
-            }
+            } else refreshInspector();
             return;
         }
         String body = value.startsWith("#") ? value.substring(1) : value;
@@ -1462,7 +1417,7 @@ public final class ThemeCreatorView extends JPanel {
         refreshAll();
     }
     private void renameInDialog(ThemeObject themeObject) {
-        String name = CkDialogs.text(this, style, L.t("tc.renameTitle"), L.t("tc.renamePrompt"), themeObject.name);
+        String name = CkDialogs.text(this, style, "tc.renameTitle", "tc.renamePrompt", themeObject.name);
         if (name == null || name.equals(themeObject.name)) return;
         snapshot();
         themeObject.name = name;
@@ -1531,9 +1486,8 @@ public final class ThemeCreatorView extends JPanel {
         applyOpen(root, open);
         for (int id : selection) {
             DefaultMutableTreeNode node = findNode(root, id);
-            for (TreeNode parent = node == null ? null : node.getParent(); parent != null; parent = parent.getParent()) {
+            for (TreeNode parent = node == null ? null : node.getParent(); parent != null; parent = parent.getParent())
                 tree.expandPath(new TreePath(((DefaultMutableTreeNode) parent).getPath()));
-            }
         }
         selectInTree();
     }
@@ -1604,23 +1558,23 @@ public final class ThemeCreatorView extends JPanel {
             return;
         }
         tree.setSelectionPaths(paths.toArray(TreePath[]::new));
-        tree.scrollPathToVisible(paths.get(paths.size() - 1));
+        tree.scrollPathToVisible(paths.getLast());
     }
     private void treeSelected(TreeSelectionEvent treeSelectionEvent) {
         if (quiet > 0) return;
         List<Integer> ids = new ArrayList<>();
         int primary = 0;
         TreePath lead = tree.getSelectionPath();
-        for (TreePath treePath : tree.getSelectionPaths()) {
+        for (TreePath treePath : Objects.requireNonNull(tree.getSelectionPaths())) {
             if (!(treePath.getLastPathComponent() instanceof DefaultMutableTreeNode defaultMutableTreeNode) || !(defaultMutableTreeNode.getUserObject() instanceof ThemeObject themeObject)) continue;
             ids.add(themeObject.id);
             if (treePath.equals(lead)) primary = themeObject.id;
         }
-        setSelection(ids, primary != 0 ? primary : (ids.isEmpty() ? 0 : ids.get(ids.size() - 1)));
+        setSelection(ids, primary != 0 ? primary : (ids.isEmpty() ? 0 : ids.getLast()));
         refreshAll();
     }
     private record TreeRow(ThemeObject o, int parent, String name, int layer, boolean visible) { }
-    private final class TreeCells extends DefaultTreeCellRenderer {
+    private static final class TreeCells extends DefaultTreeCellRenderer {
         TreeCells() {
             setLeafIcon(null);
             setOpenIcon(null);
@@ -1645,7 +1599,7 @@ public final class ThemeCreatorView extends JPanel {
         @Override public int getSourceActions(JComponent component) { return MOVE; }
         @Override protected Transferable createTransferable(JComponent component) {
             Set<Integer> chosen = new HashSet<>();
-            for (TreePath path : tree.getSelectionPaths()) {
+            for (TreePath path : Objects.requireNonNull(tree.getSelectionPaths())) {
                 if (path.getLastPathComponent() instanceof DefaultMutableTreeNode node && node.getUserObject() instanceof ThemeObject themeObject) chosen.add(themeObject.id);
             }
             if (chosen.isEmpty()) return null;
@@ -1660,9 +1614,8 @@ public final class ThemeCreatorView extends JPanel {
             if (!canImport(transferSupport)) return false;
             List<Integer> dragged = new ArrayList<>();
             try {
-                for (String part : ((String) transferSupport.getTransferable().getTransferData(DataFlavor.stringFlavor)).split(",")) {
+                for (String part : ((String) transferSupport.getTransferable().getTransferData(DataFlavor.stringFlavor)).split(","))
                     if (!part.isBlank()) dragged.add(Integer.parseInt(part.trim()));
-                }
             } catch (Exception exception) { return false; }
             JTree.DropLocation where = (JTree.DropLocation) transferSupport.getDropLocation();
             int newParent = where.getPath() == null ? 0 : idOf(where.getPath());
@@ -1684,9 +1637,8 @@ public final class ThemeCreatorView extends JPanel {
             for (int id : moving) kept.put(id, keptLocal(id, newParent));
             snapshot();
             List<Integer> done = new ArrayList<>();
-            for (int id : moving) {
+            for (int id : moving)
                 if (doc.move(id, newParent, before)) done.add(id);
-            }
             if (done.isEmpty()) {
                 undoStack.pop();
                 refreshDirty();
@@ -1696,7 +1648,7 @@ public final class ThemeCreatorView extends JPanel {
                 ThemeObject moved = doc.find(id);
                 if (moved != null) moved.props.putAll(kept.get(id));
             }
-            setSelection(done, done.get(done.size() - 1));
+            setSelection(done, done.getLast());
             refreshAll();
             return true;
         }
@@ -1714,9 +1666,7 @@ public final class ThemeCreatorView extends JPanel {
         themeDoc.id = "new-scene";
         return themeDoc;
     }
-    private void newScene() {
-        open(blankScene(), null, false);
-    }
+    private void newScene() { open(blankScene(), null, false); }
     private void openOriginal(String id) {
         ThemeDoc themeDoc = pick(ThemeOriginals.originals(), id);
         themeDoc.name = themeDoc.name + " (copy)";
@@ -1724,19 +1674,14 @@ public final class ThemeCreatorView extends JPanel {
         themeDoc.id = ThemeStore.slug(themeDoc.name);
         open(themeDoc, null, false);
     }
-    private void openTemplate(String id) {
-        open(pick(ThemeOriginals.templates(), id), null, false);
-    }
+    private void openTemplate(String id) { open(pick(ThemeOriginals.templates(), id), null, false); }
     private void openSaved(String id) {
-        try {
-            open(ThemeStore.load(id), id, true);
-        } catch (IOException | RuntimeException exception) {
-            hint.flash(Tone.BAD, L.f("tc.loadFailed", exception.getMessage()));
-        }
+        try { open(ThemeStore.load(id), id, true); }
+        catch (IOException | RuntimeException exception) { hint.flash(Tone.BAD, L.f("tc.loadFailed", exception.getMessage())); }
     }
     private static ThemeDoc pick(List<ThemeDoc> all, String id) {
         for (ThemeDoc themeDoc : all) if (themeDoc.id.equals(id)) return themeDoc;
-        return all.get(0);
+        return all.getFirst();
     }
     private void open(ThemeDoc themeDoc, String fileId, boolean saved) {
         if (!canLeave()) return;
@@ -1768,9 +1713,7 @@ public final class ThemeCreatorView extends JPanel {
             refreshSaved();
             refreshDirty();
             hint.flash(Tone.OK, L.f("tc.deletedFile", id));
-        } catch (IOException exception) {
-            hint.flash(Tone.BAD, L.f("tc.saveFailed", exception.getMessage()));
-        }
+        } catch (IOException exception) { hint.flash(Tone.BAD, L.f("tc.saveFailed", exception.getMessage())); }
     }
     private boolean save() {
         applyName();

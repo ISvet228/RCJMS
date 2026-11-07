@@ -1,7 +1,7 @@
 package Project.CreatorKit;
-import Project.EngineCreator.CustomNodes;
-import Project.EngineCreator.NodeGroup;
-import Project.Helpers.EditorKit;
+
+import Project.Helpers.*;
+import Project.EngineCreator.*;
 import Project.StyleUI.*;
 
 import javax.swing.*;
@@ -37,7 +37,7 @@ public final class NodeCanvas extends JPanel {
     private java.util.function.Consumer<String> insideOpener;
     private java.util.function.Supplier<List<NodeKind>> addableKinds = Nodes::engineKinds;
     private java.util.function.IntFunction<String> liveText;
-    private final javax.swing.Timer liveClock = new javax.swing.Timer(100, actionEvent -> { if (isShowing()) repaint(); });
+    private final javax.swing.Timer liveClock = new javax.swing.Timer(100, _ -> { if (isShowing()) repaint(); });
     //endregion
     //region Selection And Clipboard
     private final LinkedHashSet<Integer> selection = new LinkedHashSet<>();
@@ -240,15 +240,9 @@ public final class NodeCanvas extends JPanel {
         changed.run();
         if (!ids.isEmpty()) revealNode(project.node(ids.getFirst()));
     }
-    private record ClipNode(String kind, int dx, int dy, Map<String, String> params) {
-
-    }
-    private record ClipLink(int from, String fromPort, int to, String toPort) {
-
-    }
-    private record Clip(List<ClipNode> nodes, List<ClipLink> links, Point origin) {
-
-    }
+    private record ClipNode(String kind, int dx, int dy, Map<String, String> params) { }
+    private record ClipLink(int from, String fromPort, int to, String toPort) { }
+    private record Clip(List<ClipNode> nodes, List<ClipLink> links, Point origin) { }
     //endregion
 
     //region Node Editing
@@ -303,7 +297,8 @@ public final class NodeCanvas extends JPanel {
             for (int i = 0; i < nodeKind.inputs().size(); i++)
                 if (new Point(nodeInst.x, NodeGeometry.rowY(nodeInst, i)).distance(point) <= PORT_HIT) return new PortRef(nodeInst.id, nodeKind.inputs().get(i).name(), false);
             for (int i = 0; i < nodeKind.outputs().size(); i++)
-                if (new Point(nodeInst.x + NodeGeometry.width(nodeInst), NodeGeometry.rowY(nodeInst, i)).distance(point) <= PORT_HIT) return new PortRef(nodeInst.id, nodeKind.outputs().get(i).name(), true);
+                if (new Point(nodeInst.x + NodeGeometry.width(nodeInst), NodeGeometry.rowY(nodeInst, i)).distance(point) <= PORT_HIT)
+                    return new PortRef(nodeInst.id, nodeKind.outputs().get(i).name(), true);
         }
         return null;
     }
@@ -321,7 +316,7 @@ public final class NodeCanvas extends JPanel {
     public void makeCustomNode() {
         try { CustomNodes.check(project, selection); }
         catch (IllegalArgumentException exception) { status.accept(exception.getMessage()); return; }
-        String[] texts = CkDialogs.customTexts(this, style, L.t("ec.g.createTitle"), L.t("ec.g.customDefault"), "");
+        String[] texts = CkDialogs.customTexts(this, style, "ec.g.createTitle", L.t("ec.g.customDefault"), "");
         if (texts == null) return;
         beforeChange.run();
         try {
@@ -360,13 +355,13 @@ public final class NodeCanvas extends JPanel {
             g2d.setStroke(new BasicStroke(picked ? 2f : 1.2f));
             g2d.drawRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
             g2d.setStroke(new BasicStroke(1f));
-            g2d.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+            g2d.setFont(FontCache.get(Font.SANS_SERIF, Font.BOLD, 12));
             g2d.setColor(color);
             g2d.drawString(grp.name, rectangle.x + 8, rectangle.y + NodeGeometry.GROUP_HEAD - 8);
         }
     }
     private void renameGroup(NodeGroup nodeGroup) {
-        String name = CkDialogs.text(this, style, L.t("ec.menu.renameGroup"), L.t("ec.g.renamePrompt"), nodeGroup.name);
+        String name = CkDialogs.text(this, style, "ec.menu.renameGroup", "ec.g.renamePrompt", nodeGroup.name);
         if (name == null) return;
         beforeChange.run();
         nodeGroup.name = limit(name);
@@ -386,13 +381,11 @@ public final class NodeCanvas extends JPanel {
         changed.run();
         repaint();
     }
-    private void openInside(String kind) {
-        if (insideOpener != null) insideOpener.accept(kind);
-    }
+    private void openInside(String kind) { if (insideOpener != null) insideOpener.accept(kind); }
     private void editCustomTexts(String kind) {
         CustomNodes.Def def = CustomNodes.def(kind);
         if (def == null) return;
-        String[] t = CkDialogs.customTexts(this, style, L.t("ec.g.editTitle"), def.title(), def.description());
+        String[] t = CkDialogs.customTexts(this, style, "ec.g.editTitle", def.title(), def.description());
         if (t == null) return;
         try {
             CustomNodes.updateTexts(kind, limit(t[0]), t[1]);
@@ -418,8 +411,12 @@ public final class NodeCanvas extends JPanel {
         menu.add(item(L.t("ec.menu.group"), "Ctrl+G", this::groupSelection));
         menu.add(item(L.t("ec.menu.customNode"), "Ctrl+K", this::makeCustomNode));
         boolean grouped = false;
-        for (int id : selection) if (project.groupOf(id) != null) grouped = true;
-        if (grouped) menu.add(item(L.t("ec.menu.ungroup"), null, () -> {
+        for (int id : selection)
+            if (project.groupOf(id) != null) {
+                grouped = true;
+                break;
+            }
+        if (grouped) menu.add(item("ec.menu.ungroup", null, () -> {
             beforeChange.run();
             project.ungroup(selection);
             changed.run();
@@ -483,9 +480,7 @@ public final class NodeCanvas extends JPanel {
         project.setLink(new Link(from.node(), from.port(), to.node(), to.port()));
         status.accept(L.t("ec.s.linkDone"));
     }
-    private record PortRef(int node, String port, boolean output) {
-
-    }
+    private record PortRef(int node, String port, boolean output) { }
     //endregion
 
     //region Navigation
@@ -509,7 +504,8 @@ public final class NodeCanvas extends JPanel {
     }
     private MouseEvent logical(MouseEvent mouseEvent) {
         if (zoom == 1.0) return mouseEvent;
-        return new MouseEvent(mouseEvent.getComponent(), mouseEvent.getID(), mouseEvent.getWhen(), mouseEvent.getModifiersEx(), (int) Math.round(mouseEvent.getX() / zoom), (int) Math.round(mouseEvent.getY() / zoom), mouseEvent.getClickCount(),
+        return new MouseEvent(mouseEvent.getComponent(), mouseEvent.getID(), mouseEvent.getWhen(), mouseEvent.getModifiersEx(),
+                (int) Math.round(mouseEvent.getX() / zoom), (int) Math.round(mouseEvent.getY() / zoom), mouseEvent.getClickCount(),
                 mouseEvent.isPopupTrigger(), mouseEvent.getButton());
     }
     private void startPan(MouseEvent mouseEvent) {
@@ -520,9 +516,7 @@ public final class NodeCanvas extends JPanel {
         mode = Mode.PAN;
         setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
     }
-    private JViewport viewport() {
-        return getParent() instanceof JViewport viewport ? viewport : null;
-    }
+    private JViewport viewport() { return getParent() instanceof JViewport viewport ? viewport : null; }
     //endregion
 
     //region Mouse Input
@@ -539,9 +533,8 @@ public final class NodeCanvas extends JPanel {
 
         PortRef port = hitPort(point);
         if (port != null) {
-            if (port.output()) {
-                linkStart = port;
-            } else {
+            if (port.output()) linkStart = port;
+            else {
                 Link existing = project.incoming(port.node(), port.port());
                 if (existing != null) {
                     beforeChange.run();
@@ -673,7 +666,7 @@ public final class NodeCanvas extends JPanel {
             String[] labels = prm.choices().stream().map(prm::choiceLabel).toArray(String[]::new);
             StyledComboBox box = new StyledComboBox(style, labels);
             box.setSelectedIndex(Math.max(0, prm.choices().indexOf(current)));
-            box.addActionListener(actionEvent -> finishEditor(true));
+            box.addActionListener(_ -> finishEditor(true));
             bindEscape(box);
             component = box;
         } else {
@@ -733,7 +726,8 @@ public final class NodeCanvas extends JPanel {
         if (component instanceof StyledComboBox box) {
             int i = box.getSelectedIndex();
             value = i >= 0 && i < editorChoices.size() ? editorChoices.get(i) : null;
-        } else value = ((StyledTextField) component).getText().trim();
+        }
+        else value = ((StyledTextField) component).getText().trim();
         int nodeId = editorNode;
         String key = editorKey;
         editor = null;
@@ -776,7 +770,7 @@ public final class NodeCanvas extends JPanel {
         NodeInst nodeInst = hitNode(point);
         NodeGroup group = nodeInst == null ? groupHeaderAt(point) : null;
         if (link != null) {
-            menu.add(item(L.t("ec.menu.deleteLink"), null, () -> {
+            menu.add(item("ec.menu.deleteLink", null, () -> {
                 beforeChange.run();
                 project.removeLink(link);
                 status.accept(L.t("ec.s.linkRemoved"));
@@ -786,13 +780,13 @@ public final class NodeCanvas extends JPanel {
         else if (nodeInst != null) {
             if (!selection.contains(nodeInst.id)) { selection.clear(); selection.add(nodeInst.id); changed.run(); }
             NodeKind nodeKind = Nodes.get(nodeInst.kind);
-            if (!nodeKind.params().isEmpty()) menu.add(item(L.t("ec.menu.edit"), null, () -> openEditor(nodeInst, 0)));
+            if (!nodeKind.params().isEmpty()) menu.add(item("ec.menu.edit", null, () -> openEditor(nodeInst, 0)));
             if (CustomNodes.isCustom(nodeInst.kind)) {
                 String kind = nodeInst.kind;
-                menu.add(item(L.t("ec.menu.openInside"), null, () -> openInside(kind)));
-                menu.add(item(L.t("ec.menu.customText"), null, () -> editCustomTexts(kind)));
+                menu.add(item("ec.menu.openInside", null, () -> openInside(kind)));
+                menu.add(item("ec.menu.customText", null, () -> editCustomTexts(kind)));
             }
-            menu.add(item(L.t("ec.menu.comment"), null, () -> openCommentEditor(nodeInst)));
+            menu.add(item("ec.menu.comment", null, () -> openCommentEditor(nodeInst)));
             menu.add(item(L.t("ec.menu.copy"), "Ctrl+C", this::copySelection));
             menu.add(item(L.t("ec.menu.duplicate"), "Ctrl+D", this::duplicateSelection));
             menu.addSeparator();
@@ -800,16 +794,16 @@ public final class NodeCanvas extends JPanel {
             menu.add(item(L.t("ec.menu.delete"), "Del", this::deleteSelected));
         }
         else if (group != null) {
-            menu.add(item(L.t("ec.menu.renameGroup"), null, () -> renameGroup(group)));
-            JMenu colors = styledMenu(new JMenu(L.t("ec.menu.groupColor")));
+            menu.add(item("ec.menu.renameGroup", null, () -> renameGroup(group)));
+            JMenu colors = styledMenu(new JMenu("ec.menu.groupColor"));
             addColorItems(colors, group);
             menu.add(colors);
-            menu.add(item(L.t("ec.menu.disbandGroup"), null, () -> disbandGroup(group)));
+            menu.add(item("ec.menu.disbandGroup", null, () -> disbandGroup(group)));
         }
         else {
             if (!clipboard.nodes().isEmpty()) menu.add(item(L.t("ec.menu.pasteHere"), "Ctrl+V", () -> pasteClip(clipboard, point)));
             menu.add(item(L.t("ec.menu.selectAll"), "Ctrl+A", this::selectAll));
-            menu.add(item(L.t("ec.menu.arrange"), null, arrange));
+            menu.add(item("ec.menu.arrange", null, arrange));
             menu.addSeparator();
             addGroupItems(menu);
             if (!selection.isEmpty()) menu.addSeparator();
@@ -818,10 +812,10 @@ public final class NodeCanvas extends JPanel {
         menu.show(this, screenPoint.x, screenPoint.y);
     }
     private JMenu addNodeMenu(Point point) {
-        JMenu root = styledMenu(new JMenu(L.t("ec.menu.addNode")));
+        JMenu root = styledMenu(new JMenu("ec.menu.addNode"));
         Map<String, JMenu> categories = new LinkedHashMap<>();
         for (NodeKind nodeKind : addableKinds.get()) {
-            JMenu cat = categories.computeIfAbsent(nodeKind.categoryId(), id -> styledMenu(new JMenu(nodeKind.category())));
+            JMenu cat = categories.computeIfAbsent(nodeKind.categoryId(), _ -> styledMenu(new JMenu(nodeKind.category())));
             cat.add(styledItem(new JMenuItem(nodeKind.title()), () -> addNodeAt(nodeKind.id(), point)));
         }
         for (JMenu cat : categories.values()) root.add(cat);
@@ -843,7 +837,7 @@ public final class NodeCanvas extends JPanel {
     private JMenuItem item(String text, String shortcut, Runnable action) { return styledItem(new JMenuItem(shortcut == null ? text : text + "    " + shortcut), action); }
     private static JMenuItem styledItem(JMenuItem menuItem, Runnable action) {
         styleMenuItem(menuItem);
-        menuItem.addActionListener(actionEvent -> action.run());
+        menuItem.addActionListener(_ -> action.run());
         return menuItem;
     }
     private static void styleMenuItem(JMenuItem menuItem) {
@@ -929,11 +923,11 @@ public final class NodeCanvas extends JPanel {
         g2d.draw(box);
         g2d.setStroke(new BasicStroke(1f));
 
-        g2d.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+        g2d.setFont(FontCache.get(Font.SANS_SERIF, Font.BOLD, 12));
         g2d.setColor(Color.WHITE);
         g2d.drawString(nodeKind.title(), nodeInst.x + NodeGeometry.PAD, nodeInst.y + 17);
 
-        g2d.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+        g2d.setFont(FontCache.get(Font.SANS_SERIF, Font.PLAIN, 11));
         for (int i = 0; i < nodeKind.inputs().size(); i++) {
             Port port = nodeKind.inputs().get(i);
             int cy = NodeGeometry.rowY(nodeInst, i);
@@ -976,7 +970,7 @@ public final class NodeCanvas extends JPanel {
         if (!(editor != null && editorNode == nodeInst.id && COMMENT_KEY.equals(editorKey))) {
             java.util.List<String> lines = NodeGeometry.commentLines(nodeInst);
             if (!lines.isEmpty()) {
-                g2d.setFont(new Font(Font.SANS_SERIF, Font.ITALIC, 11));
+                g2d.setFont(FontCache.get(Font.SANS_SERIF, Font.ITALIC, 11));
                 g2d.setColor(COMMENT);
                 int top = NodeGeometry.commentTop(nodeInst);
                 for (int i = 0; i < lines.size(); i++)

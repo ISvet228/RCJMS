@@ -1,7 +1,4 @@
 package Project.OpenCl;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;

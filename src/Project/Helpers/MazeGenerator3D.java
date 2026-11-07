@@ -1,7 +1,4 @@
 package Project.Helpers;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import java.util.*;
 
@@ -228,7 +225,7 @@ public class MazeGenerator3D {
 
         if (foundX < 0) { carveDirect(maze, fromX, fromY, toX, toY); return; }
         int cx = foundX, cy = foundY;
-        while (cx >= 0 && cy >= 0) {
+        while (true) {
             if (maze[cy][cx] == WALL) maze[cy][cx] = OPEN;
             int p = parent[cy][cx];
             if (p < 0) break;

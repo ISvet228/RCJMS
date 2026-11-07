@@ -1,7 +1,4 @@
 package Project;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 import Project.Credits.CreditsView;
 import Project.Game.GameView;
 import Project.MainMenu.MainMenuView;

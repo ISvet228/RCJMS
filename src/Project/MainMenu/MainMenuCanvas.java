@@ -1,11 +1,9 @@
 package Project.MainMenu;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
+
+import Project.Helpers.FontCache;
 
 import Project.StyleUI.*;
 
-import javax.swing.*;
 import java.awt.*;
 import java.util.Collection;
 import java.util.List;
@@ -54,7 +52,7 @@ public final class MainMenuCanvas {
     //region Placement
     public int x(int designX) { return originX + (int) Math.round(designX * scale); }
     public int y(int designY) { return originY + (int) Math.round(designY * scale); }
-    public Font font(float designSize, int style) { return new Font(Font.SANS_SERIF, style, Math.max(1, (int) Math.round(designSize * scale))); }
+    public Font font(float designSize, int style) { return FontCache.get(Font.SANS_SERIF, style, Math.max(1, (int) Math.round(designSize * scale))); }
     public void place(Component component, int designX, int designY, int designWidth, int designHeight) {
         if (component instanceof StyledToggleButton toggle) {
             toggle.setReferenceSize(screenWidth, screenHeight);
@@ -108,11 +106,11 @@ public final class MainMenuCanvas {
         g2d.drawRoundRect(x, y, width - 1, height - 1, arc, arc);
         g2d.dispose();
     }
-    void paintDivider(Graphics graphics, Style style, int designX, int designFromY, int designToY) {
+    void paintDivider(Graphics graphics, Style style) {
         Graphics2D g2d = (Graphics2D) graphics.create();
         g2d.setColor(borderColor(style));
-        int top = y(designFromY);
-        g2d.fillRect(x(designX), top, size(1), Math.max(1, y(designToY) - top));
+        int top = y(134);
+        g2d.fillRect(x(480), top, size(1), Math.max(1, y(428) - top));
         g2d.dispose();
     }
     private static Color panelColor(Style style) {

@@ -311,7 +311,7 @@ public final class MoriartyEngine implements RenderEngine {
             int fillet = (corners[cy * mapWidth + cx] >> 4) & 15;
             if (fillet != 0) {
                 double sHit = concaveEntry(px, py, ux, uy, cx, cy, fillet, column.scratch);
-                if (sHit != INF && sHit <= MoriartyEngine.MAX_COLUMN_DISTANCE) {
+                if (sHit <= MoriartyEngine.MAX_COLUMN_DISTANCE) {
                     int side = Math.abs(column.scratch.nrmX) >= Math.abs(column.scratch.nrmY) ? 0 : 1;
                     column.wallDist = sHit;
                     column.wallTexU = faceCoord(side, px + ux * sHit, py + uy * sHit, ux, uy);

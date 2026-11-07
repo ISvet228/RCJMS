@@ -1,7 +1,4 @@
 package Project.Helpers;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import Project.StyleUI.Style;
 
@@ -89,7 +86,7 @@ public final class EditorKit {
         g2d.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
         return g2d;
     }
-    public static Font font(float size, boolean bold) { return new Font(Font.SANS_SERIF, bold ? Font.BOLD : Font.PLAIN, 12).deriveFont(size); }
+    public static Font font(float size, boolean bold) { return FontCache.get(Font.SANS_SERIF, bold ? Font.BOLD : Font.PLAIN, size); }
     public static void line(int x0, int y0, int x1, int y1, BiConsumer<Integer, Integer> action) {
         int dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
         while (true) {
@@ -127,7 +124,7 @@ public final class EditorKit {
         }
         content.add(buttons, BorderLayout.SOUTH);
         dialog.setContentPane(content);
-        dialog.getRootPane().registerKeyboardAction(actionEvent -> dialog.dispose(), KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
+        dialog.getRootPane().registerKeyboardAction(_ -> dialog.dispose(), KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
         dialog.setResizable(false);
         dialog.pack();
         dialog.setLocationRelativeTo(parent);
@@ -301,7 +298,7 @@ public final class EditorKit {
                 }
                 case HELP -> {
                     clippedG2d.draw(new Ellipse2D.Double(0.10, 0.10, 0.80, 0.80));
-                    Font font = new Font(Font.SANS_SERIF, Font.BOLD, 12).deriveFont(0.58f);
+                    Font font = FontCache.get(Font.SANS_SERIF, Font.BOLD, 0.58f);
                     clippedG2d.setFont(font);
                     Rectangle2D rectangle2D = font.getStringBounds("?", clippedG2d.getFontRenderContext());
                     clippedG2d.drawString("?", (float) (0.5 - rectangle2D.getCenterX()), (float) (0.5 - rectangle2D.getCenterY()));
@@ -465,8 +462,9 @@ public final class EditorKit {
     public static class ToolButton extends JComponent {
         private final Theme theme;
         private final Layout layout;
-        private Glyph icon, glyph;
-        private String text = "", badge;
+        private final Glyph icon;
+        private Glyph glyph;
+        private String text, badge;
         private Color swatch, glyphColor, accent;
         private boolean selectable, selected, hover, pressed, toggle;
         private double rotation;
@@ -678,7 +676,7 @@ public final class EditorKit {
     public static class HintBar extends JComponent {
         private String hint = "", flash = "";
         private Tone flashTone = Tone.INFO;
-        private final Timer timer = new Timer(3600, actionEvent -> { flash = ""; repaint(); });
+        private final Timer timer = new Timer(3600, _ -> { flash = ""; repaint(); });
 
         public HintBar() { setOpaque(false); setPreferredSize(new Dimension(300, 38)); timer.setRepeats(false); }
 

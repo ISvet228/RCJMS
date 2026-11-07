@@ -1,11 +1,7 @@
 package Project.TextureEditor;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 import Project.Helpers.EditorKit;
 
-import Project.StyleUI.Style;
-import Project.StyleUI.StyledTextField;
+import Project.StyleUI.*;
 
 import javax.swing.*;
 import java.awt.*;
@@ -52,7 +48,7 @@ public final class ColorPicker extends EditorKit.Column {
         hexField = new StyledTextField(style, "FFFFFF");
         hexField.setHorizontalAlignment(JTextField.CENTER);
         hexField.limitInput(7, c -> c == '#' || Character.digit(c, 16) >= 0);
-        hexField.addActionListener(actionEvent -> applyHex());
+        hexField.addActionListener(_ -> applyHex());
         hexField.addFocusListener(new FocusAdapter() { @Override public void focusLost(FocusEvent focusEvent) { applyHex(); } });
 
         JPanel hexRow = new JPanel(new BorderLayout(8, 0));

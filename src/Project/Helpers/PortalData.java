@@ -1,7 +1,4 @@
 package Project.Helpers;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -41,17 +38,6 @@ public final class PortalData {
     private static long key(int x, int y) { return (((long) y) << 32) ^ (x & 0xffffffffL); }
     //endregion
 
-    //region Warping
-    public static double[] transformPoint(Portal portal, double x, double y) {
-        double nax = portal.dirX, nay = portal.dirY, mbx = portal.linkedDirX, mby = portal.linkedDirY;
-        double entryBaseX = portal.x + Math.max(nax, 0) + Math.max(nay, 0);
-        double entryBaseY = portal.y + Math.max(nay, 0) + Math.max(-nax, 0);
-        double exitBaseX = portal.linkedX + Math.max(mbx, 0) + Math.max(mby, 0);
-        double exitBaseY = portal.linkedY + Math.max(mby, 0) + Math.max(-mbx, 0);
-        double cosT = nax * mbx + nay * mby, sinT = nax * mby - nay * mbx;
-        double px = x - entryBaseX, py = y - entryBaseY;
-        return new double[]{exitBaseX + px * cosT - py * sinT, exitBaseY + px * sinT + py * cosT};
-    }
     public static double[] teleport(Portal portal, double x, double y) {
         double nax = portal.dirX, nay = portal.dirY, mbx = portal.linkedDirX, mby = portal.linkedDirY;
         double ex = portal.x + Math.max(nax, 0) + Math.max(nay, 0), ey = portal.y + Math.max(nay, 0) + Math.max(-nax, 0);

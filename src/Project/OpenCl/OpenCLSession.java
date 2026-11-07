@@ -1,7 +1,4 @@
 package Project.OpenCl;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import java.lang.foreign.*;
 import java.util.concurrent.*;
@@ -82,16 +79,16 @@ public final class OpenCLSession implements AutoCloseable {
             for (int p = 0; p < platformTotal && device == null; p++) {
                 MemorySegment platform = platforms.getAtIndex(ADDRESS, p);
                 MemorySegment count = arena.allocate(JAVA_INT);
-                if (api.getDeviceIDs(platform, CL.DEVICE_TYPE_GPU, 0, MemorySegment.NULL, count) != CL.SUCCESS) continue;
+                if (api.getDeviceIDs(platform, 0, MemorySegment.NULL, count) != CL.SUCCESS) continue;
                 int deviceTotal = count.get(JAVA_INT, 0);
                 if (deviceTotal <= 0) continue;
                 MemorySegment devices = arena.allocate(ADDRESS.byteSize() * deviceTotal);
-                if (api.getDeviceIDs(platform, CL.DEVICE_TYPE_GPU, deviceTotal, devices, MemorySegment.NULL) != CL.SUCCESS) continue;
+                if (api.getDeviceIDs(platform, deviceTotal, devices, MemorySegment.NULL) != CL.SUCCESS) continue;
                 for (int d = 0; d < deviceTotal; d++) {
                     MemorySegment candidate = devices.getAtIndex(ADDRESS, d);
                     if (CL.deviceInt(api, candidate, CL.DEVICE_AVAILABLE) == CL.TRUE && CL.deviceInt(api, candidate, CL.DEVICE_COMPILER_AVAILABLE) == CL.TRUE) {
                         device = candidate;
-                        platformName = CL.platformString(api, platform, CL.PLATFORM_NAME);
+                        platformName = CL.platformString(api, platform);
                         break;
                     }
                 }
@@ -104,10 +101,10 @@ public final class OpenCLSession implements AutoCloseable {
             MemorySegment deviceArray = arena.allocate(ADDRESS.byteSize());
             deviceArray.setAtIndex(ADDRESS, 0, device);
 
-            context = api.createContext(MemorySegment.NULL, 1, deviceArray, err);
+            context = api.createContext(deviceArray, err);
             CL.check(err.get(JAVA_INT, 0), "clCreateContext");
 
-            queue = api.createQueue(context, device, 0, err);
+            queue = api.createQueue(context, device, err);
             CL.check(err.get(JAVA_INT, 0), "clCreateCommandQueue");
 
             selfTest(api, arena, context, device, queue, deviceArray);

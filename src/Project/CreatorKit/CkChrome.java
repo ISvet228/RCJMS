@@ -47,9 +47,7 @@ public final class CkChrome {
         text.setRaw(L.t(key) + ":");
         return text;
     }
-    public record Labelled(ToolButton button, String text, int fullWidth) {
-
-    }
+    public record Labelled(ToolButton button, String text, int fullWidth) { }
     //endregion
 
     //region Top Bar

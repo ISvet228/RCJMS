@@ -27,7 +27,7 @@ public final class CkDialogs {
         fields.setOpaque(false);
         fields.setLayout(new BoxLayout(fields, BoxLayout.Y_AXIS));
         for (int i = 0; i < labels.length; i++) {
-            JLabel label = new JLabel(labels[i]);
+            StyledLabel label = new StyledLabel(style, labels[i], false, false);
             label.setForeground(EditorKit.MUTED);
             label.setFont(EditorKit.font(12f, false));
             label.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -38,8 +38,7 @@ public final class CkDialogs {
                 area.setLineWrap(true);
                 area.setWrapStyleWord(true);
                 styleInput(area);
-                JScrollPane scroll = new JScrollPane(area);
-                scroll.setBorder(BorderFactory.createLineBorder(EditorKit.CARD_LINE));
+                StyledScrollPane scroll = new StyledScrollPane(area, style);
                 scroll.setAlignmentX(Component.LEFT_ALIGNMENT);
                 scroll.setPreferredSize(new Dimension(440, 60));
                 scroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 72));
@@ -116,7 +115,7 @@ public final class CkDialogs {
         return r[0].isBlank() ? null : r[0].strip();
     }
     public static String[] customTexts(Component parent, Style style, String dialogTitle, String titleValue, String descValue) {
-        String[] r = form(parent, style, dialogTitle, new String[]{L.t("ec.g.customPrompt"), L.t("ec.g.descPrompt")},
+        String[] r = form(parent, style, dialogTitle, new String[]{"ec.g.customPrompt", "ec.g.descPrompt"},
                 new String[]{titleValue, descValue}, new boolean[]{false, true});
         if (r == null || r[0].isBlank()) return null;
         return new String[]{r[0].strip(), r[1].strip()};

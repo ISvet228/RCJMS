@@ -1,6 +1,6 @@
 package Project.Game;
 
-import Project.Helpers.MazeGenerator;
+import Project.Helpers.*;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -25,13 +25,12 @@ final class TextMode {
     //endregion
 
     //region Layout
-    static BufferedImage build(int w, int h, int[][] map, float[][] known, double px, double py, double angle,
-                               String input, String status) {
+    static BufferedImage build(int w, int h, int[][] map, float[][] known, double px, double py, double angle, String input, String status) {
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = img.createGraphics();
         g2d.setColor(BLACK);
         g2d.fillRect(0, 0, w, h);
-        Font mainFont = new Font(Font.MONOSPACED, Font.PLAIN, Math.max(10, h / 36));
+        Font mainFont = FontCache.get(Font.MONOSPACED, Font.PLAIN, Math.max(10, h / 36));
         g2d.setFont(mainFont);
         FontMetrics fontMetrics = g2d.getFontMetrics();
         int cw = fontMetrics.charWidth('M'), ch = fontMetrics.getHeight();
@@ -44,7 +43,7 @@ final class TextMode {
         int mcw = mfm.charWidth('M'), mch = mfm.getHeight();
         int gridX = Math.max(0, (panelW - mcw * FRAME_COLS) / 2), gridY = Math.max(0, (panelH - mch * FRAME_ROWS) / 2);
         drawMinimap(g2d, mfm, mcw, mch, gridX, gridY, map, known, px, py, angle);
-        drawFrame(g2d, mfm, mcw, mch, gridX, gridY, FRAME_COLS, FRAME_ROWS);
+        drawFrame(g2d, mfm, mcw, mch, gridX, gridY);
 
         g2d.setFont(mainFont);
         int viewX = panelW + cw;
@@ -146,24 +145,24 @@ final class TextMode {
     private static Font fitMinimapFont(Graphics2D g2d, int panelW, int panelH) {
         int pad = 6;
         for (int size = 40; size >= 6; size--) {
-            Font font = new Font(Font.MONOSPACED, Font.PLAIN, size);
+            Font font = FontCache.get(Font.MONOSPACED, Font.PLAIN, size);
             FontMetrics fontMetrics = g2d.getFontMetrics(font);
             if (fontMetrics.charWidth('M') * FRAME_COLS <= panelW - 2 * pad && fontMetrics.getHeight() * FRAME_ROWS <= panelH - 2 * pad) return font;
         }
-        return new Font(Font.MONOSPACED, Font.PLAIN, 6);
+        return FontCache.get(Font.MONOSPACED, Font.PLAIN, 6);
     }
-    private static void drawFrame(Graphics2D g2d, FontMetrics fontMetrics, int cw, int ch, int x0, int y0, int w, int h) {
+    private static void drawFrame(Graphics2D g2d, FontMetrics fontMetrics, int cw, int ch, int x0, int y0) {
         g2d.setColor(DIM);
         int base = fontMetrics.getAscent();
         StringBuilder top = new StringBuilder("┌"), bottom = new StringBuilder("└");
-        for (int i = 0; i < w - 2; i++) { top.append('─'); bottom.append('─'); }
+        for (int i = 0; i < TextMode.FRAME_COLS - 2; i++) { top.append('─'); bottom.append('─'); }
         top.append('┐');
         bottom.append('┘');
         g2d.drawString(top.toString(), x0, y0 + base);
-        g2d.drawString(bottom.toString(), x0, y0 + (h - 1) * ch + base);
-        for (int r = 1; r < h - 1; r++) {
+        g2d.drawString(bottom.toString(), x0, y0 + (TextMode.FRAME_ROWS - 1) * ch + base);
+        for (int r = 1; r < TextMode.FRAME_ROWS - 1; r++) {
             g2d.drawString("│", x0, y0 + r * ch + base);
-            g2d.drawString("│", x0 + (w - 1) * cw, y0 + r * ch + base);
+            g2d.drawString("│", x0 + (TextMode.FRAME_COLS - 1) * cw, y0 + r * ch + base);
         }
     }
     private static String clip(String s, int max) {

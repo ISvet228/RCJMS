@@ -1,7 +1,6 @@
 package Project.Game;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
+
+import Project.Helpers.FontCache;
 import Project.MainMenu.MainMenuView;
 import Project.RCJMS;
 import Project.TextureEditor.TextureEditorView;
@@ -13,7 +12,6 @@ import javax.swing.*; //Frame Library
 import java.awt.*; //Graphics Library
 import java.awt.event.*; //Input Library
 import java.awt.image.*; //Buffer Library
-import java.awt.geom.Point2D;
 import java.io.IOException;
 
 public class GameView extends JPanel implements Runnable, KeyListener, MouseMotionListener, MouseListener, MouseWheelListener {
@@ -95,7 +93,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private static volatile boolean noCeiling = SaveData.load().noCeiling;
     private static volatile boolean textMode = SaveData.load().textMode;
     private static final double DOOM_UNITS_PER_CELL = 128, DOOM_TICS_PER_SECOND = 35, DOOM_BOB_CAP = 16;
-    private static final double BOB_RATE = 2 * Math.PI * (8192 / 20) * DOOM_TICS_PER_SECOND / 8192;
+    private static final double BOB_RATE = 2 * Math.PI * ((double) 8192 / 20) * DOOM_TICS_PER_SECOND / 8192;
     //endregion
     //region Textures
     private final RuntimeTexture wallTexture = TextureEditorView.readRuntimeTexture(AppPaths.WALL_TEXTURE_FILE, TextureEditorView.MAX_TEXTURE_SIZE, TextureEditorView.MAX_TEXTURE_SIZE);
@@ -109,14 +107,14 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private static volatile int miniMapCellPixels = 6;
     //endregion
     //region Fonts
-    private final Font fpsFont = new Font(Font.MONOSPACED, Font.BOLD, 20);
-    private final Font openClFont = new Font(Font.MONOSPACED, Font.BOLD, 16);
-    private final Font timerFont = new Font(Font.MONOSPACED, Font.BOLD, 24);
-    private static final Font BADGE_FONT = new Font(Font.MONOSPACED, Font.BOLD, 16);
-    private static final Font BIG_SANS_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 80);
-    private static final Font SMALL_SANS_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 20);
-    private static final Font BIG_MONO_FONT = new Font(Font.MONOSPACED, Font.BOLD, 56);
-    private static final Font FOG_HINT_FONT = new Font(Font.MONOSPACED, Font.BOLD, 12);
+    private final Font fpsFont = FontCache.get(Font.MONOSPACED, Font.BOLD, 20);
+    private final Font openClFont = FontCache.get(Font.MONOSPACED, Font.BOLD, 16);
+    private final Font timerFont = FontCache.get(Font.MONOSPACED, Font.BOLD, 24);
+    private static final Font BADGE_FONT = FontCache.get(Font.MONOSPACED, Font.BOLD, 16);
+    private static final Font BIG_SANS_FONT = FontCache.get(Font.SANS_SERIF, Font.BOLD, 80);
+    private static final Font SMALL_SANS_FONT = FontCache.get(Font.SANS_SERIF, Font.PLAIN, 20);
+    private static final Font BIG_MONO_FONT = FontCache.get(Font.MONOSPACED, Font.BOLD, 56);
+    private static final Font FOG_HINT_FONT = FontCache.get(Font.MONOSPACED, Font.BOLD, 12);
     //endregion
     //region Fog Of War State
     private static final double FOG_REVEAL_RADIUS = 4.5, FOG_REVEAL_SPEED = 3.0, FOG_RAY_STEP = 0.08;
@@ -131,8 +129,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private final StringBuilder textInput = new StringBuilder();
     private String textStatus = "type f, b, l, r (tiles) or tl, tr (quarter turns), e.g. f3 tr f2";
     private BufferedImage textScreen;
-    private int[][] textScreenMap;
-    private boolean textDirty = true;
     private static final java.util.regex.Pattern TEXT_MOVE = java.util.regex.Pattern.compile("(t[lr]|[fblr])(\\d*)");
     //endregion
     //region Floor Transition State
@@ -157,7 +153,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
     //region Loading State
     private volatile boolean renderPrepPending = true;
-    private int preparedFloor = -1;
     private volatile Thread busyWorker;
     private volatile Runnable pendingWork;
     private volatile LevelSpec pendingLevel;
@@ -527,7 +522,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             char c = Character.toLowerCase(keyEvent.getKeyChar());
             if ((Character.isLetterOrDigit(c) || c == ' ') && textInput.length() < 60) {
                 textInput.append(c);
-                textDirty = true;
                 repaint();
             }
         }
@@ -1044,7 +1038,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         releaseInput();
     }
     private void prepareRenderer() {
-        preparedFloor = currentFloor;
         syncRenderer(renderFrame);
         resolveRenderEngine().prepare(renderFrame);
     }
@@ -1284,7 +1277,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         int px = margin + (int) Math.round((playerX - viewLeft) * cell), py = margin + (int) Math.round((playerY - viewTop) * cell);
         int tick = Math.max(cell, (int) Math.round(cell * 1.8));
-        drawMiniMapLine(px, py, px + (int) Math.round(Math.cos(cameraAngle) * tick), py + (int) Math.round(Math.sin(cameraAngle) * tick), 0xFFAA00);
+        drawMiniMapLine(px, py, px + (int) Math.round(Math.cos(cameraAngle) * tick), py + (int) Math.round(Math.sin(cameraAngle) * tick));
         int half = Math.max(1, cell / 3);
         fillMiniRect(px - half, py - half, px + half + 1, py + half + 1, 0xFF0000, margin, margin, margin + boxW, margin + boxH);
     }
@@ -1342,7 +1335,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         }
         int tickLen = diskRadiusPx - Math.max(1, (int) Math.round(4 * s));
         drawMiniMapLine(centerX, centerY, centerX + (int)Math.round(Math.cos(cameraAngle) * tickLen),
-                centerY + (int)Math.round(Math.sin(cameraAngle) * tickLen), 0xFFAA00);
+                centerY + (int)Math.round(Math.sin(cameraAngle) * tickLen));
         int playerSize = Math.max(1, (int) Math.round(3 * s));
         for (int yy = -playerSize; yy <= playerSize; yy++) {
             for (int xx = -playerSize; xx <= playerSize; xx++) {
@@ -1351,10 +1344,10 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             }
         }
     }
-    private void drawMiniMapLine(int x0, int y0, int x1, int y1, int color) {
+    private void drawMiniMapLine(int x0, int y0, int x1, int y1) {
         int dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1, dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1, err = dx + dy;
         while (true) {
-            if (x0 >= 0 && y0 >= 0 && x0 < RCJMS.GAME_WIDTH && y0 < RCJMS.GAME_HEIGHT) pixels[x0 + y0 * RCJMS.GAME_WIDTH] = color;
+            if (x0 >= 0 && y0 >= 0 && x0 < RCJMS.GAME_WIDTH && y0 < RCJMS.GAME_HEIGHT) pixels[x0 + y0 * RCJMS.GAME_WIDTH] = 16755200;
             if (x0 == x1 && y0 == y1) break;
             int e2 = 2 * err;
             if (e2 >= dy) { err += dy; x0 += sx; }
@@ -1441,7 +1434,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         int px = margin + (int) Math.round((playerX - viewLeft) * cell), py = margin + (int) Math.round((playerY - viewTop) * cell);
         int tick = Math.max(cell, (int) Math.round(cell * 1.8));
-        drawMiniMapLine(px, py, px + (int) Math.round(Math.cos(cameraAngle) * tick), py + (int) Math.round(Math.sin(cameraAngle) * tick), 0xFFAA00);
+        drawMiniMapLine(px, py, px + (int) Math.round(Math.cos(cameraAngle) * tick), py + (int) Math.round(Math.sin(cameraAngle) * tick));
         int half = Math.max(1, cell / 3);
         fillMiniRect(px - half, py - half, px + half + 1, py + half + 1, 0xFF0000, margin, margin, margin + box, margin + box);
 
@@ -1570,9 +1563,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         }
         drawDarkness(1 - smooth(crossPhase()));
         double captionTime = floorTransitionTime - (STEP_DURATION + CROSS_DURATION);
-        if (captionTime >= 0 && captionTime < CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION + CAPTION_FADE_DURATION) {
-            drawFloorCaption(captionTime);
-        }
+        if (captionTime >= 0 && captionTime < CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION + CAPTION_FADE_DURATION) drawFloorCaption(captionTime);
     }
     private void drawDarkness(double amount) {
         float alpha = (float) Math.clamp(amount, 0, 1);
@@ -1595,10 +1586,12 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (captionTime < CAPTION_ROLL_DURATION) {
             alpha = Math.clamp((float) (captionTime / Math.max(0.001, CAPTION_ROLL_DURATION * 0.4)), 0f, 1f);
             rollProgress = 1f - Math.pow(1f - Math.clamp((float) (captionTime / CAPTION_ROLL_DURATION), 0f, 1f), 3);
-        } else if (captionTime < (CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION)) {
+        }
+        else if (captionTime < (CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION)) {
             alpha = 1f;
             rollProgress = 1;
-        } else {
+        }
+        else {
             alpha = Math.clamp((float) (1.0 - (captionTime - (CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION)) / CAPTION_FADE_DURATION), 0f, 1f);
             rollProgress = 1;
         }
@@ -1740,10 +1733,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             textInput.setLength(0);
             textCommand(line);
         }
-        else if (key == KeyEvent.VK_BACK_SPACE && textInput.length() > 0) {
-            textInput.setLength(textInput.length() - 1);
-        }
-        textDirty = true;
+        else if (key == KeyEvent.VK_BACK_SPACE && !textInput.isEmpty()) textInput.setLength(textInput.length() - 1);
         repaint();
     }
     private void textCommand(String line) {
@@ -1808,8 +1798,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         snapToTile();
         int w = bufferedImage.getWidth(), h = bufferedImage.getHeight();
         textScreen = TextMode.build(w, h, map, exploredGrid(), playerX, playerY, cameraAngle, textInput.toString(), textStatus);
-        textScreenMap = map;
-        textDirty = false;
         Graphics2D g2d = bufferedImage.createGraphics();
         g2d.drawImage(textScreen, 0, 0, null);
         g2d.dispose();

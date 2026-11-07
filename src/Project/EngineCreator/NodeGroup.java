@@ -23,11 +23,4 @@ public final class NodeGroup {
         this.color = color;
     }
     //endregion
-
-    //region Color Assignment
-    public String nextColor() {
-        int i = Arrays.asList(PALETTE).indexOf(color);
-        return PALETTE[(i + 1) % PALETTE.length];
-    }
-    //endregion
 }

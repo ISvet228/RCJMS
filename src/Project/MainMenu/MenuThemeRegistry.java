@@ -1,7 +1,4 @@
 package Project.MainMenu;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import java.io.IOException;
 import java.lang.reflect.Modifier;
@@ -15,7 +12,6 @@ public final class MenuThemeRegistry {
     //region Variables
     //region Registry
     private static final String PACKAGE = "MenuThemes";
-    public static final String DEFAULT_ID = "space";
     private static volatile List<MenuTheme> themes;
     //endregion
     //region Clock

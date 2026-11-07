@@ -1,6 +1,4 @@
 package Project.ThemeCreator;
-import Project.EngineCreator.*;
-import Project.CreatorKit.*;
 
 import java.util.*;
 
@@ -69,8 +67,6 @@ public final class ThemeTypes {
     private static Spec text(String key, String def) { return new Spec(key, Kind.TEXT, def, List.of()); }
     private static Spec choice(String key, String def, String... options) { return new Spec(key, Kind.CHOICE, def, List.of(options)); }
     public enum Kind { NUM, COLOR, CHOICE, TEXT }
-    public record Spec(String key, Kind kind, Object def, List<String> choices) {
-
-    }
+    public record Spec(String key, Kind kind, Object def, List<String> choices) { }
     //endregion
 }

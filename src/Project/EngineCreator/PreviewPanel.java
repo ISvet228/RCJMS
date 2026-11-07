@@ -34,7 +34,6 @@ public final class PreviewPanel extends JPanel {
     private final Text status = new Text(null, 11f, false, EditorKit.MUTED, 0);
     private final Note error = new Note(188, 11f, EditorKit.BAD);
     private final StyledComboBox geometry;
-    private final StyledButton buildButton;
     //endregion
     //region Callbacks
     private final Supplier<CkProject> projectSupplier;
@@ -67,10 +66,10 @@ public final class PreviewPanel extends JPanel {
 
         geometry = new StyledComboBox(style, new Object[]{L.t("ec.o.euclid"), L.t("ec.o.hyperbolic")});
         geometry.setPreferredSize(new Dimension(188, 30));
-        geometry.addActionListener(actionEvent -> render());
-        buildButton = new StyledButton(style, "ec.ui.previewBuild");
+        geometry.addActionListener(_ -> render());
+        StyledButton buildButton = new StyledButton(style, "ec.ui.previewBuild");
         buildButton.setPreferredSize(new Dimension(188, 32));
-        buildButton.addActionListener(actionEvent -> build());
+        buildButton.addActionListener(_ -> build());
 
         Column info = new Column();
         info.put(new Text("ec.ui.previewTitle", 12f, true, EditorKit.TEXT, 0), 0);

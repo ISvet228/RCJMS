@@ -1,5 +1,2 @@
 package Project.CreatorKit;
-
-public record Link(int from, String fromPort, int to, String toPort) {
-
-}
+public record Link(int from, String fromPort, int to, String toPort) { }

@@ -1,7 +1,6 @@
 package Project.Credits;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
+
+import Project.Helpers.FontCache;
 import Project.MainMenu.MainMenuView;
 import Project.RCJMS;
 import Project.Helpers.NSLocalizedString;
@@ -32,7 +31,10 @@ public class CreditsView extends JPanel {
             "",
             "cv.ljubo|https://github.com/lobujo552",
             "",
-            "cv.fungun|https://github.com/AnimemanDude",
+            "cv.fungun1|https://github.com/AnimemanDude",
+            "cv.fungun2",
+            "cv.fungun3",
+            "cv.fungun4",
             "",
             "cv.useful_resources",
             "",
@@ -84,7 +86,7 @@ public class CreditsView extends JPanel {
                 CreditLine clickedLine = getClickedLine(mouseEvent.getX(), mouseEvent.getY());
                 if (clickedLine != null && clickedLine.url != null) openURL(clickedLine.url);
             }});
-        scrollTimer = new Timer(16, actionEvent -> {updateCredits();repaint();});
+        scrollTimer = new Timer(16, _ -> {updateCredits();repaint();});
         scrollTimer.start();
         SwingUtilities.invokeLater(this::requestFocusInWindow);
     }
@@ -171,8 +173,8 @@ public class CreditsView extends JPanel {
     private void drawCredits(Graphics2D g2d) {
         int baseFontSize = 28, lineHeight = 45;
 
-        Font baseFont = new Font(Font.SANS_SERIF, Font.PLAIN, baseFontSize);
-        Font titleFont = new Font(Font.SANS_SERIF, Font.BOLD, 40);
+        Font baseFont = FontCache.get(Font.SANS_SERIF, Font.PLAIN, baseFontSize);
+        Font titleFont = FontCache.get(Font.SANS_SERIF, Font.BOLD, 40);
 
         double startY = RCJMS.SCREEN_HEIGHT + 100;
 
@@ -243,7 +245,7 @@ public class CreditsView extends JPanel {
             if (line.url == null || line.text.isEmpty()) continue;
             double y = scrollY + i * lineHeight;
 
-            Font font = new Font(Font.SANS_SERIF, Font.PLAIN, 28);
+            Font font = FontCache.get(Font.SANS_SERIF, Font.PLAIN, 28);
             FontMetrics fontMetrics = getFontMetrics(font);
 
             int textWidth = fontMetrics.stringWidth(line.text);

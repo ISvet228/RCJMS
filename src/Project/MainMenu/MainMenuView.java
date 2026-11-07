@@ -1,7 +1,4 @@
 package Project.MainMenu;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 import Project.Credits.CreditsView;
 import Project.MapEditor.MapEditorView;
 import Project.RCJMS;
@@ -17,9 +14,10 @@ import java.awt.geom.*;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Objects;
 import java.util.Random;
 
-public class MainMenuView extends JPanel implements MainMenuHost {
+public class MainMenuView extends JPanel {
     //region Variables
     //region Drift Constants
     private static final long IDLE_BEFORE_DRIFT_MS = 15_000;
@@ -112,7 +110,7 @@ public class MainMenuView extends JPanel implements MainMenuHost {
         showScreen(Screen.MAIN);
 
         for (int i = 0; i < 80; i++) stars.add(createRandomStar());
-        starTimer = new Timer(16, actionEvent -> { trackPointer(); updateStars(); updateDrift(); repaint(); });
+        starTimer = new Timer(16, _ -> { trackPointer(); updateStars(); updateDrift(); repaint(); });
         starTimer.start();
     }
     //endregion
@@ -136,16 +134,16 @@ public class MainMenuView extends JPanel implements MainMenuHost {
         fullscreen = value;
         settingsScreen.syncFullscreen(value);
     }
-    @Override public int screenWidth() { return RCJMS.SCREEN_WIDTH; }
-    @Override public int screenHeight() { return RCJMS.SCREEN_HEIGHT; }
-    @Override public Style style() { return currentStyle; }
-    @Override public int windowWidth() { return windowWidth; }
-    @Override public boolean isFullscreen() { return fullscreen; }
-    @Override public void applyFullscreen(boolean value) {
+    public int screenWidth() { return RCJMS.SCREEN_WIDTH; }
+    public int screenHeight() { return RCJMS.SCREEN_HEIGHT; }
+    public Style style() { return currentStyle; }
+    public int windowWidth() { return windowWidth; }
+    public boolean isFullscreen() { return fullscreen; }
+    public void applyFullscreen(boolean value) {
         fullscreen = value;
         RCJMS.instance.setFullscreen(value, false);
     }
-    @Override public void setWindowSize(int width, int height) {
+    public void setWindowSize(int width, int height) {
         windowWidth = width;
         windowHeight = height;
         RCJMS.GAME_WIDTH = width;
@@ -200,7 +198,7 @@ public class MainMenuView extends JPanel implements MainMenuHost {
             g2d.scale(canvas.scale(), canvas.scale());
             menuTheme = MenuThemeRegistry.refresh(menuTheme);
             menuTheme.paintBase(g2d, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT, MenuThemeRegistry.clock());
-            if (menuTheme.hasStars()) for (Star star : stars) drawStar(g2d, star);
+            if (Objects.equals(menuTheme.id(), "space")) for (Star star : stars) drawStar(g2d, star);
             if (screen == Screen.MAIN) menuTheme.paintOverlay(g2d, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
             else {
                 g2d.setColor(DIM);
@@ -241,7 +239,7 @@ public class MainMenuView extends JPanel implements MainMenuHost {
 
     //region Screens
     private enum Screen { MAIN, PLAY, SETTINGS, CONTROLS }
-    @Override public void showMain() { showScreen(Screen.MAIN); }
+    public void showMain() { showScreen(Screen.MAIN); }
     private void showScreen(Screen next) {
         screen = next;
         for (JComponent component : mainComponents) component.setVisible(next == Screen.MAIN);
@@ -253,21 +251,21 @@ public class MainMenuView extends JPanel implements MainMenuHost {
         repaint();
     }
     private void setupMainButtons() {
-        playButton.addActionListener(actionEvent -> showScreen(Screen.PLAY));
-        settingsButton.addActionListener(actionEvent -> showScreen(Screen.SETTINGS));
-        controlsButton.addActionListener(actionEvent -> showScreen(Screen.CONTROLS));
-        mapEditorButton.addActionListener(actionEvent -> RCJMS.instance.changeView(RCJMS.instance.mapEditorView = new MapEditorView(), "map_editor"));
-        textureEditorButton.addActionListener(actionEvent -> {
+        playButton.addActionListener(_ -> showScreen(Screen.PLAY));
+        settingsButton.addActionListener(_ -> showScreen(Screen.SETTINGS));
+        controlsButton.addActionListener(_ -> showScreen(Screen.CONTROLS));
+        mapEditorButton.addActionListener(_ -> RCJMS.instance.changeView(RCJMS.instance.mapEditorView = new MapEditorView(), "map_editor"));
+        textureEditorButton.addActionListener(_ -> {
             try { RCJMS.instance.changeView(RCJMS.instance.textureEditorView = new TextureEditorView(), "texture_editor"); }
             catch (IOException exception) { throw new RuntimeException(exception); }
         });
-        creditsButton.addActionListener(actionEvent -> RCJMS.instance.changeView(RCJMS.instance.creditsView = new CreditsView(), "cv.credits"));
-        exitButton.addActionListener(actionEvent -> System.exit(0));
-        engineCreatorButton.addActionListener(actionEvent -> RCJMS.instance.changeView(
+        creditsButton.addActionListener(_ -> RCJMS.instance.changeView(RCJMS.instance.creditsView = new CreditsView(), "cv.credits"));
+        exitButton.addActionListener(_ -> System.exit(0));
+        engineCreatorButton.addActionListener(_ -> RCJMS.instance.changeView(
                 RCJMS.instance.renderEngineCreatorView = new Project.EngineCreator.RenderEngineCreatorView(currentStyle,
                         () -> RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu")),
                 "engine_creator_title"));
-        themeCreatorButton.addActionListener(actionEvent -> RCJMS.instance.changeView(
+        themeCreatorButton.addActionListener(_ -> RCJMS.instance.changeView(
                 RCJMS.instance.themeCreatorView = new Project.ThemeCreator.ThemeCreatorView(currentStyle,
                         () -> RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu")),
                 "tc.title"));
@@ -313,7 +311,7 @@ public class MainMenuView extends JPanel implements MainMenuHost {
     //endregion
 
     //region Game Start
-    @Override public void startGame() {
+    public void startGame() {
         if (RenderEngines.all().isEmpty()) {
             JOptionPane.showMessageDialog(this, NSLocalizedString.get("mm.no_engines"), NSLocalizedString.get("mm.invalid_input"), JOptionPane.ERROR_MESSAGE);
             return;
@@ -374,27 +372,27 @@ public class MainMenuView extends JPanel implements MainMenuHost {
 
     //region Settings
     //region Theme And Language
-    @Override public void changeStyle(Style next) {
+    public void changeStyle(Style next) {
         if (next == currentStyle) return;
         currentStyle = next;
         saveSettings();
         canvas.applyStyle(this, currentStyle);
         for (MainMenuPanel panel : screens) panel.applyStyle(currentStyle);
     }
-    @Override public MenuTheme getMenuTheme() { return menuTheme; }
-    @Override public void setMenuTheme(MenuTheme next) {
+    public MenuTheme getMenuTheme() { return menuTheme; }
+    public void setMenuTheme(MenuTheme next) {
         if (next == null || next == menuTheme) return;
         menuTheme = next;
         try { SaveData.saveMenuTheme(menuTheme.id()); }
         catch (IOException exception) { exception.printStackTrace(); }
         repaint();
     }
-    @Override public void changeLanguage(String code) {
+    public void changeLanguage(String code) {
         if (code.equalsIgnoreCase(NSLocalizedString.getLanguage())) return;
         saveSettings(code, currentStyle);
         NSLocalizedString.setLanguage(code);
     }
-    @Override public void saveSettings() { saveSettings(NSLocalizedString.getLanguage(), currentStyle); }
+    public void saveSettings() { saveSettings(NSLocalizedString.getLanguage(), currentStyle); }
     private void saveSettings(String language, Style style) {
         try { SaveData.saveSettings(language, style, GameView.getRenderScale(), GameView.isVSyncEnabled(), GameView.getRenderEngineId(), GameView.getRenderEngineQuality(), windowWidth, windowHeight, fullscreen, GameView.isOpenClAcceleration()); }
         catch (IOException exception) { exception.printStackTrace(); }
@@ -416,16 +414,16 @@ public class MainMenuView extends JPanel implements MainMenuHost {
     }
     //endregion
     //region Render Settings
-    @Override public double getRenderScale() { return GameView.getRenderScale(); }
-    @Override public void setRenderScale(double scale) { GameView.setRenderScale(scale); }
-    @Override public boolean isVSyncEnabled() { return GameView.isVSyncEnabled(); }
-    @Override public void setVSyncEnabled(boolean enabled) { GameView.setVSyncEnabled(enabled); }
-    @Override public boolean isOpenClAcceleration() { return GameView.isOpenClAcceleration(); }
-    @Override public void setOpenClAcceleration(boolean enabled) { GameView.setOpenClAcceleration(enabled); }
-    @Override public int getRenderEngine() { return GameView.getRenderEngine(); }
-    @Override public void setRenderEngine(int engine) { GameView.setRenderEngine(engine); syncGeometryWithEngine(); }
-    @Override public int getRenderEngineQuality() { return GameView.getRenderEngineQuality(); }
-    @Override public void setRenderEngineQuality(int quality) { GameView.setRenderEngineQuality(quality); }
+    public double getRenderScale() { return GameView.getRenderScale(); }
+    public void setRenderScale(double scale) { GameView.setRenderScale(scale); }
+    public boolean isVSyncEnabled() { return GameView.isVSyncEnabled(); }
+    public void setVSyncEnabled(boolean enabled) { GameView.setVSyncEnabled(enabled); }
+    public boolean isOpenClAcceleration() { return GameView.isOpenClAcceleration(); }
+    public void setOpenClAcceleration(boolean enabled) { GameView.setOpenClAcceleration(enabled); }
+    public int getRenderEngine() { return GameView.getRenderEngine(); }
+    public void setRenderEngine(int engine) { GameView.setRenderEngine(engine); syncGeometryWithEngine(); }
+    public int getRenderEngineQuality() { return GameView.getRenderEngineQuality(); }
+    public void setRenderEngineQuality(int quality) { GameView.setRenderEngineQuality(quality); }
     //endregion
     //endregion
 
@@ -438,7 +436,7 @@ public class MainMenuView extends JPanel implements MainMenuHost {
         title.setDepth(TITLE_DEPTH);
         title.setTextColor(new Color(255, 127, 0));
         title.setDepthColor(Color.cyan);
-        title.addActionListener((ActionEvent actionEvent) -> {
+        title.addActionListener((ActionEvent _) -> {
             title.setText(title.getText().equals("RCJMS") ? "RayCasting Java Maze Simulator" : "RCJMS");
             fitTitle();
             applyBodies();
@@ -540,7 +538,7 @@ public class MainMenuView extends JPanel implements MainMenuHost {
             Point origin = getLocationOnScreen();
             Point point = new Point(screen.x - origin.x, screen.y - origin.y);
             Project.ThemeCreator.ThemeInput.pointer((point.x - canvas.x(0)) / canvas.scale(), (point.y - canvas.y(0)) / canvas.scale());
-        } catch (java.awt.IllegalComponentStateException exception) {}
+        } catch (java.awt.IllegalComponentStateException _) {}
     }
     //endregion
 

@@ -1,7 +1,4 @@
 package Project.Helpers;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import java.util.*;
 
@@ -55,15 +52,15 @@ public class MazeGenerator {
     }
     public int[][] generateRaw() {
         for (int y = 0; y < height; y++) Arrays.fill(maze[y], 1);
-        carve(1, 1);
+        carve();
         addBranchesFUN();
         generatePortals();
         reportPhase("ld.portals", 0.9, 1.0, 1.0);
         return maze;
     }
-    private void carve(int startX, int startY) {
+    private void carve() {
         Deque<CarveFrame> stack = new ArrayDeque<>();
-        enterCarveCell(startX, startY, stack);
+        enterCarveCell(1, 1, stack);
         while (!stack.isEmpty()) {
             CarveFrame frame = stack.peek();
             if (frame.next >= frame.directions.size()) { stack.pop(); continue; }
@@ -90,7 +87,7 @@ public class MazeGenerator {
         int extraOpenings = wrongGeometry ? (width * height) / 10 : (width * height) / 20;
 
         for (int i = 0; i < extraOpenings; i++) {
-            if ((i & 1023) == 0) reportPhase("ld.branches", 0.8, 0.9, i / (double) Math.max(1, extraOpenings));
+            if ((i & 1023) == 0) reportPhase("ld.branches", 0.8, 0.9, i / (double) extraOpenings);
             int x = random.nextInt(width - 2) + 1;
             int y = random.nextInt(height - 2) + 1;
 

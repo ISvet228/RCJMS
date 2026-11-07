@@ -94,9 +94,7 @@ public final class SkyCeiling {
     //endregion
 
     //region Sky Color
-    public static int colorDir(double dx, double dy, double dz, double time) {
-        return color(Math.atan2(dy, dx), Math.atan2(dz, Math.sqrt(dx * dx + dy * dy)), time);
-    }
+    public static int colorDir(double dx, double dy, double dz, double time) { return color(Math.atan2(dy, dx), Math.atan2(dz, Math.sqrt(dx * dx + dy * dy)), time); }
     public static int color(double azimuth, double elevation, double time) {
         double t = Math.clamp(elevation / 1.1, 0, 1);
         t = t * t * (3 - 2 * t);

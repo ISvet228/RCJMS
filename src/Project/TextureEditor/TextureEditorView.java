@@ -1,7 +1,4 @@
 package Project.TextureEditor;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 import Project.MainMenu.MainMenuView;
 import Project.RCJMS;
 import Project.Helpers.*;
@@ -104,14 +101,13 @@ public class TextureEditorView extends JPanel {
     //endregion
 
     //region Texture Files
-    public Path saveTexturesToTmp() throws IOException {
+    public void saveTexturesToTmp() throws IOException {
         Files.createDirectories(AppPaths.DATA_DIR);
 
         writeTexture(AppPaths.WALL_TEXTURE_FILE, textures[0]);
         writeTexture(AppPaths.FLOOR_TEXTURE_FILE, textures[1]);
         writeTexture(AppPaths.CEILING_TEXTURE_FILE, textures[2]);
         writeTexture(AppPaths.FINISH_TEXTURE_FILE, textures[3]);
-        return AppPaths.DATA_DIR;
     }
     public void loadTexturesFromTmp() throws IOException {
         Path[] files = {AppPaths.WALL_TEXTURE_FILE, AppPaths.FLOOR_TEXTURE_FILE, AppPaths.CEILING_TEXTURE_FILE, AppPaths.FINISH_TEXTURE_FILE};
@@ -119,7 +115,7 @@ public class TextureEditorView extends JPanel {
             int maxHeight = i == TextureMode.FINISH.ordinal() ? MAX_FINISH_HEIGHT : MAX_TEXTURE_SIZE;
             int[][] loaded = readTexture(files[i], MAX_TEXTURE_SIZE, maxHeight);
             if (!isValidTexture(loaded)) continue;
-            int[] size = sizeOf(loaded, MAX_TEXTURE_SIZE, maxHeight);
+            int[] size = sizeOf(loaded, maxHeight);
             textures[i] = normalizeTexture(loaded, size[0], size[1]);
         }
         Arrays.fill(imageDirty, true);
@@ -257,16 +253,6 @@ public class TextureEditorView extends JPanel {
     //endregion
 
     //region Texture Data
-    public void resetTextures() {
-        textures[0] = new int[][]{{ORIGINAL_WALL_COLOR}};
-        textures[1] = new int[][]{{ORIGINAL_FLOOR_COLOR}};
-        textures[2] = new int[][]{{ORIGINAL_CEILING_COLOR}};
-        textures[3] = new int[][]{{ORIGINAL_FINISH_COLOR}};
-        Arrays.fill(imageDirty, true);
-        undoHistory.clear();
-        redoHistory.clear();
-        showMode(mode);
-    }
     private void resetCurrent() {
         int answer = ask(this, currentStyle, "confirm_title", fmt("te.reset_confirm", L(MODE_KEYS[mode.ordinal()])), 1, "te.reset_yes", "cancel");
         if (answer != 0) return;
@@ -341,8 +327,8 @@ public class TextureEditorView extends JPanel {
         catch (NumberFormatException ignored) { refreshAll(); }
         if (t != textures[mode.ordinal()]) hintBar.flash(Tone.OK, fmt("te.size_changed", textures[mode.ordinal()][0].length, textures[mode.ordinal()].length));
     }
-    private int[] sizeOf(int[][] texture, int maxWidth, int maxHeight) {
-        if (isValidTexture(texture)) return new int[]{Math.clamp(texture[0].length, MIN_TEXTURE_SIZE, maxWidth), Math.clamp(texture.length, MIN_TEXTURE_SIZE, maxHeight)};
+    private int[] sizeOf(int[][] texture, int maxHeight) {
+        if (isValidTexture(texture)) return new int[]{Math.clamp(texture[0].length, MIN_TEXTURE_SIZE, TextureEditorView.MAX_TEXTURE_SIZE), Math.clamp(texture.length, MIN_TEXTURE_SIZE, maxHeight)};
         return new int[]{8, 8};
     }
     private int[][] resizePreservingData(int[][] source, int newWidth, int newHeight) {
@@ -370,7 +356,7 @@ public class TextureEditorView extends JPanel {
         try {
             BufferedImage source = ImageIO.read(chooser.getSelectedFile());
             if (source == null) throw new IOException(L("te.bad_image"));
-            BufferedImage fitted = fitImageToBounds(source, MAX_TEXTURE_SIZE, maxHeightForMode(mode));
+            BufferedImage fitted = fitImageToBounds(source, maxHeightForMode(mode));
             int m = mode.ordinal();
             pushUndo(new Snapshot(m, copyTexture(textures[m])));
             textures[m] = imageToTexture(fitted);
@@ -382,10 +368,10 @@ public class TextureEditorView extends JPanel {
         }
         catch (IOException exception) { inform(this, currentStyle, "te.import_error", L("te.could_not_import") + ":\n" + exception.getMessage()); }
     }
-    private BufferedImage fitImageToBounds(BufferedImage source, int maxWidth, int maxHeight) {
+    private BufferedImage fitImageToBounds(BufferedImage source, int maxHeight) {
         int width = source.getWidth(), height = source.getHeight();
-        if (width <= maxWidth && height <= maxHeight) return source;
-        double scale = Math.min((double) maxWidth / width, (double) maxHeight / height);
+        if (width <= TextureEditorView.MAX_TEXTURE_SIZE && height <= maxHeight) return source;
+        double scale = Math.min((double) TextureEditorView.MAX_TEXTURE_SIZE / width, (double) maxHeight / height);
         int newWidth = Math.max(1, (int) Math.floor(width * scale)), newHeight = Math.max(1, (int) Math.floor(height * scale));
         BufferedImage scaled = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2d = scaled.createGraphics();
@@ -401,13 +387,12 @@ public class TextureEditorView extends JPanel {
         for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) texture[y][x] = image.getRGB(x, y) & 0xFFFFFF;
         return texture;
     }
-    private static Rectangle drawFitted(Graphics2D g2d, BufferedImage img, int x, int y, int boxW, int boxH) {
+    private static void drawFitted(Graphics2D g2d, BufferedImage img, int boxW, int boxH) {
         double scale = Math.min((double) boxW / img.getWidth(), (double) boxH / img.getHeight());
         int w = Math.max(1, (int) Math.round(img.getWidth() * scale)), h = Math.max(1, (int) Math.round(img.getHeight() * scale));
-        int dx = x + (boxW - w) / 2, dy = y + (boxH - h) / 2;
+        int dx = 7 + (boxW - w) / 2, dy = 7 + (boxH - h) / 2;
         g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, scale >= 1 ? RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR : RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         g2d.drawImage(img, dx, dy, w, h, null);
-        return new Rectangle(dx, dy, w, h);
     }
     private BufferedImage image(int m) {
         int[][] t = textures[m];
@@ -510,7 +495,7 @@ public class TextureEditorView extends JPanel {
         tools.put(grid, 0);
         sizeSlider.setPreferredSize(new Dimension(100, 22));
         sizeSlider.setOpaque(false);
-        sizeSlider.addChangeListener(changeEvent -> {
+        sizeSlider.addChangeListener(_ -> {
             if (updatingControls) return;
             if (currentTool == Tool.ERASER) eraserSize = sizeSlider.getValue(); else brushSize = sizeSlider.getValue();
             sizeValue.setRaw(String.valueOf(sizeSlider.getValue()));
@@ -545,8 +530,8 @@ public class TextureEditorView extends JPanel {
         widthField.setHorizontalAlignment(JTextField.CENTER);
         heightField.setHorizontalAlignment(JTextField.CENTER);
         for (StyledTextField styledTextField : new StyledTextField[]{widthField, heightField}) styledTextField.limitInput(3, c -> c >= '0' && c <= '9');
-        widthField.addActionListener(actionEvent -> applyFields());
-        heightField.addActionListener(actionEvent -> applyFields());
+        widthField.addActionListener(_ -> applyFields());
+        heightField.addActionListener(_ -> applyFields());
         FocusAdapter blur = new FocusAdapter() { @Override public void focusLost(FocusEvent focusEvent) { applyFields(); } };
         widthField.addFocusListener(blur);
         heightField.addFocusListener(blur);
@@ -579,7 +564,7 @@ public class TextureEditorView extends JPanel {
         Card color = new Card("te.color");
         color.put(colorPicker, 0);
         column.put(color, 0);
-        colorPicker.addColorListener(rgb -> canvas.repaint());
+        colorPicker.addColorListener(_ -> canvas.repaint());
         return column;
     }
     private JComponent buildStatusBar() {
@@ -829,7 +814,7 @@ public class TextureEditorView extends JPanel {
             int box = h - 14;
             Graphics2D clippedG2d = (Graphics2D) g2d.create();
             clippedG2d.setClip(new RoundRectangle2D.Double(7, 7, box, box, 6, 6));
-            drawFitted(clippedG2d, image(tabMode.ordinal()), 7, 7, box, box);
+            drawFitted(clippedG2d, image(tabMode.ordinal()), box, box);
             clippedG2d.dispose();
             g2d.setColor(new Color(0, 0, 0, 120));
             g2d.setStroke(new BasicStroke(1f));

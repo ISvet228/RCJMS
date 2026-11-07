@@ -6,8 +6,7 @@ import Project.Helpers.RuntimeTexture;
 
 import javax.tools.*;
 import java.io.IOException;
-import java.net.URL;
-import java.net.URLClassLoader;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
@@ -56,7 +55,7 @@ public final class EngineBuilder {
 
         CkProject flat;
         try { flat = CustomNodes.flatten(ckProject); }
-        catch (IllegalStateException | IllegalArgumentException exception) { issues.add(err(-1, L.f("ec.b.checkFailed", exception.getMessage()))); return new Result(false, issues, msg, null); }
+        catch (IllegalStateException | IllegalArgumentException exception) { issues.add(err(L.f("ec.b.checkFailed", exception.getMessage()))); return new Result(false, issues, msg, null); }
         String java = CodeGen.javaSource(flat);
         String cl = ckProject.openCl ? CodeGen.clSource(flat) : null;
 
@@ -68,14 +67,15 @@ public final class EngineBuilder {
             List<String> compileErrors = compile(CodeGen.className(ckProject), java, tmp);
             if (compileErrors == null) { msg.add(L.t("ec.b.noCompiler")); }
             else if (!compileErrors.isEmpty()) {
-                for (String e : compileErrors) issues.add(err(-1, L.f("ec.b.compileError", e)));
+                for (String e : compileErrors) issues.add(err(L.f("ec.b.compileError", e)));
                 return new Result(false, issues, msg, null);
-            } else {
+            }
+            else {
                 msg.add(L.t("ec.b.compileOk"));
                 issues.addAll(smokeTest(ckProject, tmp));
                 issues.addAll(checkKernels(ckProject, cl));
             }
-        } catch (IOException exception) { issues.add(err(-1, L.f("ec.b.checkFailed", exception.getMessage()))); }
+        } catch (IOException exception) { issues.add(err(L.f("ec.b.checkFailed", exception.getMessage()))); }
         finally { deleteQuietly(tmp); }
 
         if (issues.stream().anyMatch(Issue::error)) return new Result(false, issues, msg, null);
@@ -100,7 +100,7 @@ public final class EngineBuilder {
             RenderEngines.reload();
             return new Result(true, issues, msg, target);
         } catch (IOException exception) {
-            issues.add(err(-1, L.f("ec.b.writeFailed", exception.getMessage())));
+            issues.add(err(L.f("ec.b.writeFailed", exception.getMessage())));
             return new Result(false, issues, msg, null);
         }
     }
@@ -139,10 +139,10 @@ public final class EngineBuilder {
         map[5][3] = 2;
         map[3][6] = 1;
         renderFrame.map = map;
-        renderFrame.wallTexture = texture(4, 4, 0x80);
-        renderFrame.floorTexture = texture(4, 4, 0x40);
-        renderFrame.ceilingTexture = texture(4, 4, 0x20);
-        renderFrame.finishTexture = texture(4, 4, 0xC0);
+        renderFrame.wallTexture = texture(0x80);
+        renderFrame.floorTexture = texture(0x40);
+        renderFrame.ceilingTexture = texture(0x20);
+        renderFrame.finishTexture = texture(0xC0);
         return renderFrame;
     }
     //endregion
@@ -158,7 +158,7 @@ public final class EngineBuilder {
             for (int c : frame.renderPixels) colors.add(c);
             if (colors.size() <= 1) r.add(new Issue(false, -1, L.t("ec.b.flat")));
             else r.add(new Issue(false, -1, L.f("ec.b.smokeOk", colors.size())));
-        } catch (Throwable exception) { r.add(err(-1, L.f("ec.b.smokeError", exception.toString()))); }
+        } catch (Throwable exception) { r.add(err(L.f("ec.b.smokeError", exception.toString()))); }
         return r;
     }
     private static List<Issue> checkKernels(CkProject ckProject, String clSource) {
@@ -172,7 +172,7 @@ public final class EngineBuilder {
                 for (int k = 0; k < ckProject.passCount(); k++) {
                     try { new Project.OpenCl.GpuProgram(clSource, CodeGen.kernelName(ckProject, k)).close(); }
                     catch (RuntimeException exception) {
-                        r.add(err(-1, L.f("ec.b.kernelError", exception.getMessage())));
+                        r.add(err(L.f("ec.b.kernelError", exception.getMessage())));
                         return r;
                     }
                 }
@@ -184,14 +184,14 @@ public final class EngineBuilder {
         }
         return r;
     }
-    private static RuntimeTexture texture(int w, int h, int seed) {
-        int[] px = new int[w * h];
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-                px[y * w + x] = 0xFF000000 | ((seed + x * 40) & 255) << 16 | ((seed + y * 50) & 255) << 8 | (x + y) * 20 & 255;
-        return new RuntimeTexture(w, h, px);
+    private static RuntimeTexture texture(int seed) {
+        int[] px = new int[4 * 4];
+        for (int y = 0; y < 4; y++)
+            for (int x = 0; x < 4; x++)
+                px[y * 4 + x] = 0xFF000000 | ((seed + x * 40) & 255) << 16 | ((seed + y * 50) & 255) << 8 | (x + y) * 20 & 255;
+        return new RuntimeTexture(4, 4, px);
     }
-    private static Issue err(int node, String text) { return new Issue(true, node, text); }
+    private static Issue err(String text) { return new Issue(true, -1, text); }
     //endregion
     //region Compilation
     private static List<String> compile(String cls, String source, Path dir) throws IOException {
@@ -226,10 +226,7 @@ public final class EngineBuilder {
 
     //region Types
     record Result(boolean saved, List<Issue> issues, List<String> messages, Path file) {
-    boolean hasErrors() { return issues.stream().anyMatch(Issue::error); }
-    }
-    record PreviewBuild(RenderEngine engine, List<Issue> issues, String error) {
-
-    }
+    boolean hasErrors() { return issues.stream().anyMatch(Issue::error); } }
+    record PreviewBuild(RenderEngine engine, List<Issue> issues, String error) { }
     //endregion
 }

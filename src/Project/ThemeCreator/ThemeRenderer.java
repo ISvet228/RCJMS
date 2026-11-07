@@ -1,6 +1,4 @@
 package Project.ThemeCreator;
-import Project.EngineCreator.*;
-import Project.CreatorKit.*;
 
 import java.awt.*;
 import java.awt.geom.*;
@@ -28,7 +26,13 @@ public final class ThemeRenderer {
     }
     public static List<ThemeObject> drawOrder(ThemeDoc doc, Map<Integer, Map<String, Object>> props) {
         List<ThemeObject> out = new ArrayList<>();
-        for (ThemeObject themeObject : doc.treeOrder()) if (visibleAt(themeObject, props)) out.add(themeObject);
+        Set<Integer> drawn = new HashSet<>();
+        for (ThemeObject themeObject : doc.treeOrder()) {
+            if (themeObject.parent != 0 && !drawn.contains(themeObject.parent)) continue;
+            if (!visibleAt(themeObject, props)) continue;
+            drawn.add(themeObject.id);
+            out.add(themeObject);
+        }
         out.sort(Comparator.comparingInt(themeObject -> layerAt(themeObject, props)));
         return out;
     }
@@ -43,9 +47,7 @@ public final class ThemeRenderer {
         if (n >= PARALLEL_OBJECTS) {
             java.util.stream.IntStream.range(0, n).parallel()
                     .forEach(i -> overrides[i] = ThemeGraph.evaluate(doc.objects.get(i).graph, t));
-        } else {
-            for (int i = 0; i < n; i++) overrides[i] = ThemeGraph.evaluate(doc.objects.get(i).graph, t);
-        }
+        } else for (int i = 0; i < n; i++) overrides[i] = ThemeGraph.evaluate(doc.objects.get(i).graph, t);
         Map<Integer, Map<String, Object>> props = new HashMap<>(n * 2);
         for (int i = 0; i < n; i++) {
             ThemeObject themeObject = doc.objects.get(i);
@@ -55,9 +57,6 @@ public final class ThemeRenderer {
             props.put(themeObject.id, eff);
         }
         return props;
-    }
-    public static Map<Integer, AffineTransform> worldsAt(ThemeDoc doc, double t) {
-        return worldsFrom(doc, propsAt(doc, t));
     }
     public static Map<Integer, AffineTransform> worldsFrom(ThemeDoc doc, Map<Integer, Map<String, Object>> props) {
         Map<Integer, ThemeObject> byId = new HashMap<>();
@@ -108,9 +107,9 @@ public final class ThemeRenderer {
 
     //region Painting
     public static void paint(Graphics2D g2d, ThemeDoc doc, double t, int w, int h) {
-        paint(g2d, doc, frame(doc, t), w, h);
+        paint(g2d, frame(doc, t), w, h);
     }
-    public static void paint(Graphics2D g2d, ThemeDoc doc, Frame frame, int w, int h) {
+    public static void paint(Graphics2D g2d, Frame frame, int w, int h) {
         if (ThemeGpu.paint(g2d, frame, w, h)) return;
         AffineTransform base = g2d.getTransform();
         Graphics2D workG2d = (Graphics2D) g2d.create();
@@ -169,7 +168,7 @@ public final class ThemeRenderer {
         if (y1 == y0) y1 = y0 + 1;
         Color color = withAlpha(second, d(p, "alpha2", a1));
         if (third != null) {
-            double at = Math.max(0.001, Math.min(0.999, d(p, "midAt", 0.5)));
+            double at = Math.clamp(d(p, "midAt", 0.5), 0.001, 0.999);
             Color k3 = withAlpha(third, d(p, "alpha3", a1));
             g2d.setPaint(new LinearGradientPaint(0, (float) y0, 0, (float) y1, new float[]{0f, (float) at, 1f},
                     new Color[]{first, color, k3}));
@@ -213,9 +212,8 @@ public final class ThemeRenderer {
         for (String part : s(p, "points", "").trim().split("[\\s;]+")) {
             String[] xy = part.split(",");
             if (xy.length < 2) continue;
-            try {
-                out.add(new double[]{Double.parseDouble(xy[0]), Double.parseDouble(xy[1])});
-            } catch (NumberFormatException exception) { }
+            try { out.add(new double[]{Double.parseDouble(xy[0]), Double.parseDouble(xy[1])}); }
+            catch (NumberFormatException _) { }
         }
         for (int i = 0; i < out.size(); i++) {
             if (p.get("p" + i + "x") instanceof Number nx) out.get(i)[0] = nx.doubleValue();
@@ -275,6 +273,6 @@ public final class ThemeRenderer {
         if (color == null) return null;
         return new Color(color.getRed(), color.getGreen(), color.getBlue(), alphaByte(alpha));
     }
-    private static int alphaByte(double a) { return (int) Math.round(255 * Math.max(0, Math.min(1, a))); }
+    private static int alphaByte(double a) { return (int) Math.round(255 * Math.clamp(a, 0, 1)); }
     //endregion
 }

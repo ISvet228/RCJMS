@@ -14,7 +14,6 @@ public final class SpaceTheme implements MenuTheme {
     @Override public String id() { return "space"; }
     @Override public String nameKey() { return "mm.bg_space"; }
     @Override public int order() { return 0; }
-    @Override public boolean hasStars() { return true; }
     //endregion
 
     //region Painting

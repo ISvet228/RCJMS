@@ -13,10 +13,7 @@ record Issue(boolean error, int node, String text) {
 /** Checks a project before code is generated. Errors block saving; warnings do not. */
 public final class Validator {
     //region Variables
-    //region Patterns
     private static final Pattern NAME = Pattern.compile("[A-Za-z][A-Za-z0-9_]{2,31}");
-    private static final Pattern HEX = Pattern.compile("#[0-9A-Fa-f]{6}");
-    //endregion
     //endregion
 
     //region Constructors

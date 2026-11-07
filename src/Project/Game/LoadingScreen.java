@@ -1,7 +1,6 @@
 package Project.Game;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
+
+import Project.Helpers.FontCache;
 import Project.Helpers.*;
 import Project.StyleUI.*;
 
@@ -108,7 +107,7 @@ public class LoadingScreen extends JPanel {
         int barW = (int) Math.round(w * 0.46), barH = Math.max(10, h / 34);
         int bx = (w - barW) / 2, by = (int) Math.round(h * 0.80);
         int fontSize = Math.max(12, h / 28);
-        g2d.setFont(new Font("SansSerif", Font.BOLD, fontSize));
+        g2d.setFont(FontCache.get("SansSerif", Font.BOLD, fontSize));
         FontMetrics fontMetrics = g2d.getFontMetrics();
         g2d.setColor(new Color(236, 230, 214, 230));
         g2d.drawString(status, (w - fontMetrics.stringWidth(status)) / 2, by - barH);

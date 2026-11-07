@@ -1,7 +1,4 @@
 package Project.Game;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import java.io.IOException;
 import java.lang.reflect.Modifier;
@@ -65,8 +62,7 @@ public final class ExternalEngines {
     }
     private static List<Path> javaSources(Path folder, List<String> problems) {
         try (Stream<Path> files = Files.list(folder)) {
-            return files.filter(path -> Files.isRegularFile(path) && path.getFileName().toString().endsWith(".java"))
-                    .sorted().toList();
+            return files.filter(path -> Files.isRegularFile(path) && path.getFileName().toString().endsWith(".java")).sorted().toList();
         } catch (IOException exception) {
             problems.add("cannot read folder: " + exception.getMessage());
             return List.of();

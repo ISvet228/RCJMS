@@ -1,7 +1,4 @@
 package Project.MapEditor;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 import Project.RCJMS;
 import Project.StyleUI.*;
 import Project.Helpers.*;
@@ -54,12 +51,12 @@ public class SeedMapDialog extends JDialog {
         StyledButton randomSeedButton = new StyledButton(style, "me.random_seed");
         StyledButton generateButton = new StyledButton(style, "me.generate");
         StyledButton cancelButton = new StyledButton(style, "cancel");
-        randomSeedButton.addActionListener(actionEvent -> seedField.setText(SeedUtil.randomSeed()));
-        generateButton.addActionListener(actionEvent -> confirm());
-        cancelButton.addActionListener(actionEvent -> dispose());
+        randomSeedButton.addActionListener(_ -> seedField.setText(SeedUtil.randomSeed()));
+        generateButton.addActionListener(_ -> confirm());
+        cancelButton.addActionListener(_ -> dispose());
         for (StyledTextField field : new StyledTextField[]{widthField, heightField, floorsField, seedField}) {
             field.setPreferredSize(new Dimension(150, 34));
-            field.addActionListener(actionEvent -> confirm());
+            field.addActionListener(_ -> confirm());
         }
         seedField.setPreferredSize(new Dimension(150, 34));
         loopedToggle.setPreferredSize(new Dimension(220, 34));

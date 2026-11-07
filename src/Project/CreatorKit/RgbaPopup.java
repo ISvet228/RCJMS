@@ -1,11 +1,10 @@
 package Project.CreatorKit;
 
-import Project.Helpers.EditorKit;
+import Project.StyleUI.*;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.util.Locale;
 
@@ -25,13 +24,15 @@ public final class RgbaPopup extends JPopupMenu {
     private final SquareBox square = new SquareBox();
     private final Bar hueBar = new Bar(false), alphaBar = new Bar(true);
     private final Preview preview = new Preview();
-    private final JTextField hex = new JTextField(9);
+    private final StyledTextField hex;
     //endregion
     //endregion
 
     //region Constructors
-    public RgbaPopup(int rgb, double alpha, Listener listener) {
+    public RgbaPopup(Style style, int rgb, double alpha, Listener listener) {
         this.listener = listener;
+        hex = new StyledTextField(style, "");
+        hex.setColumns(9);
         float[] hsb = Color.RGBtoHSB((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, null);
         hue = hsb[0];
         saturation = hsb[1];
@@ -57,14 +58,9 @@ public final class RgbaPopup extends JPopupMenu {
         row.setOpaque(false);
         row.setAlignmentX(LEFT_ALIGNMENT);
         row.add(preview, BorderLayout.WEST);
-        hex.setBackground(new Color(30, 31, 35));
-        hex.setForeground(EditorKit.TEXT);
-        hex.setCaretColor(EditorKit.TEXT);
         hex.setBorder(BorderFactory.createEmptyBorder(3, 6, 3, 6));
-        hex.addActionListener(actionEvent -> readHex());
-        hex.addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override public void focusLost(java.awt.event.FocusEvent focusEvent) { readHex(); }
-        });
+        hex.addActionListener(_ -> readHex());
+        hex.addFocusListener(new java.awt.event.FocusAdapter() { @Override public void focusLost(java.awt.event.FocusEvent focusEvent) { readHex(); } });
         row.add(hex, BorderLayout.CENTER);
         body.add(row);
 

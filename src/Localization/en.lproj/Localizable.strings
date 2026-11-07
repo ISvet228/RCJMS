@@ -150,7 +150,10 @@
 "cv.another_project" = "I Also Have Another Projects";
 "cv.bfs" = "Breadth-first search aka BFS";
 "cv.credits" = "Credits";
-"cv.fungun" = "fUnGuN StyleUI Help";
+"cv.fungun1" = "fUnGuN:";
+"cv.fungun2" = "StyleUI, Editors, Creators, Ideas,";
+"cv.fungun3" = "Moriarty Engine Realisation, Redesign And A Lot Of Other Help";
+"cv.fungun4" = "fUnGuN Was Hit By Truck-kun Wille Worked On Project";
 "cv.hyperbolic_geometry" = "Hyperbolic Geometry aka Wrong Geometry";
 "cv.ljubo" = "Ljubo For Collision Fix And Serbian Localization";
 "cv.main_designer" = "Main Designer";

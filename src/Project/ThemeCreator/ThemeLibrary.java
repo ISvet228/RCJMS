@@ -1,6 +1,4 @@
 package Project.ThemeCreator;
-import Project.EngineCreator.*;
-import Project.CreatorKit.*;
 
 import Project.MainMenu.MenuTheme;
 
@@ -69,7 +67,6 @@ public final class ThemeLibrary {
             System.err.println("Theme folder not read: " + exception);
             return out;
         }
-        if (roots.isEmpty()) return out;
         try (URLClassLoader loader = new URLClassLoader(roots.toArray(URL[]::new), ThemeLibrary.class.getClassLoader())) {
             for (String name : names) {
                 try {
@@ -89,9 +86,7 @@ public final class ThemeLibrary {
     }
     private static List<Path> listed(Path folder, String ext) throws IOException {
         List<Path> out = new ArrayList<>();
-        try (Stream<Path> files = Files.list(folder)) {
-            files.filter(path -> path.getFileName().toString().endsWith(ext)).sorted().forEach(out::add);
-        }
+        try (Stream<Path> files = Files.list(folder)) { files.filter(path -> path.getFileName().toString().endsWith(ext)).sorted().forEach(out::add); }
         return out;
     }
     //endregion
@@ -149,19 +144,15 @@ public final class ThemeLibrary {
         @Override public void paintBase(java.awt.Graphics2D g2d, int w, int h, double t) {
             ThemeRenderer.Frame frame = null;
             if (ahead != null && Math.abs(aheadTime - t) < TICK / 2) {
-                try {
-                    frame = ahead.get();
-                } catch (InterruptedException exception) {
-                    Thread.currentThread().interrupt();
-                } catch (java.util.concurrent.ExecutionException exception) {
-                    frame = null;
-                }
+                try { frame = ahead.get(); }
+                catch (InterruptedException exception) {Thread.currentThread().interrupt(); }
+                catch (java.util.concurrent.ExecutionException _) {}
             }
             if (frame == null) frame = ThemeRenderer.frame(doc, t);
             double next = t + TICK;
             ahead = FRAMES.submit(() -> ThemeRenderer.frame(doc, next));
             aheadTime = next;
-            ThemeRenderer.paint(g2d, doc, frame, w, h);
+            ThemeRenderer.paint(g2d, frame, w, h);
         }
     }
     //endregion

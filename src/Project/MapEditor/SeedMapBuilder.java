@@ -1,11 +1,5 @@
 package Project.MapEditor;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
-import Project.Helpers.MazeGenerator;
-import Project.Helpers.MazeGenerator3D;
-import Project.Helpers.PortalData;
-import Project.Helpers.SeedUtil;
+import Project.Helpers.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,11 +53,7 @@ public final class SeedMapBuilder {
     //endregion
 
     //region Results
-    public record Options(int width, int height, int floors, boolean looped, int finishMode, String seed) {
-
-    }
-    public record Result(List<int[][]> floors, List<int[]> portalLinks, String seed) {
-
-    }
+    public record Options(int width, int height, int floors, boolean looped, int finishMode, String seed) { }
+    public record Result(List<int[][]> floors, List<int[]> portalLinks, String seed) { }
     //endregion
 }

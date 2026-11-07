@@ -42,9 +42,8 @@ public final class ThemeIO {
         doc.name = str(m.get("name"), doc.id);
         doc.nameKey = m.get("nameKey") instanceof String k ? k : null;
         doc.order = (int) num(m.get("order"), 100);
-        if (m.get("objects") instanceof List<?> list) {
+        if (m.get("objects") instanceof List<?> list)
             for (Object item : list) readObject(doc, (Map<?, ?>) item);
-        }
         doc.repairParents();
         doc.nextId = 1;
         for (ThemeObject themeObject : doc.objects) doc.nextId = Math.max(doc.nextId, themeObject.id + 1);

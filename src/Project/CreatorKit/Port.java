@@ -1,4 +1,2 @@
 package Project.CreatorKit;
-public record Port(String name, DataType type) {
-
-}
+public record Port(String name, DataType type) { }

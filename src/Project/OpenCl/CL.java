@@ -1,7 +1,4 @@
 package Project.OpenCl;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
@@ -18,7 +15,7 @@ public final class CL {
     //endregion
     //region Device Flags
     static final long DEVICE_TYPE_GPU = 1L << 2;
-    static final long MEM_READ_WRITE = 1L << 0;
+    static final long MEM_READ_WRITE = 1L;
     static final long MEM_WRITE_ONLY = 1L << 1;
     //endregion
     //region Query Parameters
@@ -46,7 +43,7 @@ public final class CL {
             try { return SymbolLookup.libraryLookup(name, Arena.global()); }
             catch (IllegalArgumentException exception) { last = exception; }
         }
-        throw new UnsatisfiedLinkError("OpenCL library not found (" + String.join(", ", candidates) + "): " + (last == null ? "" : last.getMessage()));
+        throw new UnsatisfiedLinkError("OpenCL library not found (" + String.join(", ", candidates) + "): " + last.getMessage());
     }
     //endregion
 
@@ -54,7 +51,6 @@ public final class CL {
     static void check(int code, String what) { if (code != SUCCESS) throw new CLException(what, code); }
     static final class CLException extends RuntimeException {
         final int code;
-
         CLException(String what, int code) { super(what + " failed with OpenCL error " + code); this.code = code; }
     }
     //endregion
@@ -83,20 +79,14 @@ public final class CL {
     //endregion
 
     //region Info Queries
-    static String platformString(Api api, MemorySegment platform, int param) {
-        try (Arena arena = Arena.ofConfined()) {
-            return readString(arena, (size, value, sizeRet) -> api.getPlatformInfo(platform, param, size, value, sizeRet));
-        }
+    static String platformString(Api api, MemorySegment platform) {
+        try (Arena arena = Arena.ofConfined()) { return readString(arena, (size, value, sizeRet) -> api.getPlatformInfo(platform, size, value, sizeRet)); }
     }
     static String deviceString(Api api, MemorySegment device, int param) {
-        try (Arena arena = Arena.ofConfined()) {
-            return readString(arena, (size, value, sizeRet) -> api.getDeviceInfo(device, param, size, value, sizeRet));
-        }
+        try (Arena arena = Arena.ofConfined()) { return readString(arena, (size, value, sizeRet) -> api.getDeviceInfo(device, param, size, value, sizeRet)); }
     }
     static String buildLog(Api api, MemorySegment program, MemorySegment device) {
-        try (Arena arena = Arena.ofConfined()) {
-            return readString(arena, (size, value, sizeRet) -> api.getBuildInfo(program, device, PROGRAM_BUILD_LOG, size, value, sizeRet));
-        }
+        try (Arena arena = Arena.ofConfined()) { return readString(arena, (size, value, sizeRet) -> api.getBuildInfo(program, device, PROGRAM_BUILD_LOG, size, value, sizeRet)); }
     }
     static int deviceInt(Api api, MemorySegment device, int param) {
         try (Arena arena = Arena.ofConfined()) {
@@ -105,16 +95,7 @@ public final class CL {
             return v.get(JAVA_INT, 0);
         }
     }
-    static long deviceLong(Api api, MemorySegment device, int param) {
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment v = arena.allocate(JAVA_LONG);
-            check(api.getDeviceInfo(device, param, 8, v, MemorySegment.NULL), "clGetDeviceInfo");
-            return v.get(JAVA_LONG, 0);
-        }
-    }
-    interface InfoQuery {
-int run(long size, MemorySegment value, MemorySegment sizeRet);
- }
+    interface InfoQuery { int run(long size, MemorySegment value, MemorySegment sizeRet); }
     //endregion
 
     //region Native API
@@ -153,24 +134,24 @@ int run(long size, MemorySegment value, MemorySegment sizeRet);
         int getPlatformIDs(int n, MemorySegment platforms, MemorySegment count) {
             try { return (int) getPlatformIDs.invokeExact(n, platforms, count); } catch (Throwable exception) { throw rethrow(exception); }
         }
-        int getDeviceIDs(MemorySegment platform, long type, int n, MemorySegment devices, MemorySegment count) {
-            try { return (int) getDeviceIDs.invokeExact(platform, type, n, devices, count); } catch (Throwable exception) { throw rethrow(exception); }
+        int getDeviceIDs(MemorySegment platform, int n, MemorySegment devices, MemorySegment count) {
+            try { return (int) getDeviceIDs.invokeExact(platform, CL.DEVICE_TYPE_GPU, n, devices, count); } catch (Throwable exception) { throw rethrow(exception); }
         }
-        int getPlatformInfo(MemorySegment platform, int param, long size, MemorySegment value, MemorySegment sizeRet) {
-            try { return (int) getPlatformInfo.invokeExact(platform, param, size, value, sizeRet); } catch (Throwable exception) { throw rethrow(exception); }
+        int getPlatformInfo(MemorySegment platform, long size, MemorySegment value, MemorySegment sizeRet) {
+            try { return (int) getPlatformInfo.invokeExact(platform, CL.PLATFORM_NAME, size, value, sizeRet); } catch (Throwable exception) { throw rethrow(exception); }
         }
         int getDeviceInfo(MemorySegment device, int param, long size, MemorySegment value, MemorySegment sizeRet) {
             try { return (int) getDeviceInfo.invokeExact(device, param, size, value, sizeRet); } catch (Throwable exception) { throw rethrow(exception); }
         }
 
-        MemorySegment createContext(MemorySegment props, int numDevices, MemorySegment devices, MemorySegment errcode) {
-            try { return (MemorySegment) createContext.invokeExact(props, numDevices, devices, MemorySegment.NULL, MemorySegment.NULL, errcode); } catch (Throwable exception) { throw rethrow(exception); }
+        MemorySegment createContext(MemorySegment devices, MemorySegment errcode) {
+            try { return (MemorySegment) createContext.invokeExact(MemorySegment.NULL, 1, devices, MemorySegment.NULL, MemorySegment.NULL, errcode); } catch (Throwable exception) { throw rethrow(exception); }
         }
         int releaseContext(MemorySegment ctx) {
             try { return (int) releaseContext.invokeExact(ctx); } catch (Throwable exception) { throw rethrow(exception); }
         }
-        MemorySegment createQueue(MemorySegment ctx, MemorySegment device, long props, MemorySegment errcode) {
-            try { return (MemorySegment) createQueue.invokeExact(ctx, device, props, errcode); } catch (Throwable exception) { throw rethrow(exception); }
+        MemorySegment createQueue(MemorySegment ctx, MemorySegment device, MemorySegment errcode) {
+            try { return (MemorySegment) createQueue.invokeExact(ctx, device, (long) 0, errcode); } catch (Throwable exception) { throw rethrow(exception); }
         }
         int releaseQueue(MemorySegment queue) {
             try { return (int) releaseQueue.invokeExact(queue); } catch (Throwable exception) { throw rethrow(exception); }

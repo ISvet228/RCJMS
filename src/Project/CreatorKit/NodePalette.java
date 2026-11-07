@@ -1,6 +1,5 @@
 package Project.CreatorKit;
 
-import Project.Helpers.EditorKit.*;
 import Project.StyleUI.*;
 
 import javax.swing.*;
@@ -21,15 +20,18 @@ public final class NodePalette extends Column {
     //region Palette State
     private final List<String> categories;
     private final Supplier<List<NodeKind>> kinds;
-    private BiConsumer<NodeKind, NodeCard> decorate = (nodeKind, nodeCard) -> {};
+    private BiConsumer<NodeKind, NodeCard> decorate = (_, _) -> {};
     private final Consumer<String> onPick;
     private final Column list = new Column();
     private String category = "all", query = "";
     //endregion
     //endregion
 
+    private final Style style;
+
     //region Constructors
     public NodePalette(Style style, List<String> categories, Supplier<List<NodeKind>> kinds, Consumer<String> onPick) {
+        this.style = style;
         this.categories = categories;
         this.kinds = kinds;
         this.onPick = onPick;
@@ -61,7 +63,7 @@ public final class NodePalette extends Column {
             int chipW = chip.getFontMetrics(font(11f, false)).stringWidth(label) + 28;
             chip.setPreferredSize(new Dimension(chipW, 26));
             chip.setMinimumSize(new Dimension(chipW, 26));
-            chip.addActionListener(actionEvent -> {
+            chip.addActionListener(_ -> {
                 category = cat;
                 refresh();
             });
@@ -101,7 +103,7 @@ public final class NodePalette extends Column {
                 shown++;
             }
             list.put(grid, 0);
-            if (shown == 0) list.put(note(INNER_W, "ec.ui.noNodes"), 0);
+            if (shown == 0) list.put(note(), 0);
         }
         list.revalidate();
         list.repaint();
@@ -113,7 +115,7 @@ public final class NodePalette extends Column {
     //region Cards
     private NodeCard card(NodeKind nodeKind) {
         String id = nodeKind.id();
-        NodeCard card = new NodeCard(nodeKind, () -> onPick.accept(id));
+        NodeCard card = new NodeCard(style, nodeKind, () -> onPick.accept(id));
         decorate.accept(nodeKind, card);
         return card;
     }
@@ -122,9 +124,9 @@ public final class NodePalette extends Column {
         grid.setOpaque(false);
         return grid;
     }
-    private static Note note(int width, String key) {
-        Note note = new Note(width, 11f, MUTED);
-        note.set(null, MUTED, L.t(key));
+    private static Note note() {
+        Note note = new Note(NodePalette.INNER_W, 11f, MUTED);
+        note.set(null, MUTED, L.t("ec.ui.noNodes"));
         return note;
     }
     //endregion

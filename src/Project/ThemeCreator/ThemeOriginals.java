@@ -15,9 +15,7 @@ public final class ThemeOriginals {
     //endregion
 
     //region Template Registry
-    public static List<ThemeDoc> originals() {
-        return arranged(List.of(space(), nebula(), blackhole(), sunset(), aurora(), ocean()));
-    }
+    public static List<ThemeDoc> originals() { return arranged(List.of(space(), nebula(), blackhole(), sunset(), aurora(), ocean())); }
     public static List<ThemeDoc> templates() {
         return arranged(List.of(blank(), starfield(), gradientSun()));
     }
@@ -340,9 +338,8 @@ public final class ThemeOriginals {
         return obj(themeDoc, "glow", name, layer, 0).v("x", x).v("y", y).v("radius", radius).v("color", color).v("alpha", alpha);
     }
     public static void compressLayers(ThemeDoc themeDoc) {
-        for (ThemeObject themeObject : themeDoc.objects) {
+        for (ThemeObject themeObject : themeDoc.objects)
             for (NodeInst nodeInst : themeObject.graph.nodes) if (nodeInst.kind.equals("th.set.layer")) return;
-        }
         TreeSet<Integer> used = new TreeSet<>();
         for (ThemeObject themeObject : themeDoc.objects) used.add(themeObject.layer);
         Map<Integer, Integer> rank = new HashMap<>();
@@ -375,8 +372,8 @@ public final class ThemeOriginals {
             if (point) nodeInst.params.put("index", key.substring(1, key.length() - 1));
             input(nodeInst, "v", value);
         }
-        void drivePosition(Object x, Object y) { setter("th.setPosition", null, "x", x, "y", y); }
-        void driveSize(Object w, Object h) { setter("th.setSize", null, "w", w, "h", h); }
+        void drivePosition(Object x, Object y) { setter("th.setPosition", "x", x, "y", y); }
+        void driveSize(Object w, Object h) { setter("th.setSize", "w", w, "h", h); }
 
         N time(double speed) {
             NodeInst nodeInst = p.add("th.time", 0, 0, 0);
@@ -403,12 +400,11 @@ public final class ThemeOriginals {
         }
 
         private void input(NodeInst nodeInst, String port, Object value) {
-            if (value instanceof N from) p.links.add(new Link(from.id(), "out", nodeInst.id, port));
+            if (value instanceof N(int id)) p.links.add(new Link(id, "out", nodeInst.id, port));
             else nodeInst.params.put(port, fmt(((Number) value).doubleValue()));
         }
-        private void setter(String kind, String prefix, Object... pairs) {
+        private void setter(String kind, Object... pairs) {
             NodeInst nodeInst = p.add(kind, 0, 0, 0);
-            if (prefix != null) nodeInst.params.put("prefix", prefix);
             for (int i = 0; i < pairs.length; i += 2) input(nodeInst, (String) pairs[i], pairs[i + 1]);
         }
     }

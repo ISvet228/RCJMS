@@ -1,7 +1,4 @@
 package Project.MainMenu;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
 import Project.StyleUI.*;
 
 import javax.swing.*;
@@ -12,7 +9,7 @@ import java.util.List;
 public abstract class MainMenuPanel extends JPanel {
     //region Variables
     //region Child Components
-    protected final MainMenuHost menu;
+    protected final MainMenuView menu;
     protected final MainMenuCanvas canvas;
     //endregion
     //region Card Overlay
@@ -22,7 +19,7 @@ public abstract class MainMenuPanel extends JPanel {
     //endregion
 
     //region Constructors
-    protected MainMenuPanel(MainMenuHost menu) {
+    protected MainMenuPanel(MainMenuView menu) {
         this.menu = menu;
         this.canvas = new MainMenuCanvas(menu.screenWidth(), menu.screenHeight());
         setOpaque(false);

@@ -1,7 +1,6 @@
 package Project.Game;
-import Project.EngineCreator.*;
-import Project.ThemeCreator.*;
-import Project.CreatorKit.*;
+
+import Project.Helpers.FontCache;
 
 import java.awt.*;
 import java.awt.datatransfer.*;
@@ -13,7 +12,7 @@ public final class DevConsole {
     //region Variables
     //region Layout Constants
     private static final int MAX_LOG_LINES = 400, MAX_HISTORY = 100, PADDING = 10, LINE_HEIGHT = 18, WHEEL_ROWS = 3;
-    private static final Font FONT = new Font(Font.MONOSPACED, Font.PLAIN, 14);
+    private static final Font FONT = FontCache.get(Font.MONOSPACED, Font.PLAIN, 14);
     private static final Color BACKGROUND = new Color(8, 10, 14, 218);
     private static final Color BORDER = new Color(120, 170, 255);
     private static final Color INPUT_TEXT = new Color(235, 235, 235);
@@ -48,9 +47,7 @@ public final class DevConsole {
     //endregion
 
     //region Commands
-    public synchronized void register(String name, String usage, Command command) {
-        commands.put(name.toLowerCase(Locale.ROOT), new Entry(usage, command, new ArrayList<>()));
-    }
+    public synchronized void register(String name, String usage, Command command) { commands.put(name.toLowerCase(Locale.ROOT), new Entry(usage, command, new ArrayList<>())); }
     public synchronized void alias(String shortName, String name) {
         String target = name.toLowerCase(Locale.ROOT);
         Entry entry = commands.get(target);
@@ -59,7 +56,6 @@ public final class DevConsole {
         entry.shortNames().add(key);
         shortNames.put(key, target);
     }
-    public synchronized List<String> commandNames() { return new ArrayList<>(commands.keySet()); }
     public synchronized List<String> helpLines() {
         List<String> out = new ArrayList<>();
         for (Entry entry : commands.values()) {
@@ -68,10 +64,6 @@ public final class DevConsole {
             out.add(line);
         }
         return out;
-    }
-    public synchronized String usageOf(String name) {
-        Entry entry = commands.get(name.toLowerCase(Locale.ROOT));
-        return entry == null ? null : entry.usage();
     }
     public void execute(String line) {
         String text = line == null ? "" : line.trim();
@@ -92,9 +84,8 @@ public final class DevConsole {
         Args args = new Args(tokens, this);
         try {
             entry.command().run(args);
-            for (String token : tokens) {
+            for (String token : tokens)
                 if (args.isOptionUnread(token)) log(Level.WARN, name + ": unknown option " + token + " (type --help)");
-            }
         }
         catch (IllegalArgumentException exception) {
             log(Level.ERROR, exception.getMessage());
@@ -102,9 +93,7 @@ public final class DevConsole {
         }
         catch (RuntimeException exception) { log(Level.ERROR, name + " failed: " + exception); }
     }
-    @FunctionalInterface public interface Command {
-void run(Args args);
- }
+    @FunctionalInterface public interface Command { void run(Args args); }
     public static final class Args {
         private final List<String> tokens;
         private final Set<String> used = new HashSet<>();
@@ -169,42 +158,36 @@ void run(Args args);
         return out.toString();
     }
     public enum Level { INFO, COMMAND, WARN, ERROR }
-    private record Entry(String usage, Command command, List<String> shortNames) {
-
-    }
-    private record LogLine(long seq, Level level, String text) {
-
-    }
+    private record Entry(String usage, Command command, List<String> shortNames) { }
+    private record LogLine(long seq, Level level, String text) { }
     //endregion
 
     //region Keyboard
-    public synchronized boolean handleKey(KeyEvent keyEvent) {
+    public synchronized void handleKey(KeyEvent keyEvent) {
         int key = keyEvent.getKeyCode();
         if (keyEvent.isControlDown() || keyEvent.isMetaDown()) {
             if (key == KeyEvent.VK_C) copySelection();
             else if (key == KeyEvent.VK_V) pasteIntoInput();
             else if (key == KeyEvent.VK_A) selectAll();
-            return true;
+            return;
         }
-        if (key == KeyEvent.VK_ESCAPE) { setOpen(false); return true; }
-        if (key == KeyEvent.VK_ENTER) { submit(); return true; }
+        if (key == KeyEvent.VK_ESCAPE) { setOpen(false); return; }
+        if (key == KeyEvent.VK_ENTER) { submit(); return; }
         if (key == KeyEvent.VK_BACK_SPACE) {
             if (!input.isEmpty()) input = input.substring(0, input.length() - 1);
-            return true;
+            return;
         }
-        if (key == KeyEvent.VK_UP) { recall(-1); return true; }
-        if (key == KeyEvent.VK_DOWN) { recall(1); return true; }
-        if (key == KeyEvent.VK_PAGE_UP) { scrollRows += Math.max(1, visibleCount - 1); return true; }
-        if (key == KeyEvent.VK_PAGE_DOWN) { scrollRows = Math.max(0, scrollRows - Math.max(1, visibleCount - 1)); return true; }
-        return true;
+        if (key == KeyEvent.VK_UP) { recall(-1); return; }
+        if (key == KeyEvent.VK_DOWN) { recall(1); return; }
+        if (key == KeyEvent.VK_PAGE_UP) { scrollRows += Math.max(1, visibleCount - 1); return; }
+        if (key == KeyEvent.VK_PAGE_DOWN) { scrollRows = Math.max(0, scrollRows - Math.max(1, visibleCount - 1));
+        }
     }
     public synchronized void typed(char c) {
         if (isToggleChar(c) || c == KeyEvent.CHAR_UNDEFINED || Character.isISOControl(c)) return;
         if (input.length() < 200) input += c;
     }
-    public static boolean isToggleChar(char c) {
-        return c == '`' || c == '~' || c == 'ё' || c == 'Ё';
-    }
+    public static boolean isToggleChar(char c) { return c == '`' || c == '~' || c == 'ё' || c == 'Ё'; }
     public synchronized String takeSubmitted() {
         String line = pending;
         pending = null;
@@ -319,9 +302,7 @@ void run(Args args);
         g2d.setColor(SELECTION);
         g2d.fillRect(PADDING + (from0 - row.start()) * charWidth, top, (to0 - from0) * charWidth, LINE_HEIGHT);
     }
-    private record Point(long seq, int index) {
-
-    }
+    private record Point(long seq, int index) { }
     //endregion
 
     //region Drawing
@@ -383,8 +364,6 @@ void run(Args args);
             case INFO -> new Color(210, 210, 210);
         };
     }
-    private record Row(long seq, int start, int end, Level level, String text) {
-
-    }
+    private record Row(long seq, int start, int end, Level level, String text) { }
     //endregion
 }
