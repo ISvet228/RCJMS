@@ -1,12 +1,19 @@
 package Project.Game;
 
+import Project.Core.*;
+import Project.Helpers.Settings;
+
+import Project.*;
 import Project.Helpers.FontCache;
 import Project.MainMenu.MainMenuView;
 import Project.RCJMS;
 import Project.TextureEditor.TextureEditorView;
 import Project.Victory.VictoryView;
 import Project.Helpers.*;
+import Project.Helpers.maze.MazeAlgorithms;
 import static Project.Game.RenderEngineConfig.*;
+import Project.Filters.*;
+import Project.Game.Pause.*;
 
 import javax.swing.*; //Frame Library
 import java.awt.*; //Graphics Library
@@ -18,7 +25,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Variables
     //region Maze Configuration
     private static MazeGenerator.FinishMode MAZE_MODE = MazeGenerator.FinishMode.RANDOM_EDGE;
-    private static boolean MAZE_3D = false;
+    private String mazeAlgorithmId = MazeAlgorithms.selected().id();
+    private static boolean MAZE_HAS_FLOORS = false;
     private static int MAZE_FLOORS = 1;
     private String customSeed;
     private String mazeSeedText = "";
@@ -31,6 +39,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Maze State
     private MazeGenerator mazeGenerator;
     private MazeGenerator3D mazeGenerator3D;
+    private MazeData sharedMaze;
     private int[][][] map3D;
     private PortalData[] floorPortalsAll;
     private int[][] map;
@@ -168,6 +177,18 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private long gameStartTime = System.currentTimeMillis();
     private long pauseStartTime = 0, pausedTime = 0, elapsedSeconds;
     //endregion
+    //region Game Modules
+    private final java.util.List<GameModule> features = ModuleRegistry.create();
+    private final java.util.Set<GameModule> brokenModules = new java.util.HashSet<>();
+    private final GameContext gameContext = new ModuleContext();
+    private volatile String flashText = "";
+    private volatile long flashUntilMillis = 0;
+    private volatile boolean hudVisible = true;
+    //endregion
+    //region Pause Menu State
+    private final PauseMenuView pauseMenu = new PauseMenuView(new PauseMenuState(), this::onPauseItem);
+    private String pauseFilterName = "";
+    //endregion
     //region FPS Counter State
     private int frameCounter = 0, currentFps = 0;
     private long fpsWindowStart = System.currentTimeMillis();
@@ -191,6 +212,15 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     public GameView(int mazeWidth, int mazeHeight, int mazeMode, int geometryMode, int floors) throws IOException {
         this(mazeWidth, mazeHeight, mazeMode, geometryMode, (String) null, floors); }
     public GameView(int mazeWidth, int mazeHeight, int mazeMode, int geometryMode, String seed, int floors) throws IOException {
+        this(mazeWidth, mazeHeight, mazeMode, geometryMode, seed, floors, null); }
+    public GameView(int mazeWidth, int mazeHeight, int mazeMode, int geometryMode, String seed, int floors, String algorithm) throws IOException {
+        this(mazeWidth, mazeHeight, mazeMode, geometryMode, seed, floors, algorithm, null);
+    }
+    public GameView(MazeData maze) throws IOException {
+        this(maze.width(), maze.height(), maze.finishMode(), maze.geometry(), maze.seed(), maze.hasFloors() ? maze.floors() : 1, maze.algorithm(), maze);
+    }
+    private GameView(int mazeWidth, int mazeHeight, int mazeMode, int geometryMode, String seed, int floors, String algorithm,
+                     MazeData shared) throws IOException {
         setPreferredSize(new Dimension(RCJMS.GAME_WIDTH, RCJMS.GAME_HEIGHT));
         setFocusable(true);
         requestFocus();
@@ -206,15 +236,18 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         String typedSeed = SeedUtil.normalize(seed);
         customSeed = typedSeed.isEmpty() ? null : typedSeed;
         isCustomMap = false;
+        sharedMaze = shared;
         requestedWidth = mazeWidth;
         requestedHeight = mazeHeight;
         GEOMETRY_MODE = MazeGenerator.GeometryMode.values()[Math.clamp(geometryMode, 0, MazeGenerator.GeometryMode.values().length - 1)];
         MAZE_MODE = MazeGenerator.FinishMode.values()[mazeMode];
+        mazeAlgorithmId = (algorithm != null ? MazeAlgorithms.find(algorithm) : MazeAlgorithms.selected()).id();
 
-        MAZE_3D = floors > 1;
-        MAZE_FLOORS = MAZE_3D ? floors : 1;
+        MAZE_HAS_FLOORS = floors > 1;
+        MAZE_FLOORS = MAZE_HAS_FLOORS ? floors : 1;
 
-        if (MAZE_3D) {
+        if (shared != null) applyShared(shared);
+        else if (MAZE_HAS_FLOORS) {
             mazeGenerator3D = new MazeGenerator3D(mazeWidth, mazeHeight, MAZE_FLOORS, chooseSeed(), GEOMETRY_MODE);
 
             map3D = mazeGenerator3D.generate(MAZE_MODE);
@@ -258,7 +291,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         requestedWidth = requestedHeight = -1;
 
         int floors = Math.max(1, customFloors.length);
-        MAZE_3D = floors > 1;
+        MAZE_HAS_FLOORS = floors > 1;
         MAZE_FLOORS = floors;
         GEOMETRY_MODE = MazeGenerator.GeometryMode.values()[Math.clamp(geometryMode, 0, MazeGenerator.GeometryMode.values().length - 1)];
 
@@ -301,7 +334,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         customSeed = null;
         isCustomMap = true;
         requestedWidth = requestedHeight = -1;
-        MAZE_3D = false;
+        MAZE_HAS_FLOORS = false;
         GEOMETRY_MODE = MazeGenerator.GeometryMode.EUCLIDEAN;
         MAZE_FLOORS = 1;
         map = customMap;
@@ -327,6 +360,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (!consoleReady) {
             consoleReady = true;
             registerConsoleCommands();
+            eachModule(feature -> feature.onConsoleReady(gameContext));
             Project.OpenCl.GpuRuntime.setLogSink(line -> console.log(line.contains("disabled") || line.contains("unavailable") ? DevConsole.Level.WARN : DevConsole.Level.INFO, line));
             console.log(DevConsole.Level.INFO, "developer console: press ~ and type --help");
             console.log(DevConsole.Level.INFO, "engine " + renderEngineId + ", OpenCL acceleration " + (openClAcceleration ? "ON" : "OFF"));
@@ -346,7 +380,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                         busyWorker = null;
                         autoRender.reset();
                         lastFrameTime = System.nanoTime();
-                        onLoadingFinished();
+                        if (pendingWork == null && !renderPrepPending) onLoadingFinished();
                     }
                     if (busyWorker == null) startNextBusyWork();
                     long currentFrameTime = System.nanoTime();
@@ -394,10 +428,13 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (paused == isPaused) return;
         if (paused && isBusy()) return;
         isPaused = paused;
+        notifyPause(paused);
         console.log(DevConsole.Level.INFO, paused ? "paused" : "resumed");
         if (paused) {
             pauseStartTime = System.currentTimeMillis();
             showCursor();
+            pauseFilterName = currentFilterName();
+            pauseMenu.open(hudVisible, pauseFilterName);
         } else {
             pausedTime += System.currentTimeMillis() - pauseStartTime;
             hideCursor();
@@ -477,41 +514,41 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             consoleKey(keyEvent);
             return;
         }
+        if (notifyKey(keyEvent, true)) return;
         boolean loading = isBusy();
-        if (loading && (key == KeyEvent.VK_ESCAPE || key == KeyEvent.VK_R)) return;
-        if (textMode && !isPaused && key != KeyEvent.VK_ESCAPE) {
+        boolean pauseKey = KeyBindings.matches(KeyBindings.Action.PAUSE, keyEvent);
+        if (loading && (pauseKey || KeyBindings.matches(KeyBindings.Action.RESTART, keyEvent))) return;
+        if (isPaused && pauseMenu.key(keyEvent)) return;
+        if (textMode && !isPaused && !pauseKey) {
             textKey(keyEvent);
             return;
         }
-        if (key == KeyEvent.VK_W) w = !loading;
-        if (key == KeyEvent.VK_S) s = !loading;
-        if (key == KeyEvent.VK_A) a = !loading;
-        if (key == KeyEvent.VK_D) d = !loading;
+        if (KeyBindings.matches(KeyBindings.Action.FORWARD, keyEvent)) w = !loading;
+        if (KeyBindings.matches(KeyBindings.Action.BACK, keyEvent)) s = !loading;
+        if (KeyBindings.matches(KeyBindings.Action.LEFT, keyEvent)) a = !loading;
+        if (KeyBindings.matches(KeyBindings.Action.RIGHT, keyEvent)) d = !loading;
         if (key == KeyEvent.VK_B) isDebugMode = !isDebugMode;
         if (key == KeyEvent.VK_M && fogMinimap) fogMapVisible = !fogMapVisible;
-        if (key == KeyEvent.VK_SHIFT) shift = !loading;
+        if (KeyBindings.matches(KeyBindings.Action.SPRINT, keyEvent)) shift = !loading;
         if (key == KeyEvent.VK_F1) noClip = !noClip;
         if (key == KeyEvent.VK_EQUALS || key == KeyEvent.VK_PLUS || key == KeyEvent.VK_ADD) miniMapCellPixels = Math.min(20, miniMapCellPixels + 1);
         if (key == KeyEvent.VK_MINUS || key == KeyEvent.VK_SUBTRACT) miniMapCellPixels = Math.max(3, miniMapCellPixels - 1);
-        if (key == KeyEvent.VK_ESCAPE) {
+        if (pauseKey) {
             setPaused(!isPaused);
         }
         if (isPaused && keyEvent.isControlDown() && key == KeyEvent.VK_C) {
-            isGameRunning = false;
-            showCursor();
-            RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu");
-            gameThread.interrupt();
+            returnToMainMenu();
             return;
         }
-        if (key == KeyEvent.VK_R) restartGame();
+        if (KeyBindings.matches(KeyBindings.Action.RESTART, keyEvent)) restartGame();
     }
     @Override public void keyReleased(KeyEvent keyEvent) {
-        int key = keyEvent.getKeyCode();
-        if (key == KeyEvent.VK_W) w = false;
-        if (key == KeyEvent.VK_S) s = false;
-        if (key == KeyEvent.VK_A) a = false;
-        if (key == KeyEvent.VK_D) d = false;
-        if (key == KeyEvent.VK_SHIFT) shift = false;
+        notifyKey(keyEvent, false);
+        if (KeyBindings.matches(KeyBindings.Action.FORWARD, keyEvent)) w = false;
+        if (KeyBindings.matches(KeyBindings.Action.BACK, keyEvent)) s = false;
+        if (KeyBindings.matches(KeyBindings.Action.LEFT, keyEvent)) a = false;
+        if (KeyBindings.matches(KeyBindings.Action.RIGHT, keyEvent)) d = false;
+        if (KeyBindings.matches(KeyBindings.Action.SPRINT, keyEvent)) shift = false;
     }
     @Override public void keyTyped(KeyEvent keyEvent) {
         if (console.isOpen()) {
@@ -528,8 +565,20 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     //endregion
     //region Mouse
-    @Override public void mouseMoved(MouseEvent mouseEvent) { handleMouseLook(mouseEvent); }
+    @Override public void mouseMoved(MouseEvent mouseEvent) {
+        if (isPaused && !console.isOpen()) {
+            Point point = toFrame(mouseEvent);
+            pauseMenu.mouseMoved(point.x, point.y);
+            return;
+        }
+        handleMouseLook(mouseEvent);
+    }
     @Override public void mouseDragged(MouseEvent mouseEvent) {
+        if (isPaused && !console.isOpen()) {
+            Point point = toFrame(mouseEvent);
+            pauseMenu.mouseDragged(point.x, point.y);
+            return;
+        }
         if (console.isOpen()) {
             console.mouseDragged(mouseEvent.getX(), mouseEvent.getY());
             repaint();
@@ -538,11 +587,21 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         handleMouseLook(mouseEvent);
     }
     @Override public void mousePressed(MouseEvent mouseEvent) {
+        if (isPaused && !console.isOpen()) {
+            Point point = toFrame(mouseEvent);
+            pauseMenu.mousePressed(point.x, point.y);
+            repaint();
+            return;
+        }
         if (!console.isOpen()) return;
         console.mousePressed(mouseEvent.getX(), mouseEvent.getY());
         repaint();
     }
     @Override public void mouseReleased(MouseEvent mouseEvent) {
+        if (isPaused && !console.isOpen()) {
+            pauseMenu.mouseReleased();
+            return;
+        }
         if (!console.isOpen()) return;
         console.mouseReleased();
         repaint();
@@ -574,6 +633,12 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         cameraPitch = Math.clamp(cameraPitch - dy * mouseSensitivity, -1.2, 1.2);
 
         if (cursorRobot != null && nearViewEdge(x, y, origin)) recentreCursor(origin);
+    }
+    private Point toFrame(MouseEvent mouseEvent) {
+        double scale = Math.min(getWidth() / (double) bufferedImage.getWidth(), getHeight() / (double) bufferedImage.getHeight());
+        int drawX = (getWidth() - (int) (bufferedImage.getWidth() * scale)) / 2;
+        int drawY = (getHeight() - (int) (bufferedImage.getHeight() * scale)) / 2;
+        return new Point((int) ((mouseEvent.getX() - drawX) / scale), (int) ((mouseEvent.getY() - drawY) / scale));
     }
     private void setLastMouse(int x, int y) {
         lastMouseScreenX = x;
@@ -619,6 +684,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
     //region Player Movement
     private void update(double deltaTiime) {
+        notifyUpdate(deltaTiime);
         if (isFloorTransitioning) {
             double speed = Math.max(0.05, STAIR_ANIMATION_SPEED);
             floorTransitionTime += deltaTiime * speed;
@@ -690,48 +756,52 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         playerX = Math.clamp(playerX, 0.0001, mapWidth() - 0.0001);
         playerY = Math.clamp(playerY, 0.0001, mapHeight() - 0.0001);
 
-        double moveLength = Math.hypot(movementX, movementY);
-        int portalCellY = Math.clamp((int) moveStartY, 0, mapHeight() - 1);
-        int portalCellX = Math.clamp((int) moveStartX, 0, mapWidth() - 1);
-        if (moveLength > 1e-12 && map[portalCellY][portalCellX] == MazeGenerator.PORTAL) {
-            PortalData.Portal portal = portals.get(portalCellX, portalCellY);
-            if (portal != null) {
-                double moveDirX = movementX / moveLength, moveDirY = movementY / moveLength;
-                if (PortalData.entersFromCorrectSide(portal, moveDirX, moveDirY)
-                        && PortalData.crossesWindow(portal, moveStartX, moveStartY, playerX, playerY)) {
-                    double[] warped = PortalData.teleport(portal, playerX, playerY);
-                    if (map3D != null && portal.linkedFloor >= 0 && portal.linkedFloor != currentFloor && portal.linkedFloor < map3D.length) {
-                        int fromFloor = currentFloor;
-                        currentFloor = portal.linkedFloor;
-                        map = map3D[currentFloor];
-                        portals = floorPortalsAll[currentFloor];
-                        if (!isFloorTransitioning) startPortalTransition(fromFloor, currentFloor);
-                    }
-                    playerX = Math.clamp(warped[0], 0.0001, mapWidth() - 0.0001);
-                    playerY = Math.clamp(warped[1], 0.0001, mapHeight() - 0.0001);
-                    if (!noClip) pushPlayerOutOfWalls(map);
-                    double[] warpedFacing = PortalData.transformDirection(portal, Math.cos(cameraAngle), Math.sin(cameraAngle));
-                    cameraAngle = Math.atan2(warpedFacing[1], warpedFacing[0]);
-                    hasLastMousePos = false;
-                }
-            }
-        }
+        applyPortalStep(moveStartX, moveStartY, movementX, movementY);
+        if (reachedFinish()) return;
 
         int cellY = Math.clamp((int) playerY, 0, mapHeight() - 1);
         int cellX = Math.clamp((int) playerX, 0, mapWidth() - 1);
         int cellType = map[cellY][cellX];
 
-        if (cellType == 2 && isGameRunning) {
-            isGameRunning = false;
-            playerX = playerY = 1.5;
-            cameraAngle = cameraPitch = 0;
-            RCJMS.instance.changeView(RCJMS.instance.victoryView = new VictoryView(elapsedSeconds, requestedWidth, requestedHeight, isCustomMap), "vv.victory");
-            gameThread.interrupt();
-            return;
-        }
-
         if (fogMinimap || textMode) updateFog(deltaTiime);
-        if (is3D()) handleStairs(cellType);
+        if (hasFloors()) handleStairs(cellType);
+    }
+    private boolean applyPortalStep(double startX, double startY, double moveX, double moveY) {
+        double moveLength = Math.hypot(moveX, moveY);
+        if (moveLength <= 1e-12) return false;
+        int cellX = Math.clamp((int) playerX, 0, mapWidth() - 1), cellY = Math.clamp((int) playerY, 0, mapHeight() - 1);
+        int fromX = Math.clamp((int) startX, 0, mapWidth() - 1), fromY = Math.clamp((int) startY, 0, mapHeight() - 1);
+        if ((cellX == fromX && cellY == fromY) || map[cellY][cellX] != MazeGenerator.PORTAL) return false;
+        PortalData.Portal portal = portals.get(cellX, cellY);
+        if (portal == null) return false;
+        if (!PortalData.entersFromCorrectSide(portal, moveX / moveLength, moveY / moveLength)) return false;
+        double[] warped = PortalData.arrive(portal, playerX, playerY);
+        if (map3D != null && portal.linkedFloor >= 0 && portal.linkedFloor != currentFloor && portal.linkedFloor < map3D.length) {
+            int fromFloor = currentFloor;
+            currentFloor = portal.linkedFloor;
+            map = map3D[currentFloor];
+            portals = floorPortalsAll[currentFloor];
+            if (!isFloorTransitioning) startPortalTransition(fromFloor, currentFloor);
+        }
+        playerX = Math.clamp(warped[0], 0.0001, mapWidth() - 0.0001);
+        playerY = Math.clamp(warped[1], 0.0001, mapHeight() - 0.0001);
+        if (!noClip) pushPlayerOutOfWalls(map);
+        double[] warpedFacing = PortalData.transformDirection(portal, Math.cos(cameraAngle), Math.sin(cameraAngle));
+        cameraAngle = Math.atan2(warpedFacing[1], warpedFacing[0]);
+        hasLastMousePos = false;
+        return true;
+    }
+    private boolean reachedFinish() {
+        int cellY = Math.clamp((int) playerY, 0, mapHeight() - 1);
+        int cellX = Math.clamp((int) playerX, 0, mapWidth() - 1);
+        if (map[cellY][cellX] != MazeGenerator.FINISH || !isGameRunning) return false;
+        isGameRunning = false;
+        notifyRunFinish();
+        playerX = playerY = 1.5;
+        cameraAngle = cameraPitch = 0;
+        RCJMS.instance.changeView(RCJMS.instance.victoryView = new VictoryView(elapsedSeconds, requestedWidth, requestedHeight, isCustomMap), "vv.victory");
+        gameThread.interrupt();
+        return true;
     }
     private static boolean isSolidForPlayer(int[][] m, int x, int y) {
         if (y < 0 || x < 0 || y >= m.length || x >= m[0].length) return true;
@@ -824,14 +894,18 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         }
         applyRenderQuality();
         renderSelectedEngine();
-        drawTimer();
-        int hudLine = 0;
-        if (!isCustomMap) drawSeedBadge(hudLine++);
-        if (GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG) drawGeometryBadge(hudLine++);
-        if (GEOMETRY_MODE == MazeGenerator.GeometryMode.LOOPED) drawGeometryBadge(hudLine++, NSLocalizedString.get("looped_geometry"));
-        if (is3D()) drawFloorIndicator(hudLine);
+        updateElapsed();
+        if (hudVisible) {
+            drawTimer();
+            int hudLine = 0;
+            if (!isCustomMap) drawSeedBadge(hudLine++);
+            if (GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG) drawGeometryBadge(hudLine++);
+            if (GEOMETRY_MODE == MazeGenerator.GeometryMode.LOOPED) drawGeometryBadge(hudLine++, NSLocalizedString.get("looped_geometry"));
+            if (hasFloors()) drawFloorIndicator(hudLine);
+        }
         if (isDebugMode && !isPaused) { drawMiniMap(); drawFpsCounter(); drawOpenClBadge(); }
         if (fogMinimap && fogMapVisible) drawFogMiniMap();
+        paintModules();
         if (isPaused) drawPauseMenu();
         if (isFloorTransitioning) drawFloorTransitionEffects();
     }
@@ -851,6 +925,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         renderFrame.outputHeight = RCJMS.GAME_HEIGHT;
         renderFrame.quality = RenderEngineConfig.renderEngineQuality;
         renderFrame.geometry = GEOMETRY_MODE;
+        spriteHyperbolic = GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG;
         renderFrame.curvature = HYPERBOLIC_CURVATURE;
         renderFrame.map = map;
         renderFrame.map3D = map3D;
@@ -917,6 +992,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (engine != null) renderEngineId = engine.id();
     }
     private static RenderEngine currentEngine() { return RenderEngines.find(renderEngineId); }
+    private static volatile boolean spriteHyperbolic;
+    public static float[] spriteLight(double distance) {
+        RenderEngine engine = currentEngine();
+        return engine == null ? new float[]{1f, 1f, 1f} : engine.spriteLight(distance, spriteHyperbolic);
+    }
     private static RenderEngine findEngine(String name) {
         for (RenderEngine renderEngine : RenderEngines.all())
             if (renderEngine.id().equalsIgnoreCase(name) || renderEngine.displayName().equalsIgnoreCase(name)) return renderEngine;
@@ -930,8 +1010,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         Project.OpenCl.GpuRuntime.Health health = Project.OpenCl.GpuRuntime.healthFor(engine.openClKey());
         if (health == Project.OpenCl.GpuRuntime.Health.UNAVAILABLE)
             console.log(DevConsole.Level.WARN, "GPU is not usable: " + Project.OpenCl.GpuRuntime.reasonFor(engine.openClKey()));
-        else if (health == Project.OpenCl.GpuRuntime.Health.PROBING)
-            console.log(DevConsole.Level.INFO, "GPU is still being checked");
+        else if (health == Project.OpenCl.GpuRuntime.Health.PROBING) console.log(DevConsole.Level.INFO, "GPU is still being checked");
     }
     private void logEngineState(RenderEngine engine) {
         String key = engine.id() + '|' + GEOMETRY_MODE + '|' + openClAcceleration + '|' + noCeiling + '|' + textMode
@@ -1036,6 +1115,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         gameStartTime = System.currentTimeMillis();
         pausedTime = 0;
         releaseInput();
+        notifyRunStart();
     }
     private void prepareRenderer() {
         syncRenderer(renderFrame);
@@ -1097,11 +1177,10 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         g2d.drawString(fpsText, 38, RCJMS.SCREEN_HEIGHT - 30);
         g2d.dispose();
     }
+    private void updateElapsed() { elapsedSeconds = ((isPaused ? pauseStartTime : System.currentTimeMillis()) - gameStartTime - pausedTime) / 1000; }
     private void drawTimer() {
         Graphics2D g2d = bufferedImage.createGraphics();
         g2d.scale(uiScale(), uiScale());
-        elapsedSeconds = ((isPaused ? pauseStartTime : System.currentTimeMillis()) - gameStartTime - pausedTime) / 1000;
-
         long hours = elapsedSeconds / 3600;
         long minutes = (elapsedSeconds % 3600) / 60;
         long seconds = elapsedSeconds % 60;
@@ -1179,32 +1258,43 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Pause Menu
     private void drawPauseMenu() {
         Graphics2D g2d = bufferedImage.createGraphics();
-        g2d.scale(uiScale(), uiScale());
-        g2d.setColor(new Color(0,0,0,180));
-        g2d.fillRect(0,0, RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
-
-        String pausedText = NSLocalizedString.get("gv.paused");
-
-        g2d.setColor(Color.WHITE);
-        g2d.setFont(BIG_SANS_FONT);
-        int pausedWidth = g2d.getFontMetrics().stringWidth(pausedText);
-        g2d.drawString(pausedText, (RCJMS.SCREEN_WIDTH - pausedWidth) / 2, RCJMS.SCREEN_HEIGHT / 2 - 50);
-
-        g2d.setFont(SMALL_SANS_FONT);
-        g2d.drawString(NSLocalizedString.get("gv.continue"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 20);
-        g2d.drawString(NSLocalizedString.get("restart"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 50);
-        g2d.drawString(NSLocalizedString.get("run"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 80);
-        g2d.drawString(NSLocalizedString.get("gv.no_clip") + " = " + noClip, RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 110);
-        g2d.drawString(NSLocalizedString.get("gv.geometry") + " = " + NSLocalizedString.get(
-                GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG ? "gv.wrong_geometry" : "gv.euclidean"), RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 140);
-        if (is3D()) g2d.drawString(NSLocalizedString.get("floor") + ": " + (currentFloor + 1) + "/" + map3D.length,
-                RCJMS.SCREEN_WIDTH / 2 - 90, RCJMS.SCREEN_HEIGHT / 2 + 170);
-
-        int exitHintY = RCJMS.SCREEN_HEIGHT / 2 + 170 + (is3D() ? 30 : 0);
-        g2d.drawString(NSLocalizedString.get("gv.exit_hint"), RCJMS.SCREEN_WIDTH / 2 - 90, exitHintY);
-        if (fogMinimap) g2d.drawString(NSLocalizedString.get("gv.map_toggle_hint"), RCJMS.SCREEN_WIDTH / 2 - 90, exitHintY + 30);
-
-        g2d.dispose();
+        try {
+            pauseMenu.setStatus(hudVisible, pauseFilterName);
+            pauseMenu.paint(g2d, bufferedImage.getWidth(), bufferedImage.getHeight());
+        }
+        finally { g2d.dispose(); }
+    }
+    private void onPauseItem(PauseMenuState.Item item) {
+        switch (item) {
+            case RESUME -> setPaused(false);
+            case RESTART -> restartGame();
+            case TOGGLE_HUD -> hudVisible = !hudVisible;
+            case CYCLE_FILTER -> cyclePauseFilter();
+            case MAIN_MENU -> returnToMainMenu();
+            default -> { }
+        }
+    }
+    private void cyclePauseFilter() {
+        java.util.List<Filter> filters = FilterRegistry.create();
+        String id = Settings.getString("filters.current", "none");
+        int index = -1;
+        for (int i = 0; i < filters.size(); i++) if (filters.get(i).id().equals(id)) index = i;
+        int next = index + 1 < filters.size() ? index + 1 : -1;
+        Settings.set("filters.current", next < 0 ? "none" : filters.get(next).id());
+        pauseFilterName = currentFilterName();
+    }
+    private String currentFilterName() {
+        String id = Settings.getString("filters.current", "none");
+        for (Filter filter : FilterRegistry.create()) {
+            if (filter.id().equals(id)) return NSLocalizedString.get(filter.nameKey());
+        }
+        return NSLocalizedString.get("filter.none");
+    }
+    private void returnToMainMenu() {
+        isGameRunning = false;
+        showCursor();
+        RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu");
+        gameThread.interrupt();
     }
     //endregion
     //endregion
@@ -1241,6 +1331,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             }
         }
 
+        drawMiniMapMarkers(offsetX, offsetY, scale, offsetX, offsetY, offsetX + (int) (mapWidth * scale), offsetY + (int) (mapHeight * scale));
         int playerSize = Math.max(1, (int)Math.floor(scale * 0.25));
         for (int yy = -playerSize; yy <= playerSize; yy++) {
             for (int xx = -playerSize; xx <= playerSize; xx++) {
@@ -1280,7 +1371,73 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         drawMiniMapLine(px, py, px + (int) Math.round(Math.cos(cameraAngle) * tick), py + (int) Math.round(Math.sin(cameraAngle) * tick));
         int half = Math.max(1, cell / 3);
         fillMiniRect(px - half, py - half, px + half + 1, py + half + 1, 0xFF0000, margin, margin, margin + boxW, margin + boxH);
+        drawMiniMapMarkers(margin - viewLeft * cell, margin - viewTop * cell, cell, margin, margin, margin + boxW, margin + boxH);
     }
+    //region Rival Markers
+    public static volatile java.util.function.IntFunction<java.util.List<MiniMapMarker>> miniMapMarkers;
+    private static final Font MINI_MARKER_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 10);
+    public record MiniMapMarker(double x, double y, int color, String label) {}
+    private java.util.List<MiniMapMarker> miniMapMarkersHere() {
+        java.util.function.IntFunction<java.util.List<MiniMapMarker>> source = miniMapMarkers;
+        if (source == null) return java.util.List.of();
+        try {
+            java.util.List<MiniMapMarker> markers = source.apply(currentFloor);
+            return markers == null ? java.util.List.of() : markers;
+        } catch (RuntimeException exception) {
+            return java.util.List.of();
+        }
+    }
+    private void drawMiniMapMarkers(double originX, double originY, double cell, int clipX0, int clipY0, int clipX1, int clipY1) {
+        java.util.List<MiniMapMarker> markers = miniMapMarkersHere();
+        if (markers.isEmpty()) return;
+        Graphics2D g = bufferedImage.createGraphics();
+        try {
+            setupMarkerPainting(g, clipX0, clipY0, clipX1, clipY1);
+            for (MiniMapMarker marker : markers) {
+                if (!Double.isFinite(marker.x()) || !Double.isFinite(marker.y())) continue;
+                double px = clampTo(originX + marker.x() * cell, clipX0 + 4, clipX1 - 4);
+                double py = clampTo(originY + marker.y() * cell, clipY0 + 4, clipY1 - 4);
+                paintMarker(g, marker, px, py);
+            }
+        } finally {
+            g.dispose();
+        }
+    }
+    private void drawCoolMiniMapMarkers(int centerX, int centerY, int radiusPx) {
+        java.util.List<MiniMapMarker> markers = miniMapMarkersHere();
+        if (markers.isEmpty()) return;
+        Graphics2D g = bufferedImage.createGraphics();
+        try {
+            setupMarkerPainting(g, centerX - radiusPx, centerY - radiusPx, centerX + radiusPx, centerY + radiusPx);
+            for (MiniMapMarker marker : markers) {
+                if (!Double.isFinite(marker.x()) || !Double.isFinite(marker.y())) continue;
+                double dx = marker.x() - playerX, dy = marker.y() - playerY;
+                double diskR = Math.min(HyperbolicMath.poincareRadius(Math.hypot(dx, dy), HYPERBOLIC_CURVATURE), 0.98);
+                double angle = Math.atan2(dy, dx);
+                paintMarker(g, marker, centerX + Math.cos(angle) * diskR * radiusPx, centerY + Math.sin(angle) * diskR * radiusPx);
+            }
+        } finally { g.dispose(); }
+    }
+
+    private static void setupMarkerPainting(Graphics2D g, int x0, int y0, int x1, int y1) {
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setClip(x0, y0, x1 - x0, y1 - y0);
+        g.setFont(MINI_MARKER_FONT);
+    }
+    private static void paintMarker(Graphics2D g, MiniMapMarker marker, double px, double py) {
+        int x = (int) Math.round(px), y = (int) Math.round(py);
+        g.setColor(Color.BLACK);
+        g.fillOval(x - 4, y - 4, 9, 9);
+        g.setColor(new Color(marker.color()));
+        g.fillOval(x - 3, y - 3, 7, 7);
+        g.setColor(Color.BLACK);
+        g.drawString(marker.label(), x + 6, y + 4);
+        g.setColor(Color.WHITE);
+        g.drawString(marker.label(), x + 5, y + 3);
+    }
+
+    private static double clampTo(double value, double min, double max) { return Math.min(Math.max(value, min), max); }
+    //endregion
     private void fillMiniRect(int x0, int y0, int x1, int y1, int color, int clipX0, int clipY0, int clipX1, int clipY1) {
         x0 = Math.max(x0, Math.max(clipX0, 0)); y0 = Math.max(y0, Math.max(clipY0, 0));
         x1 = Math.min(x1, Math.min(clipX1, RCJMS.GAME_WIDTH)); y1 = Math.min(y1, Math.min(clipY1, RCJMS.GAME_HEIGHT));
@@ -1328,6 +1485,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 }
             }
         }
+        drawCoolMiniMapMarkers(centerX, centerY, diskRadiusPx);
         for (double a = 0; a < Math.PI * 2; a += 0.01) {
             int px = centerX + (int) Math.round(Math.cos(a) * diskRadiusPx);
             int py = centerY + (int) Math.round(Math.sin(a) * diskRadiusPx);
@@ -1437,6 +1595,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         drawMiniMapLine(px, py, px + (int) Math.round(Math.cos(cameraAngle) * tick), py + (int) Math.round(Math.sin(cameraAngle) * tick));
         int half = Math.max(1, cell / 3);
         fillMiniRect(px - half, py - half, px + half + 1, py + half + 1, 0xFF0000, margin, margin, margin + box, margin + box);
+        drawMiniMapMarkers(margin - viewLeft * cell, margin - viewTop * cell, cell, margin, margin, margin + box, margin + box);
 
         Graphics2D g2d = bufferedImage.createGraphics();
         g2d.scale(s, s);
@@ -1498,9 +1657,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     private static double smooth(double t) { return t * t * (3 - 2 * t); }
     private double stepPhase() { return Math.clamp(floorTransitionTime / STEP_DURATION, 0, 1); }
-    private double crossPhase() {
-        return Math.clamp((floorTransitionTime - crossStart()) / CROSS_DURATION, 0, 1);
-    }
+    private double crossPhase() { return Math.clamp((floorTransitionTime - crossStart()) / CROSS_DURATION, 0, 1); }
     private double crossStart() { return transitionDirection == 0 ? 0 : STEP_DURATION; }
     private double transitionTotalDuration() {
         return transitionDirection == 0 ? CROSS_DURATION
@@ -1649,14 +1806,53 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         mazeSeedText = customSeed != null ? customSeed : SeedUtil.randomSeed();
         return SeedUtil.toLong(mazeSeedText);
     }
+    private void applyShared(MazeData data) {
+        mazeSeedText = data.seed();
+        customSeed = data.seed();
+        GEOMETRY_MODE = MazeGenerator.GeometryMode.values()[Math.clamp(data.geometry(), 0, MazeGenerator.GeometryMode.values().length - 1)];
+        MAZE_MODE = MazeGenerator.FinishMode.values()[Math.clamp(data.finishMode(), 0, MazeGenerator.FinishMode.values().length - 1)];
+        mazeAlgorithmId = data.algorithm();
+        MAZE_HAS_FLOORS = data.hasFloors();
+        MAZE_FLOORS = data.floors();
+        requestedWidth = data.width();
+        requestedHeight = data.height();
+        mazeGenerator = null;
+        mazeGenerator3D = null;
+        currentFloor = 0;
+        if (data.hasFloors()) {
+            map3D = new int[data.floors()][][];
+            floorPortalsAll = new PortalData[data.floors()];
+            for (int f = 0; f < data.floors(); f++) {
+                map3D[f] = copyCells(data.cells()[f]);
+                floorPortalsAll[f] = data.portals()[f].copy();
+            }
+            map = map3D[0];
+            portals = floorPortalsAll[0];
+        }
+        else {
+            map3D = null;
+            floorPortalsAll = null;
+            map = copyCells(data.cells()[0]);
+            portals = data.portals()[0].copy();
+        }
+    }
+    private static int[][] copyCells(int[][] cells) {
+        int[][] copy = new int[cells.length][];
+        for (int y = 0; y < cells.length; y++) copy[y] = cells[y].clone();
+        return copy;
+    }
+
     private void regenerateMaze() {
         LevelSpec level = pendingLevel;
         pendingLevel = null;
         int width = level != null ? level.width() : mapWidth();
         int height = level != null ? level.height() : mapHeight();
+        MazeAlgorithm chosenAlgorithm = level != null && level.algorithm() != null ? MazeAlgorithms.find(level.algorithm()) : MazeAlgorithms.find(mazeAlgorithmId);
+        mazeAlgorithmId = chosenAlgorithm.id();
         if (level != null) {
-            MAZE_3D = level.floors() > 1;
-            MAZE_FLOORS = MAZE_3D ? level.floors() : 1;
+            if (level.finish() != null) MAZE_MODE = level.finish();
+            MAZE_HAS_FLOORS = level.floors() > 1;
+            MAZE_FLOORS = MAZE_HAS_FLOORS ? level.floors() : 1;
             GEOMETRY_MODE = level.geometry();
             customSeed = level.seed();
             requestedWidth = width;
@@ -1664,8 +1860,9 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         }
         mapEngine = null;
 
-        if (MAZE_3D) {
-            mazeGenerator3D = new MazeGenerator3D(width, height, MAZE_FLOORS, chooseSeed(), GEOMETRY_MODE);
+        if (sharedMaze != null) applyShared(sharedMaze);
+        else if (MAZE_HAS_FLOORS) {
+            mazeGenerator3D = new MazeGenerator3D(width, height, MAZE_FLOORS, chooseSeed(), GEOMETRY_MODE).useAlgorithm(chosenAlgorithm);
             map3D = mazeGenerator3D.generate(MAZE_MODE);
             currentFloor = 0;
             floorPortalsAll = new PortalData[MAZE_FLOORS];
@@ -1677,7 +1874,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             map3D = null;
             floorPortalsAll = null;
             currentFloor = 0;
-            mazeGenerator = new MazeGenerator(width, height, chooseSeed(), GEOMETRY_MODE);
+            mazeGenerator = new MazeGenerator(width, height, chooseSeed(), GEOMETRY_MODE).useAlgorithm(chosenAlgorithm);
             map = mazeGenerator.generate(MAZE_MODE);
             portals = mazeGenerator.getPortals();
         }
@@ -1691,7 +1888,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         pausedTime = 0;
         renderPrepPending = true;
     }
-    private boolean is3D() { return map3D != null && map3D.length > 1; }
+    private boolean hasFloors() { return map3D != null && map3D.length > 1; }
     private int floorCount() { return map3D == null ? 1 : map3D.length; }
     private int mapWidth() { return map[0].length; }
     private int mapHeight() { return map.length; }
@@ -1707,7 +1904,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (isCustomMap) {
             try {
                 isGameRunning = false;
-                GameView gameView = is3D() ? new GameView(customFloorsForRestart, customPortalsForRestart, customGeometryModeForRestart) : new GameView(map);
+                GameView gameView = hasFloors() ? new GameView(customFloorsForRestart, customPortalsForRestart, customGeometryModeForRestart) : new GameView(map);
                 gameView.setFogOfWarMinimap(fogMinimap);
                 RCJMS.instance.changeView(gameView, "Raycast Me!");
                 gameThread.interrupt();
@@ -1719,10 +1916,110 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         pendingWork = this::regenerateMaze;
         if (level == null) console.log(DevConsole.Level.INFO, "restarting the level");
     }
-    private record LevelSpec(int width, int height, int floors, String seed, MazeGenerator.GeometryMode geometry) {
-
+    private record LevelSpec(int width, int height, int floors, String seed, MazeGenerator.GeometryMode geometry,
+                             String algorithm, MazeGenerator.FinishMode finish) {
+        LevelSpec(int width, int height, int floors, String seed, MazeGenerator.GeometryMode geometry) {
+            this(width, height, floors, seed, geometry, null, null);
+        }
     }
     //endregion
+    //endregion
+
+    //region Module Hooks
+    private void notifyRunStart() { eachModule(feature -> feature.onRunStart(gameContext)); }
+    private void notifyRunFinish() { eachModule(feature -> feature.onRunFinish(gameContext)); }
+    private void notifyPause(boolean paused) { eachModule(feature -> feature.onPauseChanged(gameContext, paused)); }
+    private void notifyUpdate(double seconds) { eachModule(feature -> feature.update(gameContext, seconds)); }
+    private boolean notifyKey(KeyEvent keyEvent, boolean down) {
+        boolean[] consumed = {false};
+        eachModule(feature -> {
+            if (!consumed[0] && feature.onKey(gameContext, keyEvent, down)) consumed[0] = true;
+        });
+        return consumed[0];
+    }
+    private void eachModule(java.util.function.Consumer<GameModule> action) {
+        for (GameModule feature : features) {
+            if (brokenModules.contains(feature)) continue;
+            try { action.accept(feature); }
+            catch (RuntimeException exception) {
+                brokenModules.add(feature);
+                console.log(DevConsole.Level.WARN, "feature " + feature.id() + " was switched off: " + exception);
+            }
+        }
+    }
+    private void paintModules() {
+        int width = bufferedImage.getWidth(), height = bufferedImage.getHeight();
+        Graphics2D g2d = bufferedImage.createGraphics();
+        try {
+            if (hudVisible) eachModule(feature -> feature.paintHud(gameContext, g2d, width, height));
+            drawFlash(g2d, width, height);
+        } finally { g2d.dispose(); }
+        eachModule(feature -> feature.postProcess(gameContext, pixels, width, height));
+    }
+    private void drawFlash(Graphics2D g2d, int width, int height) {
+        String text = flashText;
+        if (text.isEmpty() || System.currentTimeMillis() >= flashUntilMillis) return;
+        g2d.setFont(SMALL_SANS_FONT);
+        FontMetrics metrics = g2d.getFontMetrics();
+        int textWidth = metrics.stringWidth(text);
+        int x = (width - textWidth) / 2, baseline = height - 24;
+        g2d.setColor(new Color(0, 0, 0, 170));
+        g2d.fillRoundRect(x - 10, baseline - metrics.getAscent() - 4, textWidth + 20, metrics.getHeight() + 8, 12, 12);
+        g2d.setColor(Color.WHITE);
+        g2d.drawString(text, x, baseline);
+    }
+    private final class ModuleContext implements GameContext {
+        @Override public double playerX() { return playerX; }
+        @Override public double playerY() { return playerY; }
+        @Override public double cameraAngle() { return cameraAngle; }
+        @Override public double cameraPitch() { return cameraPitch + stepPitchOffset(); }
+        @Override public double eyeHeight() { return Math.clamp(cameraHeight + viewBob() + stepHeightOffset(), 0.05, 0.95); }
+        @Override public void moveTo(double x, double y, double angle) { playerX = x; playerY = y; cameraAngle = angle; }
+        @Override public int[][] map() { return map; }
+        @Override public int[][] floorMap(int floor) { return map3D == null ? map : map3D[floor]; }
+        @Override public PortalData portalsOf(int floor) {
+            return floorPortalsAll != null && floor >= 0 && floor < floorPortalsAll.length ? floorPortalsAll[floor] : portals;
+        }
+        @Override public int currentFloor() { return currentFloor; }
+        @Override public int floorCount() { return map3D == null ? 1 : map3D.length; }
+        @Override public boolean hasFloors() { return GameView.this.hasFloors(); }
+        @Override public int mazeWidth() { return mapWidth(); }
+        @Override public int mazeHeight() { return mapHeight(); }
+        @Override public boolean isPaused() { return isPaused; }
+        @Override public double elapsedSeconds() { return elapsedSeconds; }
+        @Override public String seed() { return isCustomMap ? "" : mazeSeedText; }
+        @Override public boolean isCustomMap() { return isCustomMap; }
+        @Override public int geometry() { return GEOMETRY_MODE.ordinal(); }
+        @Override public boolean fogOfWar() { return fogMinimap; }
+        @Override public String algorithm() { return mazeAlgorithmId; }
+        @Override public int finishMode() { return MAZE_MODE.ordinal(); }
+        @Override public void startSeeded(String seed, int width, int height, int floors, int geometry, boolean hasFloors, boolean fog,
+                                          String algorithm, int finishMode) {
+            if (isCustomMap) return;
+            sharedMaze = null;
+            String normalized = SeedUtil.normalize(seed);
+            MazeGenerator.GeometryMode mode = MazeGenerator.GeometryMode.values()[Math.clamp(geometry, 0, MazeGenerator.GeometryMode.values().length - 1)];
+            setFogOfWarMinimap(fog);
+            MazeGenerator.FinishMode finish = MazeGenerator.FinishMode.values()[Math.clamp(finishMode, 0, MazeGenerator.FinishMode.values().length - 1)];
+            restartGame(new LevelSpec(width, height, hasFloors ? Math.max(2, floors) : 1, normalized.isEmpty() ? null : normalized, mode,
+                    MazeAlgorithms.find(algorithm).id(), finish));
+        }
+        @Override public void flash(String text) {
+            flashText = text == null ? "" : text;
+            flashUntilMillis = System.currentTimeMillis() + 2500;
+        }
+        @Override public void restart() { restartGame(); }
+        @Override public void useMaze(MazeData maze, boolean fog) {
+            if (isCustomMap) return;
+            setFogOfWarMinimap(fog);
+            sharedMaze = maze;
+            restartGame();
+        }
+        @Override public void clearMaze() { sharedMaze = null; }
+        @Override public void command(String name, String usage, DevConsole.Command command) { console.register(name, usage, command); }
+        @Override public boolean hudVisible() { return hudVisible; }
+        @Override public void setHudVisible(boolean visible) { hudVisible = visible; }
+    }
     //endregion
 
     //region Text Mode
@@ -1757,19 +2054,20 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                 continue;
             }
             char dir = kind.charAt(0);
-            double base = cameraAngle;
+            double[] base = {cameraAngle};
             for (int i = 0; i < count; i++) {
                 if (!textStep(dir, base)) {
                     textStatus = "blocked after " + steps + " steps, at " + token;
                     return;
                 }
                 steps++;
+                if (onFinishCell()) return;
             }
         }
         textStatus = steps + " steps" + (turned ? ", turned" : "");
     }
-    private boolean textStep(char dir, double base) {
-        int fx = (int) Math.round(Math.cos(base)), fy = (int) Math.round(Math.sin(base));
+    private boolean textStep(char dir, double[] base) {
+        int fx = (int) Math.round(Math.cos(base[0])), fy = (int) Math.round(Math.sin(base[0]));
         int vx, vy;
         switch (dir) {
             case 'f' -> { vx = fx; vy = fy; }
@@ -1778,15 +2076,18 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             default -> { vx = -fy; vy = fx; }
         }
         int tx = (int) Math.floor(playerX) + vx, ty = (int) Math.floor(playerY) + vy;
-        if (!noClip) {
-            if (ty < 0 || ty >= map.length || tx < 0 || tx >= map[ty].length) return false;
-            int cell = map[ty][tx];
-            if (cell == MazeGenerator.WALL || cell == MazeGenerator.FINISH || cell == MazeGenerator.PORTAL) return false;
-        }
+        if (!noClip && isSolidForPlayer(map, tx, ty)) return false;
+        double startX = playerX, startY = playerY;
         playerX = tx + 0.5;
         playerY = ty + 0.5;
         cameraAngle = Math.atan2(vy, vx);
+        if (applyPortalStep(startX, startY, vx, vy)) base[0] = cameraAngle;
         return true;
+    }
+    private boolean onFinishCell() {
+        int cellY = Math.clamp((int) playerY, 0, mapHeight() - 1);
+        int cellX = Math.clamp((int) playerX, 0, mapWidth() - 1);
+        return isGameRunning && map[cellY][cellX] == MazeGenerator.FINISH;
     }
     private void snapToTile() {
         playerX = Math.floor(playerX) + 0.5;
@@ -1894,19 +2195,19 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         restartGame(new LevelSpec(width, height, floors, seed, geometry));
     }
     private void mazeCommand(DevConsole.Args args) {
-        boolean three = is3D();
-        args.info("size: " + mapWidth() + " x " + mapHeight() + (three ? ", " + floorCount() + " floors" : ", one floor"));
+        boolean multiFloor = hasFloors();
+        args.info("size: " + mapWidth() + " x " + mapHeight() + (multiFloor ? ", " + floorCount() + " floors" : ", one floor"));
         args.info("finish mode: " + MAZE_MODE);
         args.info("geometry: " + GEOMETRY_MODE);
         args.info("seed: " + (isCustomMap ? "none (custom map)" : mazeSeedText));
-        int[][][] layers = three ? map3D : new int[][][]{map};
+        int[][][] layers = multiFloor ? map3D : new int[][][]{map};
         int found = 0;
         for (int f = 0; f < layers.length; f++)
             for (int y = 0; y < layers[f].length; y++)
                 for (int x = 0; x < layers[f][y].length; x++)
                     if (layers[f][y][x] == 2) {
                         found++;
-                        args.info("finish: " + (three ? "floor " + (f + 1) + ", " : "") + "x " + x + ", y " + y);
+                        args.info("finish: " + (multiFloor ? "floor " + (f + 1) + ", " : "") + "x " + x + ", y " + y);
                     }
         if (found == 0) args.info("finish: none");
     }

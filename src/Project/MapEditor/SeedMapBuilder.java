@@ -1,5 +1,6 @@
 package Project.MapEditor;
 import Project.Helpers.*;
+import Project.Helpers.maze.MazeAlgorithms;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,11 +18,12 @@ public final class SeedMapBuilder {
 
         MazeGenerator.GeometryMode geometry = options.looped() ? MazeGenerator.GeometryMode.LOOPED : MazeGenerator.GeometryMode.EUCLIDEAN;
         MazeGenerator.FinishMode finish = MazeGenerator.FinishMode.values()[Math.clamp(options.finishMode(), 0, MazeGenerator.FinishMode.values().length - 1)];
+        MazeAlgorithm algorithm = MazeAlgorithms.find(options.algorithm());
 
         List<int[][]> floors = new ArrayList<>();
         PortalData[] portals;
         if (options.floors() > 1) {
-            MazeGenerator3D generator = new MazeGenerator3D(options.width(), options.height(), options.floors(), seedNumber, geometry);
+            MazeGenerator3D generator = new MazeGenerator3D(options.width(), options.height(), options.floors(), seedNumber, geometry).useAlgorithm(algorithm);
             int[][][] generated = generator.generate(finish);
             portals = new PortalData[generated.length];
             for (int f = 0; f < generated.length; f++) {
@@ -29,7 +31,7 @@ public final class SeedMapBuilder {
                 portals[f] = generator.getPortals(f);
             }
         } else {
-            MazeGenerator generator = new MazeGenerator(options.width(), options.height(), seedNumber, geometry);
+            MazeGenerator generator = new MazeGenerator(options.width(), options.height(), seedNumber, geometry).useAlgorithm(algorithm);
             floors.add(generator.generate(finish));
             portals = new PortalData[]{generator.getPortals()};
         }
@@ -53,7 +55,11 @@ public final class SeedMapBuilder {
     //endregion
 
     //region Results
-    public record Options(int width, int height, int floors, boolean looped, int finishMode, String seed) { }
+    public record Options(int width, int height, int floors, boolean looped, int finishMode, String seed, String algorithm) {
+        public Options(int width, int height, int floors, boolean looped, int finishMode, String seed) {
+            this(width, height, floors, looped, finishMode, seed, MazeAlgorithms.selected().id());
+        }
+    }
     public record Result(List<int[][]> floors, List<int[]> portalLinks, String seed) { }
     //endregion
 }

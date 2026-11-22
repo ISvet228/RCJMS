@@ -9,18 +9,18 @@ import Project.OpenCl.*;
 public final class DDAEngine implements RenderEngine {
     //region Variables
     //region Render Configuration
-    static volatile int cfgQuality = 1, cfgOutW = 960, cfgOutH = 540;
-    static volatile MazeGenerator.GeometryMode cfgGeometry = MazeGenerator.GeometryMode.EUCLIDEAN;
-    static volatile double cfgCurvature = HyperbolicMath.DEFAULT_CURVATURE;
+    private static volatile int cfgQuality = 1, cfgOutW = 960, cfgOutH = 540;
+    private static volatile MazeGenerator.GeometryMode cfgGeometry = MazeGenerator.GeometryMode.EUCLIDEAN;
+    private static volatile double cfgCurvature = HyperbolicMath.DEFAULT_CURVATURE;
     private RenderFrame fr;
     //endregion
     //region Render Constants
-    static final String ID = "dda";
-    static final int MAX_PRIMARY_STEPS = 6000;
-    static final int wallBaseColor = 0xECD485;
-    static final int ceilingBaseColor = 0x816E1E;
-    static final int floorBaseColor = 0xD3AF63;
-    static final int finishBaseColor = 0x33FF66;
+    private static final String ID = "dda";
+    private static final int MAX_PRIMARY_STEPS = 6000;
+    private static final int wallBaseColor = 0xECD485;
+    private static final int ceilingBaseColor = 0x816E1E;
+    private static final int floorBaseColor = 0xD3AF63;
+    private static final int finishBaseColor = 0x33FF66;
     private static final double flashlightDistance = 2;
     private static final double HYP_PLANE_LENGTH = Math.tan(Math.toRadians(140.0) / 2.0);
     //endregion
@@ -37,7 +37,7 @@ public final class DDAEngine implements RenderEngine {
     //endregion
 
     //region Lifecycle
-    static void syncConfig(RenderFrame renderFrame) {
+    private static void syncConfig(RenderFrame renderFrame) {
         cfgQuality = renderFrame.quality;
         cfgGeometry = renderFrame.geometry;
         cfgCurvature = renderFrame.curvature;
@@ -63,15 +63,15 @@ public final class DDAEngine implements RenderEngine {
             g2d.dispose();
         }
     }
-    static void parallelRange(RenderFrame renderFrame, int end, IntConsumer task) {
+    private static void parallelRange(RenderFrame renderFrame, int end, IntConsumer task) {
         if (end <= 0) return;
         renderFrame.renderWorkers.execute(0, end, task);
     }
-    static boolean is3D(RenderFrame renderFrame) { return renderFrame.map3D != null && renderFrame.map3D.length > 1; }
+    private static boolean hasFloors(RenderFrame renderFrame) { return renderFrame.map3D != null && renderFrame.map3D.length > 1; }
     //endregion
 
     //region Ray Setup Caches
-    static void ensureRaycastCaches(RenderFrame renderFrame, int screenWidth, int screenHeight) {
+    private static void ensureRaycastCaches(RenderFrame renderFrame, int screenWidth, int screenHeight) {
         if (renderFrame.wallTopCache == null || renderFrame.wallTopCache.length != screenWidth) {
             renderFrame.wallTopCache = new int[screenWidth]; renderFrame.wallBottomCache = new int[screenWidth];
             renderFrame.portalFloorEdgeCache = new double[screenWidth]; renderFrame.portalCeilEdgeCache = new double[screenWidth];
@@ -82,7 +82,7 @@ public final class DDAEngine implements RenderEngine {
 
     //region Euclidean Tracing
     //region Grid Stepping
-    static TraceHit traceRay(RenderFrame renderFrame, double ox, double oy, double oz, double rx, double ry, double rz,
+    private static TraceHit traceRay(RenderFrame renderFrame, double ox, double oy, double oz, double rx, double ry, double rz,
                              int[][] startMap, PortalData startPortals, TraceHit result) {
         result.reset();
         final int mapWidth = startMap[0].length, mapHeight = startMap.length;
@@ -199,7 +199,7 @@ public final class DDAEngine implements RenderEngine {
         }
         return result;
     }
-    static double wallHeightForType(int type) { return type == 2 ? 0.5 : 1.0; }
+    private static double wallHeightForType(int type) { return type == 2 ? 0.5 : 1.0; }
     //endregion
 
     //region Column Rendering
@@ -418,12 +418,12 @@ public final class DDAEngine implements RenderEngine {
 
     //region Hyperbolic Tracing
     //region Hyperbolic Geometry
-    static double[] hypPixelRay(double cx, double py, double dirX, double dirY, double focal, double horizon) {
+    private static double[] hypPixelRay(double cx, double py, double dirX, double dirY, double focal, double horizon) {
         double rdX = dirX - dirY * HYP_PLANE_LENGTH * cx, rdY = dirY + dirX * HYP_PLANE_LENGTH * cx;
         double L = Math.sqrt(rdX * rdX + rdY * rdY);
         return new double[]{rdX / L, rdY / L, L, -(py - horizon) / focal};
     }
-    static TraceHit traceHyp(RenderFrame renderFrame, double ox, double oy, double z0, double ux, double uy, double L, double slope, TraceHit result) {
+    private static TraceHit traceHyp(RenderFrame renderFrame, double ox, double oy, double z0, double ux, double uy, double L, double slope, TraceHit result) {
         result.reset();
         final int[][] m = renderFrame.map;
         final int mapWidth = m[0].length, mapHeight = m.length;
@@ -648,7 +648,7 @@ public final class DDAEngine implements RenderEngine {
                 else if (Double.isFinite(tPlane) && (floorPlane || !fr.skyCeiling)) {
                     double wx = baseX + rx * tPlane, wy = baseY + ry * tPlane;
                     int color = floorPlane ? surfaceColor(fr.floorTexture, wx, wy, floorBaseColor, cfgQuality) : surfaceColor(fr.ceilingTexture, wx, wy, ceilingBaseColor, cfgQuality);
-                    if (floorPlane && is3D(fr)) color = tintStairs(color, wx, wy, m);
+                    if (floorPlane && hasFloors(fr)) color = tintStairs(color, wx, wy, m);
                     double brightness = Math.clamp(1.0 - tPlane * norm / lightDistance, 0.05, 1.0);
                     fr.renderPixels[offset] = applyBrightness(color, brightness);
                 }
@@ -673,7 +673,7 @@ public final class DDAEngine implements RenderEngine {
         final int width = fr.renderWidth;
         final int[] wallTop = fr.wallTopCache, wallBottom = fr.wallBottomCache;
         final double[] floorEdge = fr.portalFloorEdgeCache, ceilEdge = fr.portalCeilEdgeCache;
-        final boolean tinted = is3D(fr);
+        final boolean tinted = hasFloors(fr);
         final int quality = cfgQuality;
         final double[] rowInvA = fr.rowInvACache, rowZA = fr.rowZACache;
         final double planeLength2 = planeX * planeX + planeY * planeY;
@@ -720,19 +720,19 @@ public final class DDAEngine implements RenderEngine {
     //endregion
 
     //region Shading
-    static int applyBrightness(int color, double brightness) {
+    private static int applyBrightness(int color, double brightness) {
         int r = (int) Math.min(255, ((color >> 16) & 255) * brightness);
         int g = (int) Math.min(255, ((color >> 8) & 255) * brightness);
         int b = (int) Math.min(255, (color & 255) * brightness);
         return (r << 16) | (g << 8) | b;
     }
-    static int shadeTraceHit(RenderFrame renderFrame, TraceHit hit, double lightDistance, PlaneColor planeFn) {
+    private static int shadeTraceHit(RenderFrame renderFrame, TraceHit hit, double lightDistance, PlaneColor planeFn) {
         if (!hit.hit) return renderFrame.skyCeiling ? SkyCeiling.colorDir(hit.dirX, hit.dirY, hit.dirZ, renderFrame.skyTime) : ceilingBaseColor;
         if (hit.isPlane) {
             boolean floor = hit.type == -1;
             if (!floor && renderFrame.skyCeiling) return SkyCeiling.colorDir(hit.dirX, hit.dirY, hit.dirZ, renderFrame.skyTime);
             int color = floor ? planeFn.at(renderFrame.floorTexture, hit.x, hit.y, floorBaseColor) : planeFn.at(renderFrame.ceilingTexture, hit.x, hit.y, ceilingBaseColor);
-            if (floor && is3D(renderFrame)) color = tintStairs(color, hit.x, hit.y, hit.map);
+            if (floor && hasFloors(renderFrame)) color = tintStairs(color, hit.x, hit.y, hit.map);
             return applyBrightness(color, Math.clamp(1.0 - hit.distance / lightDistance, 0.05, 1.0));
         }
         boolean finish = hit.type == 2;
@@ -752,7 +752,7 @@ public final class DDAEngine implements RenderEngine {
         r = (int)(r * (1 - 0.45) + tr * 0.45); g = (int)(g * (1 - 0.45) + tg * 0.45); b = (int)(b * (1 - 0.45) + tb * 0.45);
         return (r << 16) | (g << 8) | b;
     }
-    static int tintStairs(int color, double worldX, double worldY, int[][] floorMap) {
+    private static int tintStairs(int color, double worldX, double worldY, int[][] floorMap) {
         int fx = (int) Math.floor(worldX), fy = (int) Math.floor(worldY);
         if (fx < 0 || fy < 0 || fy >= floorMap.length || fx >= floorMap[0].length) return color;
         int cell = floorMap[fy][fx];
@@ -764,7 +764,7 @@ public final class DDAEngine implements RenderEngine {
 
     //region Textures
     @FunctionalInterface interface PlaneColor { int at(RuntimeTexture texture, double worldX, double worldY, int baseColor); }
-    static int sampleTexture(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
+    private static int sampleTexture(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
         int width = texture.width(), height = texture.height();
         if (width <= 0 || height <= 0) return baseColor;
         double fracX = worldX - Math.floor(worldX);

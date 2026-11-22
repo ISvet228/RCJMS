@@ -10,27 +10,27 @@ import java.util.function.IntConsumer;
 public final class RayMarchingEngine  implements RenderEngine {
     //region Variables
     //region Render Configuration
-    static volatile int cfgQuality = 1, cfgOutW = 960, cfgOutH = 540;
-    static volatile MazeGenerator.GeometryMode cfgGeometry = MazeGenerator.GeometryMode.EUCLIDEAN;
-    static volatile double cfgCurvature = HyperbolicMath.DEFAULT_CURVATURE;
+    private static volatile int cfgQuality = 1, cfgOutW = 960, cfgOutH = 540;
+    private static volatile MazeGenerator.GeometryMode cfgGeometry = MazeGenerator.GeometryMode.EUCLIDEAN;
+    private static volatile double cfgCurvature = HyperbolicMath.DEFAULT_CURVATURE;
     private RenderFrame fr;
     //endregion
     //region Render Constants
-    static final String ID = "raymarching";
-    static final int MAX_PRIMARY_STEPS = 6000;
-    static final int wallBaseColor = 0xECD485;
+    private static final String ID = "raymarching";
+    private static final int MAX_PRIMARY_STEPS = 6000;
+    private static final int wallBaseColor = 0xECD485;
     static final int ceilingBaseColor = 0x816E1E;
-    static final int floorBaseColor = 0xD3AF63;
-    static final int finishBaseColor = 0x33FF66;
+    private static final int floorBaseColor = 0xD3AF63;
+    private static final int finishBaseColor = 0x33FF66;
     private static final double flashlightDistance = 2;
     private static final double HYP_PLANE_LENGTH = Math.tan(Math.toRadians(140.0) / 2.0);
-    static final int HIT_WALL = 1, HIT_FLOOR = 2, HIT_CEIL = 3;
+    private static final int HIT_WALL = 1, HIT_FLOOR = 2, HIT_CEIL = 3;
     private static final int SDF_SUB = 8, SDF_WINDOW = 4;
-    static final int SDF_TILE = 256;
+    private static final int SDF_TILE = 256;
     private  static final double RM_HIT = 0.001, RM_STEP_SCALE = 0.8, RM_MAX_DISTANCE = 48, RM_MIN_STEP = 0.001;
     //endregion
     //region Caches
-    static final SdfCache sdfCache = new SdfCache();
+    private static final SdfCache sdfCache = new SdfCache();
     //endregion
     //endregion
 
@@ -45,7 +45,7 @@ public final class RayMarchingEngine  implements RenderEngine {
     //endregion
 
     //region Lifecycle
-    static void syncConfig(RenderFrame renderFrame) {
+    private static void syncConfig(RenderFrame renderFrame) {
         cfgQuality = renderFrame.quality;
         cfgGeometry = renderFrame.geometry;
         cfgCurvature = renderFrame.curvature;
@@ -62,21 +62,21 @@ public final class RayMarchingEngine  implements RenderEngine {
         }
         renderRayMarching();
     }
-    static void copyRenderBuffer(RenderFrame renderFrame) {
-        if (renderFrame.renderWidth == renderFrame.bufferedImage.getWidth() && renderFrame.renderHeight == renderFrame.bufferedImage.getHeight()) {
+    private static void copyRenderBuffer(RenderFrame renderFrame) {
+        if (renderFrame.renderWidth == renderFrame.bufferedImage.getWidth() && renderFrame.renderHeight == renderFrame.bufferedImage.getHeight())
             System.arraycopy(renderFrame.renderPixels, 0, renderFrame.pixels, 0, renderFrame.pixels.length);
-        } else {
+        else {
             Graphics2D g2d = renderFrame.bufferedImage.createGraphics();
             g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
             g2d.drawImage(renderFrame.renderImage, 0, 0, cfgOutW, cfgOutH, null);
             g2d.dispose();
         }
     }
-    static void parallelRange(RenderFrame renderFrame, int end, IntConsumer task) {
+    private static void parallelRange(RenderFrame renderFrame, int end, IntConsumer task) {
         if (end <= 0) return;
         renderFrame.renderWorkers.execute(0, end, task);
     }
-    static boolean is3D(RenderFrame renderFrame) { return renderFrame.map3D != null && renderFrame.map3D.length > 1; }
+    private static boolean hasFloors(RenderFrame renderFrame) { return renderFrame.map3D != null && renderFrame.map3D.length > 1; }
     private void renderRayMarching() {
         if (cfgGeometry == MazeGenerator.GeometryMode.WRONG) { renderRayMarchingHyp(); return; }
         if (fr.cameraPitch == 0) { renderRayMarchingColumns(); return; }
@@ -116,14 +116,14 @@ public final class RayMarchingEngine  implements RenderEngine {
     //endregion
 
     //region Ray Setup Caches
-    static void ensureRaycastCaches(RenderFrame renderFrame, int screenWidth, int screenHeight) {
+    private static void ensureRaycastCaches(RenderFrame renderFrame, int screenWidth, int screenHeight) {
         if (renderFrame.wallTopCache == null || renderFrame.wallTopCache.length != screenWidth) {
             renderFrame.wallTopCache = new int[screenWidth]; renderFrame.wallBottomCache = new int[screenWidth];
             renderFrame.portalFloorEdgeCache = new double[screenWidth]; renderFrame.portalCeilEdgeCache = new double[screenWidth];
         }
         if (renderFrame.rowInvACache == null || renderFrame.rowInvACache.length != screenHeight) renderFrame.rowInvACache = new double[screenHeight]; renderFrame.rowZACache = new double[screenHeight];
     }
-    static void fillRowCaches(RenderFrame renderFrame, double focal, double halfHeight, double pitchSin, double pitchCos) {
+    private static void fillRowCaches(RenderFrame renderFrame, double focal, double halfHeight, double pitchSin, double pitchCos) {
         final int screenHeight = renderFrame.renderHeight;
         for (int y = 0; y < screenHeight; y++) {
             double v = (halfHeight - (y + 0.5)) / focal;
@@ -220,12 +220,12 @@ public final class RayMarchingEngine  implements RenderEngine {
         }
         if (dist < RayMarchingEngine.RM_MAX_DISTANCE) columnRay.exhausted = true;
     }
-    static void addColumnSegment(ColumnRay columnRay, double dist, RayState rayState) {
+    private static void addColumnSegment(ColumnRay columnRay, double dist, RayState rayState) {
         int k = columnRay.segCount++;
         columnRay.segStartDist[k] = dist; columnRay.segStartX[k] = rayState.x; columnRay.segStartY[k] = rayState.y; columnRay.segDirX[k] = rayState.dx; columnRay.segDirY[k] = rayState.dy;
         columnRay.segMap[k] = rayState.map; columnRay.segDistField[k] = rayState.field;
     }
-    static int shadeColumnRow(RenderFrame renderFrame, ColumnRay columnRay, RayState rayState, double z0, double sigma, double lightDistance) {
+    private static int shadeColumnRow(RenderFrame renderFrame, ColumnRay columnRay, RayState rayState, double z0, double sigma, double lightDistance) {
         final double scale = Math.sqrt(1.0 + sigma * sigma);
         final double planeD = sigma < 0 ? z0 / -sigma : sigma > 0 ? (1.0 - z0) / sigma : Double.POSITIVE_INFINITY;
         final boolean floor = sigma < 0;
@@ -326,7 +326,7 @@ public final class RayMarchingEngine  implements RenderEngine {
         storeMarch(rayState, x, y, z, dx, dy, dz, dist);
         if (dist < RayMarchingEngine.RM_MAX_DISTANCE) rayState.exhausted = true;
     }
-    static TraceHit traceRay(RenderFrame renderFrame, double ox, double oy, double oz, double rx, double ry, double rz, int[][] startMap, PortalData startPortals, TraceHit result) {
+    private static TraceHit traceRay(RenderFrame renderFrame, double ox, double oy, double oz, double rx, double ry, double rz, int[][] startMap, PortalData startPortals, TraceHit result) {
         result.reset();
         final int mapWidth = startMap[0].length, mapHeight = startMap.length;
 
@@ -447,7 +447,7 @@ public final class RayMarchingEngine  implements RenderEngine {
     }
     //endregion
     //region Hit Resolution
-    static void resolveWallFace(RayState rayState) {
+    private static void resolveWallFace(RayState rayState) {
         double fx = rayState.x - Math.floor(rayState.x), fy = rayState.y - Math.floor(rayState.y);
         int cx = (int) Math.floor(rayState.x), cy = (int) Math.floor(rayState.y);
         double best = Double.MAX_VALUE;
@@ -462,24 +462,22 @@ public final class RayMarchingEngine  implements RenderEngine {
         rayState.hitSide = side;
         rayState.hitU = Math.clamp(u, 0.0, 0.999999);
     }
-    static void setWallFraction(RayState rayState) {
+    private static void setWallFraction(RayState rayState) {
         double wallH = wallHeightForType(rayState.hitType);
         rayState.hitFrac = Math.clamp((wallH - rayState.z) / wallH, 0.0, 0.999999);
     }
-    static void setPlaneHit(RayState rayState, int kind) {
+    private static void setPlaneHit(RayState rayState, int kind) {
         rayState.hitKind = kind;
         rayState.hitX = rayState.x;
         rayState.hitY = rayState.y;
         rayState.hitDist = rayState.dist;
     }
-    static double wallHeightForType(int type) { return type == 2 ? 0.5 : 1.0; }
+    private static double wallHeightForType(int type) { return type == 2 ? 0.5 : 1.0; }
     private static boolean isSolidCell(int[][] m, int x, int y) {
         if (y < 0 || x < 0 || y >= m.length || x >= m[0].length) return true;
         return m[y][x] == 1 || m[y][x] == 2;
     }
-    private static boolean isPortalCell(int[][] m, int x, int y) {
-        return y >= 0 && x >= 0 && y < m.length && x < m[0].length && m[y][x] == MazeGenerator.PORTAL;
-    }
+    private static boolean isPortalCell(int[][] m, int x, int y) { return y >= 0 && x >= 0 && y < m.length && x < m[0].length && m[y][x] == MazeGenerator.PORTAL; }
     private static double portalStepLimit(int[][] m, double x, double y, double dx, double dy) {
         int cx = (int) Math.floor(x), cy = (int) Math.floor(y);
         double best = Double.POSITIVE_INFINITY;
@@ -489,7 +487,7 @@ public final class RayMarchingEngine  implements RenderEngine {
         else if (dy < -1e-12 && isPortalCell(m, cx, cy - 1)) best = Math.min(best, (y - cy) / -dy);
         return Math.max(0.0, best);
     }
-    static boolean enterPortal(RenderFrame renderFrame, RayState rayState, int cx, int cy) {
+    private static boolean enterPortal(RenderFrame renderFrame, RayState rayState, int cx, int cy) {
         if (rayState.hops >= 8 || rayState.portals == null) return false;
         PortalData.Portal portal = rayState.portals.get(cx, cy);
         if (portal == null || !PortalData.entersFromCorrectSide(portal, rayState.dx, rayState.dy)) return false;
@@ -515,11 +513,11 @@ public final class RayMarchingEngine  implements RenderEngine {
 
     //region Hyperbolic Tracing
     //region Hyperbolic Geometry
-    static double hypHeight(RayState rayState) {
+    private static double hypHeight(RayState rayState) {
         return rayState.hypZ0 + rayState.slope * HyperbolicMath.hyperbolicDistance(rayState.dist * rayState.invL, cfgCurvature);
     }
-    static double hypPerceivedOf(RayState rayState) { return HyperbolicMath.hyperbolicDistance(rayState.dist * rayState.invL, cfgCurvature); }
-    static double[] hypPixelRay(double cx, double py, double dirX, double dirY, double focal, double horizon) {
+    private static double hypPerceivedOf(RayState rayState) { return HyperbolicMath.hyperbolicDistance(rayState.dist * rayState.invL, cfgCurvature); }
+    private static double[] hypPixelRay(double cx, double py, double dirX, double dirY, double focal, double horizon) {
         double rdX = dirX - dirY * HYP_PLANE_LENGTH * cx, rdY = dirY + dirX * HYP_PLANE_LENGTH * cx;
         double L = Math.sqrt(rdX * rdX + rdY * rdY);
         return new double[]{rdX / L, rdY / L, L, -(py - horizon) / focal};
@@ -532,8 +530,9 @@ public final class RayMarchingEngine  implements RenderEngine {
         if (slope <= 0 || z0 >= 1.0 - 1e-9) return Double.POSITIVE_INFINITY;
         return L * HyperbolicMath.inverseHyperbolicDistance((1.0 - z0) / slope, cfgCurvature);
     }
-    static double effectiveFlashlightDistance(boolean hyperbolic) { return hyperbolic ? flashlightDistance * 1.6 : flashlightDistance; }
+    private static double effectiveFlashlightDistance(boolean hyperbolic) { return hyperbolic ? flashlightDistance * 1.6 : flashlightDistance; }
     //endregion
+
     //region Hyperbolic Rendering
     private void renderRayMarchingHyp() {
         final int width = fr.renderWidth, height = fr.renderHeight;
@@ -559,7 +558,7 @@ public final class RayMarchingEngine  implements RenderEngine {
         });
         copyRenderBuffer(fr);
     }
-    static TraceHit traceHyp(RenderFrame renderFrame, double ox, double oy, double z0, double ux, double uy, double L, double slope, TraceHit result) {
+    private static TraceHit traceHyp(RenderFrame renderFrame, double ox, double oy, double z0, double ux, double uy, double L, double slope, TraceHit result) {
         result.reset();
         final int[][] m = renderFrame.map;
         final int mapWidth = m[0].length, mapHeight = m.length;
@@ -666,10 +665,10 @@ public final class RayMarchingEngine  implements RenderEngine {
 
     //region Shading
     //region Shade Pipeline
-    static int missColor(RenderFrame renderFrame, RayState rayState) {
+    private static int missColor(RenderFrame renderFrame, RayState rayState) {
         return renderFrame.skyCeiling ? SkyCeiling.colorDir(rayState.dx, rayState.dy, rayState.dz, renderFrame.skyTime) : ceilingBaseColor;
     }
-    static int shadeMarch(RenderFrame renderFrame, RayState rayState, double lightDistance) {
+    private static int shadeMarch(RenderFrame renderFrame, RayState rayState, double lightDistance) {
         if (rayState.hitKind == HIT_WALL) {
             boolean finish = rayState.hitType == 2;
             RuntimeTexture texture = finish ? renderFrame.finishTexture : renderFrame.wallTexture;
@@ -687,20 +686,20 @@ public final class RayMarchingEngine  implements RenderEngine {
         boolean floor = rayState.hitKind == HIT_FLOOR;
         if (!floor && renderFrame.skyCeiling) return SkyCeiling.colorDir(rayState.dx, rayState.dy, rayState.dz, renderFrame.skyTime);
         int color = floor ? planeColor(renderFrame.floorTexture, rayState.hitX, rayState.hitY, floorBaseColor) : planeColor(renderFrame.ceilingTexture, rayState.hitX, rayState.hitY, ceilingBaseColor);
-        if (floor && is3D(renderFrame)) color = tintStairs(color, rayState.hitX, rayState.hitY, rayState.map);
+        if (floor && hasFloors(renderFrame)) color = tintStairs(color, rayState.hitX, rayState.hitY, rayState.map);
         double brightness = Math.clamp(1.0 - rayState.hitDist / lightDistance, 0.05, 1.0);
         return applyBrightness(color, brightness);
     }
-    static int shadeTraceHit(RenderFrame renderFrame, TraceHit hit, double lightDistance) {
+    private static int shadeTraceHit(RenderFrame renderFrame, TraceHit hit, double lightDistance) {
         return shadeTraceHit(renderFrame, hit, lightDistance, RayMarchingEngine::planeColor);
     }
-    static int shadeTraceHit(RenderFrame renderFrame, TraceHit hit, double lightDistance, PlaneColor planeFn) {
+    private static int shadeTraceHit(RenderFrame renderFrame, TraceHit hit, double lightDistance, PlaneColor planeFn) {
         if (!hit.hit) return renderFrame.skyCeiling ? SkyCeiling.colorDir(hit.dirX, hit.dirY, hit.dirZ, renderFrame.skyTime) : ceilingBaseColor;
         if (hit.isPlane) {
             boolean floor = hit.type == -1;
             if (!floor && renderFrame.skyCeiling) return SkyCeiling.colorDir(hit.dirX, hit.dirY, hit.dirZ, renderFrame.skyTime);
             int color = floor ? planeFn.at(renderFrame.floorTexture, hit.x, hit.y, floorBaseColor) : planeFn.at(renderFrame.ceilingTexture, hit.x, hit.y, ceilingBaseColor);
-            if (floor && is3D(renderFrame)) color = tintStairs(color, hit.x, hit.y, hit.map);
+            if (floor && hasFloors(renderFrame)) color = tintStairs(color, hit.x, hit.y, hit.map);
             return applyBrightness(color, Math.clamp(1.0 - hit.distance / lightDistance, 0.05, 1.0));
         }
         boolean finish = hit.type == 2;
@@ -709,7 +708,7 @@ public final class RayMarchingEngine  implements RenderEngine {
         if (hit.side == 1) brightness *= 0.85;
         return applyBrightness(color, brightness);
     }
-    static int applyBrightness(int color, double brightness) {
+    private static int applyBrightness(int color, double brightness) {
         int r = (int) Math.min(255, ((color >> 16) & 255) * brightness);
         int g = (int) Math.min(255, ((color >> 8) & 255) * brightness);
         int b = (int) Math.min(255, (color & 255) * brightness);
@@ -721,7 +720,7 @@ public final class RayMarchingEngine  implements RenderEngine {
         r = (int)(r * (1 - 0.45) + tr * 0.45); g = (int)(g * (1 - 0.45) + tg * 0.45); b = (int)(b * (1 - 0.45) + tb * 0.45);
         return (r << 16) | (g << 8) | b;
     }
-    static int tintStairs(int color, double worldX, double worldY, int[][] floorMap) {
+    private static int tintStairs(int color, double worldX, double worldY, int[][] floorMap) {
         int fx = (int) Math.floor(worldX), fy = (int) Math.floor(worldY);
         if (fx < 0 || fy < 0 || fy >= floorMap.length || fx >= floorMap[0].length) return color;
         int cell = floorMap[fy][fx];
@@ -732,7 +731,7 @@ public final class RayMarchingEngine  implements RenderEngine {
     //endregion
     //region Textures
     @FunctionalInterface interface PlaneColor { int at(RuntimeTexture texture, double worldX, double worldY, int baseColor); }
-    static int sampleTexture(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
+    private static int sampleTexture(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
         int width = texture.width(), height = texture.height();
         if (width <= 0 || height <= 0) return baseColor;
         double fracX = worldX - Math.floor(worldX);
@@ -741,9 +740,7 @@ public final class RayMarchingEngine  implements RenderEngine {
         int ty = Math.min((int)(fracY * height), height - 1);
         return texture.pixels()[ty * width + tx];
     }
-    static int planeColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
-        return sampleTexture(texture, worldX, worldY, baseColor);
-    }
+    private static int planeColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) { return sampleTexture(texture, worldX, worldY, baseColor); }
     static int sampleWallTexture(RuntimeTexture texture, TraceHit hit) {
         if (texture.width() <= 0 || texture.height() <= 0) return hit.type == 2 ? finishBaseColor : wallBaseColor;
         int tx = Math.min((int) (hit.wallU * texture.width()), texture.width() - 1);
@@ -754,7 +751,7 @@ public final class RayMarchingEngine  implements RenderEngine {
     //endregion
 
     //region Signed Distance Fields
-    public static final class SdfCache {
+    static final class SdfCache {
         static final long BUDGET_BYTES = 256L << 20;
         static final int MAX_FIELDS = 32;
         final java.util.concurrent.ConcurrentHashMap<int[][], SDFField> fields = new java.util.concurrent.ConcurrentHashMap<>();
@@ -786,7 +783,7 @@ public final class RayMarchingEngine  implements RenderEngine {
             }
         }
     }
-    public static final class SDFField {
+    static final class SDFField {
         private final SdfCache owner;
         private final int[][] m;
         private final int mw, mh;
@@ -898,17 +895,15 @@ public final class RayMarchingEngine  implements RenderEngine {
             return tile;
         }
     }
-    static void prepareSdfFields(RenderFrame renderFrame) {
+    private static void prepareSdfFields(RenderFrame renderFrame) {
         if (renderFrame.map3D != null) for (int[][] floor : renderFrame.map3D) sdfFieldFor(floor);
         else sdfFieldFor(renderFrame.map);
     }
-    static SDFField sdfFieldFor(int[][] m) {
-        return sdfCache.fieldFor(m);
-    }
+    private static SDFField sdfFieldFor(int[][] m) { return sdfCache.fieldFor(m); }
     //endregion
 
     //region Ray State
-    public static final class RayState {
+    private static final class RayState {
         double x, y, z, dx, dy, dz, dist,
                 hitU, hitFrac, hitX, hitY, hitDist,
                 hypZ0, slope, L, invL, floorD, ceilD;
@@ -941,7 +936,7 @@ public final class RayMarchingEngine  implements RenderEngine {
             hitKind = 0;
         }
     }
-    public static final class ColumnRay {
+    private static final class ColumnRay {
         static final int MAX_SEG = 10, MAX_FIN = 4;
         int segCount, finCount;
         final double[] segStartDist = new double[MAX_SEG], segStartX = new double[MAX_SEG], segStartY = new double[MAX_SEG];
@@ -956,7 +951,7 @@ public final class RayMarchingEngine  implements RenderEngine {
         final RayState ray = new RayState();
         boolean exhausted;
     }
-    public static final class TraceHit {
+    private static final class TraceHit {
         double x, y, z, distance;
         int type, side;
         double wallU, wallV;
@@ -1067,7 +1062,7 @@ public final class RayMarchingEngine  implements RenderEngine {
             return program.buffer(size);
         }
 
-        static double[] sdfField(int[][] m, boolean finish) {
+        private static double[] sdfField(int[][] m, boolean finish) {
             final int mh = m.length, mw = m[0].length;
             final int cols = mw * SDF_SUB + 1, rows = mh * SDF_SUB + 1;
             final double none = Double.POSITIVE_INFINITY;
@@ -1107,7 +1102,7 @@ public final class RayMarchingEngine  implements RenderEngine {
             }
             return out;
         }
-        static int[] ipValues(RenderFrame renderFrame, Scene scene, int width, int height) {
+        private static int[] ipValues(RenderFrame renderFrame, Scene scene, int width, int height) {
             return new int[]{
                     width, height, scene.floors, scene.tinted ? 1 : 0,
                     renderFrame.wallTexture.width(), renderFrame.wallTexture.height(),
@@ -1119,7 +1114,7 @@ public final class RayMarchingEngine  implements RenderEngine {
                     renderFrame.skyCeiling ? 1 : 0
             };
         }
-        static double[] cameraParams(RenderFrame renderFrame, int width, int height) {
+        private static double[] cameraParams(RenderFrame renderFrame, int width, int height) {
             double dirX = Math.cos(renderFrame.cameraAngle), dirY = Math.sin(renderFrame.cameraAngle);
             double planeLength = Math.tan(Math.PI / 3.0 / 2.0);
             double focal = width / (2.0 * planeLength);

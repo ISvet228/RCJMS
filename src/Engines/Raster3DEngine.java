@@ -12,15 +12,20 @@ import java.util.stream.IntStream;
 public final class Raster3DEngine implements RenderEngine {
     //region Variables
     //region Engine Identity
-    static final String ID = "raster3d";
+    private static final String ID = "raster3d";
     //endregion
     //region Lighting
-    static final double TORCH_RIGHT = 0.3, TORCH_FORWARD = 0.25, TORCH_DROP = 0.25, TORCH_RANGE = 3.0;
-    static final double AMBIENT = 0.22;
-    static final double SIDE_SHADE_Y = 0.85;
-    static final double WARM_RED = 0.12, WARM_BLUE = 0.18;
-    static final int FOG = 0x120C1E;
-    static final double FOG_START = 2.0, FOG_RANGE = 7.0, FOG_MAX = 0.8;
+    private static final double TORCH_RIGHT = 0.3, TORCH_FORWARD = 0.25, TORCH_DROP = 0.25, TORCH_RANGE = 3.0;
+    private static final double AMBIENT = 0.22;
+
+    @Override public float[] spriteLight(double distance, boolean hyperbolic) {
+        float v = (float) Math.clamp(AMBIENT + Math.clamp(1.0 - distance / TORCH_RANGE, 0.0, 1.0), 0.05, 1.0);
+        return new float[]{v, v, v};
+    }
+    private static final double SIDE_SHADE_Y = 0.85;
+    private static final double WARM_RED = 0.12, WARM_BLUE = 0.18;
+    private static final int FOG = 0x120C1E;
+    private static final double FOG_START = 2.0, FOG_RANGE = 7.0, FOG_MAX = 0.8;
     //endregion
     //region Textures
     private static final int WALL = 0, FINISH = 1, FLOOR = 2, CEILING = 3;
@@ -28,15 +33,15 @@ public final class Raster3DEngine implements RenderEngine {
     //endregion
     //region Frame Limits
     private static final double NEAR = 0.05;
-    static final double APERTURE_EPS = 1e-3;
+    private static final double APERTURE_EPS = 1e-3;
     private static final int BAND_ROWS = 8;
-    static final int HYP_SPLIT = 6;
-    static final int GRID_COUNT = (HYP_SPLIT + 1) * (HYP_SPLIT + 2) / 2;
+    private static final int HYP_SPLIT = 6;
+    private static final int GRID_COUNT = (HYP_SPLIT + 1) * (HYP_SPLIT + 2) / 2;
     private static final int[][] GRID_INDEX = gridIndex();
-    static final int MAX_DEPTH = 3;
-    static final int MAX_APS = 32;
-    static final int STACK = MAX_DEPTH + 1;
-    static final int AP_STRIDE = 12;
+    private static final int MAX_DEPTH = 3;
+    private static final int MAX_APS = 32;
+    private static final int STACK = MAX_DEPTH + 1;
+    private static final int AP_STRIDE = 12;
     private static final int[] PRISM_PLANES = {0, 3, 4};
     private static final Aperture IDENTITY = new Aperture(0, -1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0);
     private static final int[][] NO_MAP = new int[0][];
@@ -91,7 +96,7 @@ public final class Raster3DEngine implements RenderEngine {
         }
         DDAEngine.copyRenderBuffer(renderFrame);
     }
-    static int[][][] layersOf(RenderFrame renderFrame) {
+    private static int[][][] layersOf(RenderFrame renderFrame) {
         int floors = renderFrame.map3D == null ? 0 : renderFrame.map3D.length;
         int[][][] layers = new int[1 + floors][][];
         layers[0] = renderFrame.map;
@@ -116,7 +121,7 @@ public final class Raster3DEngine implements RenderEngine {
     //endregion
 
     //region Lighting
-    static double[] placeTorch(int[][] map, double[] eye, double sinA, double cosA) {
+    private static double[] placeTorch(int[][] map, double[] eye, double sinA, double cosA) {
         double tz = Math.max(0.05, eye[2] - TORCH_DROP);
         for (double s : new double[]{1.0, 0.75, 0.5, 0.25}) {
             double tx = eye[0] - s * (TORCH_RIGHT * sinA + TORCH_FORWARD * cosA);
@@ -126,7 +131,7 @@ public final class Raster3DEngine implements RenderEngine {
         }
         return new double[]{eye[0], eye[1], tz};
     }
-    static int light(int color, double shade, double torch, double z) {
+    private static int light(int color, double shade, double torch, double z) {
         double k = (AMBIENT + torch) * shade;
         double r = ((color >> 16) & 255) * k * (1 + WARM_RED * torch);
         double g = ((color >> 8) & 255) * k;
@@ -137,12 +142,12 @@ public final class Raster3DEngine implements RenderEngine {
         b = Math.min(255, b * (1 - fog) + (FOG & 255) * fog);
         return ((int) r << 16) | ((int) g << 8) | (int) b;
     }
-    static double cellHeight(int[][] map, int x, int y) {
+    private static double cellHeight(int[][] map, int x, int y) {
         if (y < 0 || y >= map.length || x < 0 || x >= map[y].length) return 1.0;
         int type = map[y][x];
         return type == 1 ? 1.0 : type == 2 ? 0.5 : 0.0;
     }
-    static boolean shadowed(int[][] map, double fx, double fy, double fz, double lx, double ly, double lz) {
+    private static boolean shadowed(int[][] map, double fx, double fy, double fz, double lx, double ly, double lz) {
         if (cellHeight(map, (int) Math.floor(lx), (int) Math.floor(ly)) > 0) return false;
         double dx = lx - fx, dy = ly - fy;
         if (Math.abs(dx) + Math.abs(dy) < 1e-9) return false;
@@ -175,8 +180,8 @@ public final class Raster3DEngine implements RenderEngine {
     //endregion
 
     //region Hyperbolic View
-    static double warpDepth(double flat, double r) { return r * Math.sinh(flat / r); }
-    static double unwarpDepth(double seen, double r) {
+    private static double warpDepth(double flat, double r) { return r * Math.sinh(flat / r); }
+    private static double unwarpDepth(double seen, double r) {
         double q = seen / r;
         return r * Math.log(q + Math.sqrt(q * q + 1.0));
     }

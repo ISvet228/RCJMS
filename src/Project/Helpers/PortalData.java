@@ -35,6 +35,17 @@ public final class PortalData {
     public Portal get(int x, int y) { return portals.get(key(x, y)); }
     public java.util.Collection<Portal> values() { return portals.values(); }
     public boolean isEmpty() { return portals.isEmpty(); }
+    public void put(Portal portal) { portals.put(key(portal.x, portal.y), portal); }
+    public PortalData copy() {
+        PortalData copy = new PortalData();
+        for (Portal portal : portals.values()) {
+            Portal next = new Portal(portal.x, portal.y, portal.dirX, portal.dirY);
+            next.linkedX = portal.linkedX; next.linkedY = portal.linkedY;
+            next.linkedDirX = portal.linkedDirX; next.linkedDirY = portal.linkedDirY; next.linkedFloor = portal.linkedFloor;
+            copy.put(next);
+        }
+        return copy;
+    }
     private static long key(int x, int y) { return (((long) y) << 32) ^ (x & 0xffffffffL); }
     //endregion
 
@@ -57,6 +68,15 @@ public final class PortalData {
         return u >= -1e-9 && u <= 1 + 1e-9;
     }
     public static boolean entersFromCorrectSide(Portal portal, double dirX, double dirY) { return dirX * portal.dirX + dirY * portal.dirY > 1e-9; }
+    private static final double ARRIVAL_DEPTH = 0.5;
+    public static double[] arrive(Portal portal, double x, double y) {
+        double nax = portal.dirX, nay = portal.dirY;
+        double ex = portal.x + Math.max(nax, 0) + Math.max(nay, 0), ey = portal.y + Math.max(nay, 0) + Math.max(-nax, 0);
+        double u = Math.clamp((x - ex) * (-nay) + (y - ey) * nax, EDGE_MARGIN, 1.0 - EDGE_MARGIN);
+        double[] onLinked = teleport(portal, ex + u * (-nay), ey + u * nax);
+        return new double[]{onLinked[0] + ARRIVAL_DEPTH * portal.linkedDirX, onLinked[1] + ARRIVAL_DEPTH * portal.linkedDirY};
+    }
+
     public static double[] transformDirection(Portal portal, double dirX, double dirY) {
         double cosT = portal.dirX * portal.linkedDirX + portal.dirY * portal.linkedDirY;
         double sinT = portal.dirX * portal.linkedDirY - portal.dirY * portal.linkedDirX;

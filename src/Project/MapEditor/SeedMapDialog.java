@@ -2,6 +2,7 @@ package Project.MapEditor;
 import Project.RCJMS;
 import Project.StyleUI.*;
 import Project.Helpers.*;
+import Project.Helpers.maze.MazeAlgorithms;
 
 import javax.swing.*;
 import java.awt.*;
@@ -23,7 +24,7 @@ public class SeedMapDialog extends JDialog {
     private final StyledTextField floorsField;
     private final StyledTextField seedField;
     private final StyledToggle loopedToggle;
-    private final StyledComboBox finishBox;
+    private final StyledComboBox finishBox, algorithmBox;
     //endregion
     //region Result
     private SeedMapBuilder.Options result = null;
@@ -43,9 +44,11 @@ public class SeedMapDialog extends JDialog {
         seedField = new StyledTextField(style, SeedUtil.normalize(initial.seed()));
         loopedToggle = new StyledToggle(style, "looped_geometry");
         finishBox = new StyledComboBox(style, FINISH_MODES);
+        algorithmBox = new StyledComboBox(style, MazeAlgorithms.all().stream().map(MazeAlgorithm::nameKey).toArray());
 
         loopedToggle.setSelected(initial.looped());
         finishBox.setSelectedIndex(Math.clamp(initial.finishMode(), 0, FINISH_MODES.length - 1));
+        algorithmBox.setSelectedIndex(Math.max(0, indexOfAlgorithm(initial.algorithm())));
         seedField.limitInput(SeedUtil.LENGTH, SeedUtil::isAllowedChar);
 
         StyledButton randomSeedButton = new StyledButton(style, "me.random_seed");
@@ -61,6 +64,7 @@ public class SeedMapDialog extends JDialog {
         seedField.setPreferredSize(new Dimension(150, 34));
         loopedToggle.setPreferredSize(new Dimension(220, 34));
         finishBox.setPreferredSize(new Dimension(220, 36));
+        algorithmBox.setPreferredSize(new Dimension(220, 36));
 
         buildLayout(style, randomSeedButton, generateButton, cancelButton);
         NSLocalizedString.bind(this, "me.load_from_seed", this::setTitle);
@@ -80,8 +84,16 @@ public class SeedMapDialog extends JDialog {
                 sizeNormalizer.applyAsInt(parseNumber(widthField, initial.width())),
                 sizeNormalizer.applyAsInt(parseNumber(heightField, initial.height())),
                 Math.clamp(parseNumber(floorsField, initial.floors()), 1, maxFloors),
-                loopedToggle.isSelected(), finishBox.getSelectedIndex(), seed);
+                loopedToggle.isSelected(), finishBox.getSelectedIndex(), seed, selectedAlgorithm());
         dispose();
+    }
+    private static int indexOfAlgorithm(String id) {
+        for (int i = 0; i < MazeAlgorithms.all().size(); i++) if (MazeAlgorithms.all().get(i).id().equals(id)) return i;
+        return -1;
+    }
+    private String selectedAlgorithm() {
+        int index = algorithmBox.getSelectedIndex();
+        return MazeAlgorithms.all().get(Math.clamp(index, 0, MazeAlgorithms.all().size() - 1)).id();
     }
     private static int parseNumber(StyledTextField field, int fallback) {
         try { return Integer.parseInt(field.getText().trim()); }
@@ -100,6 +112,7 @@ public class SeedMapDialog extends JDialog {
         addRow(content, row++, new StyledLabel(style, NSLocalizedString.get("height") + ":"), heightField);
         addRow(content, row++, new StyledLabel(style, "floors_count"), floorsField);
         addRow(content, row++, new StyledLabel(style, "me.mode"), finishBox);
+        addRow(content, row++, new StyledLabel(style, "mm.algorithm"), algorithmBox);
         addRow(content, row++, null, loopedToggle);
 
         JPanel seedPanel = new JPanel(new BorderLayout(6, 0));

@@ -10,27 +10,27 @@ import java.util.Arrays;
 public final class RayTracingEngine implements RenderEngine {
     //region Variables
     //region Engine Identity
-    static final String ID = "raytracing";
+    private static final String ID = "raytracing";
     //endregion
     //region Render Config
-    static volatile int cfgQuality = 1, cfgOutW = 960, cfgOutH = 540;
-    static volatile MazeGenerator.GeometryMode cfgGeometry = MazeGenerator.GeometryMode.EUCLIDEAN;
-    static volatile double cfgCurvature = HyperbolicMath.DEFAULT_CURVATURE;
+    private static volatile int cfgQuality = 1, cfgOutW = 960, cfgOutH = 540;
+    private static volatile MazeGenerator.GeometryMode cfgGeometry = MazeGenerator.GeometryMode.EUCLIDEAN;
+    private static volatile double cfgCurvature = HyperbolicMath.DEFAULT_CURVATURE;
     //endregion
     //region Frame State
     private RenderFrame fr;
     //endregion
     //region Wall Palette
-    static final int wallBaseColor = 0xECD485;
-    static final int ceilingBaseColor = 0x816E1E;
-    static final int floorBaseColor = 0xD3AF63;
-    static final int finishBaseColor = 0x33FF66;
+    private static final int wallBaseColor = 0xECD485;
+    private static final int ceilingBaseColor = 0x816E1E;
+    private static final int floorBaseColor = 0xD3AF63;
+    private static final int finishBaseColor = 0x33FF66;
     //endregion
     //region Trace Limits
-    static final int MAX_PRIMARY_STEPS = 6000;
+    private static final int MAX_PRIMARY_STEPS = 6000;
     private static final double HYP_PLANE_LENGTH = Math.tan(Math.toRadians(140.0) / 2.0);
-    static final int[] REFLECTION_STEPS = {6, 16, 48};
-    static final int[] REFLECTION_DEPTH = {1, 1, 2};
+    private static final int[] REFLECTION_STEPS = {6, 16, 48};
+    private static final int[] REFLECTION_DEPTH = {1, 1, 2};
     //endregion
     //region Lighting
     private static final double[] AMBIENT_LIGHT = {0.10, 0.115, 0.17};
@@ -40,17 +40,26 @@ public final class RayTracingEngine implements RenderEngine {
     private static final double FLASH_STRENGTH = 0.95;
     private static final double FLASH_RANGE = 3.0;
     private static final double FLASH_RANGE_SQ_INV = 1.0 / (FLASH_RANGE * FLASH_RANGE);
+
+    @Override public float[] spriteLight(double distance, boolean hyperbolic) {
+        double att = 1.0 / (1.0 + distance * distance * FLASH_RANGE_SQ_INV);
+        double flash = FLASH_STRENGTH * att * 0.8;
+        float[] light = new float[3];
+        for (int c = 0; c < 3; c++) {
+            light[c] = (float) Math.clamp(AMBIENT_LIGHT[c] + FILL_LIGHT[c] * 0.8 + FLASH_LIGHT[c] * flash, 0.05, 1.0);
+        }
+        return light;
+    }
     private static final double glossiness = .75;
     //endregion
     //region Tone Mapping
     private static final int TONE_STEPS = 2048;
     private static final double TONE_MAX = 3.0;
-    static final double[] TONE_LUT = buildToneLut();
+    private static final double[] TONE_LUT = buildToneLut();
     //endregion
     //region SDF Settings
-    private static final int SDF_SUB = 8, SDF_WINDOW = 4;
-    static final int SDF_TILE = 256;
-    static final SdfCache sdfCache = new SdfCache();
+    private static final int SDF_SUB = 8, SDF_WINDOW = 4, SDF_TILE = 256;
+    private static final SdfCache sdfCache = new SdfCache();
     //endregion
     //endregion
 
@@ -65,7 +74,7 @@ public final class RayTracingEngine implements RenderEngine {
     //endregion
 
     //region Render Pipeline
-    static void syncConfig(RenderFrame renderFrame) {
+    private static void syncConfig(RenderFrame renderFrame) {
         cfgQuality = renderFrame.quality;
         cfgGeometry = renderFrame.geometry;
         cfgCurvature = renderFrame.curvature;
@@ -121,7 +130,7 @@ public final class RayTracingEngine implements RenderEngine {
         });
         copyRenderBuffer(fr);
     }
-    static void copyRenderBuffer(RenderFrame renderFrame) {
+    private static void copyRenderBuffer(RenderFrame renderFrame) {
         if (renderFrame.renderWidth == renderFrame.bufferedImage.getWidth() && renderFrame.renderHeight == renderFrame.bufferedImage.getHeight()) {
             System.arraycopy(renderFrame.renderPixels, 0, renderFrame.pixels, 0, renderFrame.pixels.length);
         }
@@ -132,14 +141,14 @@ public final class RayTracingEngine implements RenderEngine {
             g2d.dispose();
         }
     }
-    static void parallelRange(RenderFrame renderFrame, int end, IntConsumer task) {
+    private static void parallelRange(RenderFrame renderFrame, int end, IntConsumer task) {
         if (end <= 0) return;
         renderFrame.renderWorkers.execute(0, end, task);
     }
     //endregion
 
     //region Ray Tracing
-    static TraceHit traceRay(RenderFrame renderFrame, double ox, double oy, double oz, double rx, double ry, double rz, int[][] startMap, PortalData startPortals, TraceHit result, int maxSteps) {
+    private static TraceHit traceRay(RenderFrame renderFrame, double ox, double oy, double oz, double rx, double ry, double rz, int[][] startMap, PortalData startPortals, TraceHit result, int maxSteps) {
         result.reset();
         final int mapWidth = startMap[0].length, mapHeight = startMap.length;
 
@@ -255,7 +264,7 @@ public final class RayTracingEngine implements RenderEngine {
         }
         return result;
     }
-    static double wallOcclusion(double z, double height) {
+    private static double wallOcclusion(double z, double height) {
         double ao = 1.0 - 0.45 * (1.0 - smooth(z / 0.22));
         ao *= 1.0 - 0.25 * (1.0 - smooth((height - z) / 0.14));
         return ao;
@@ -269,8 +278,8 @@ public final class RayTracingEngine implements RenderEngine {
         ao *= 1.0 - farStrength * (1.0 - smooth(d / farReach));
         return ao;
     }
-    static boolean is3D(RenderFrame renderFrame) { return renderFrame.map3D != null && renderFrame.map3D.length > 1; }
-    static double wallHeightForType(int type) { return type == 2 ? 0.5 : 1.0; }
+    private static boolean hasFloors(RenderFrame renderFrame) { return renderFrame.map3D != null && renderFrame.map3D.length > 1; }
+    private static double wallHeightForType(int type) { return type == 2 ? 0.5 : 1.0; }
     private int shadeSurface(TraceHit hit, double lx, double ly, double lz, double pathBefore, int depth, int steps, TraceHit[] scratch) {
         if (!hit.hit) return fr.skyCeiling ? SkyCeiling.colorDir(hit.dirX, hit.dirY, hit.dirZ, fr.skyTime) : ceilingBaseColor;
         double llen = Math.sqrt(lx * lx + ly * ly + lz * lz);
@@ -284,7 +293,7 @@ public final class RayTracingEngine implements RenderEngine {
             boolean floor = hit.type == -1;
             if (!floor && fr.skyCeiling) return SkyCeiling.colorDir(hit.dirX, hit.dirY, hit.dirZ, fr.skyTime);
             base = sampleTexture(floor ? fr.floorTexture : fr.ceilingTexture, hit.x, hit.y, floor ? floorBaseColor : ceilingBaseColor);
-            if (floor && is3D(fr)) base = tintStairs(base, hit.x, hit.y, hit.map);
+            if (floor && hasFloors(fr)) base = tintStairs(base, hit.x, hit.y, hit.map);
             nx = 0; ny = 0; nz = floor ? 1 : -1;
             ao = planeOcclusion(sdfFieldFor(hit.map), hit.x, hit.y);
             shininess = floor ? 30 : 16;
@@ -350,7 +359,7 @@ public final class RayTracingEngine implements RenderEngine {
         int reflectedColor = shadeSurface(reflected, -rrx, -rry, -rrz + 0.18, dist, depth - 1, steps, scratch);
         return mixColor(lit, reflectedColor, reflectivity);
     }
-    public static final class TraceHit {
+    private static final class TraceHit {
         double x, y, z, distance;
         int type, side;
         double wallU, wallV;
@@ -370,12 +379,12 @@ public final class RayTracingEngine implements RenderEngine {
     //endregion
 
     //region Hyperbolic Geometry
-    static double[] hypPixelRay(double cx, double py, double dirX, double dirY, double focal, double horizon) {
+    private static double[] hypPixelRay(double cx, double py, double dirX, double dirY, double focal, double horizon) {
         double rdX = dirX - dirY * HYP_PLANE_LENGTH * cx, rdY = dirY + dirX * HYP_PLANE_LENGTH * cx;
         double L = Math.sqrt(rdX * rdX + rdY * rdY);
         return new double[]{rdX / L, rdY / L, L, -(py - horizon) / focal};
     }
-    static TraceHit traceHyp(RenderFrame renderFrame, double ox, double oy, double z0, double ux, double uy, double L, double slope, TraceHit result, int maxSteps) {
+    private static TraceHit traceHyp(RenderFrame renderFrame, double ox, double oy, double z0, double ux, double uy, double L, double slope, TraceHit result, int maxSteps) {
         result.reset();
         final int[][] m = renderFrame.map;
         final int mapWidth = m[0].length, mapHeight = m.length;
@@ -451,14 +460,14 @@ public final class RayTracingEngine implements RenderEngine {
     //endregion
 
     //region Shading and Textures
-    static double smooth(double t) { t = Math.clamp(t, 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
-    static double glintPow(double x, int exp) {
+    private static double smooth(double t) { t = Math.clamp(t, 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
+    private static double glintPow(double x, int exp) {
         double x2 = x * x, x4 = x2 * x2, x8 = x4 * x4, x16 = x8 * x8;
         if (exp == 16) return x16;
         if (exp == 24) return x16 * x8;
         return x16 * x8 * x4 * x2;
     }
-    static int mixColor(int a, int b, double amount) {
+    private static int mixColor(int a, int b, double amount) {
         amount = Math.clamp(amount, 0, 1);
         int ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
         int br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
@@ -470,7 +479,7 @@ public final class RayTracingEngine implements RenderEngine {
         r = (int)(r * (1 - 0.45) + tr * 0.45); g = (int)(g * (1 - 0.45) + tg * 0.45); b = (int)(b * (1 - 0.45) + tb * 0.45);
         return (r << 16) | (g << 8) | b;
     }
-    static int tintStairs(int color, double worldX, double worldY, int[][] floorMap) {
+    private static int tintStairs(int color, double worldX, double worldY, int[][] floorMap) {
         int fx = (int) Math.floor(worldX), fy = (int) Math.floor(worldY);
         if (fx < 0 || fy < 0 || fy >= floorMap.length || fx >= floorMap[0].length) return color;
         int cell = floorMap[fy][fx];
@@ -478,7 +487,7 @@ public final class RayTracingEngine implements RenderEngine {
         if (cell == 4) return tintColor(color, 0xFFAA33);
         return color;
     }
-    static int sampleTexture(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
+    private static int sampleTexture(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
         int width = texture.width(), height = texture.height();
         if (width <= 0 || height <= 0) return baseColor;
         double fracX = worldX - Math.floor(worldX);
@@ -487,7 +496,7 @@ public final class RayTracingEngine implements RenderEngine {
         int ty = Math.min((int)(fracY * height), height - 1);
         return texture.pixels()[ty * width + tx];
     }
-    static int sampleWallTexture(RuntimeTexture texture, TraceHit hit) {
+    private static int sampleWallTexture(RuntimeTexture texture, TraceHit hit) {
         if (texture.width() <= 0 || texture.height() <= 0) return hit.type == 2 ? finishBaseColor : wallBaseColor;
         int tx = Math.min((int) (hit.wallU * texture.width()), texture.width() - 1);
         int ty = Math.min((int) ((1.0 - hit.wallV) * texture.height()), texture.height() - 1);
@@ -496,7 +505,7 @@ public final class RayTracingEngine implements RenderEngine {
     //endregion
 
     //region Tone Mapping
-    static double toneCurve(double v) { return v <= 0.7 ? v : 0.7 + 0.3 * (1.0 - Math.exp(-(v - 0.7) / 0.3)); }
+    private static double toneCurve(double v) { return v <= 0.7 ? v : 0.7 + 0.3 * (1.0 - Math.exp(-(v - 0.7) / 0.3)); }
     private static double[] buildToneLut() {
         double[] lut = new double[TONE_STEPS + 1];
         for (int i = 0; i <= TONE_STEPS; i++) lut[i] = toneCurve(i * TONE_MAX / TONE_STEPS);
@@ -510,11 +519,11 @@ public final class RayTracingEngine implements RenderEngine {
     //endregion
 
     //region SDF Fields
-    static void prepareSdfFields(RenderFrame renderFrame) {
+    private static void prepareSdfFields(RenderFrame renderFrame) {
         if (renderFrame.map3D != null) for (int[][] floor : renderFrame.map3D) sdfFieldFor(floor);
         else sdfFieldFor(renderFrame.map);
     }
-    static SDFField sdfFieldFor(int[][] m) {
+    private static SDFField sdfFieldFor(int[][] m) {
         return sdfCache.fieldFor(m);
     }
     public static final class SdfCache {
@@ -548,7 +557,7 @@ public final class RayTracingEngine implements RenderEngine {
             }
         }
     }
-    public static final class SDFField {
+    static final class SDFField {
         private final SdfCache owner;
         private final int[][] m;
         private final int mw, mh;
@@ -660,154 +669,167 @@ public final class RayTracingEngine implements RenderEngine {
     //endregion
 
     //region GPU Backend
-    static final class Gpu {
-    static final long SDF_BUDGET_BYTES = 192L << 20;
-    private static GpuProgram program;
-    private static Object[] sdfKey;
-    private static boolean lutUploaded;
-    private static boolean disabled;
-    private static GpuProgram.Buffer bMaps, bGrid, bMeta, bPortals, bWall, bFinish, bFloor, bCeil;
-    private static GpuProgram.Buffer bSdfW, bSdfF, bSm, bLut, bDp, bIp, bOut;
-    private static int[] wallSrc, finishSrc, floorSrc, ceilSrc;
+    private static final class Gpu {
+        static final long SDF_BUDGET_BYTES = 1024L << 20;
+        private static GpuProgram program;
+        private static Object[] sdfKey;
+        private static boolean lutUploaded;
+        private static boolean disabled;
+        private static GpuProgram.Buffer bMaps, bGrid, bMeta, bPortals, bWall, bFinish, bFloor, bCeil;
+        private static GpuProgram.Buffer bSdfW, bSdfF, bSm, bLut, bDp, bIp, bOut;
+        private static int[] wallSrc, finishSrc, floorSrc, ceilSrc;
 
-    private Gpu() {}
+        private Gpu() {}
+        private static boolean tryRender(RenderFrame renderFrame) { synchronized (GpuRuntime.LOCK) { return tryRenderLocked(renderFrame); } }
 
-    static boolean tryRender(RenderFrame renderFrame) {
-        synchronized (GpuRuntime.LOCK) { return tryRenderLocked(renderFrame); }
-    }
-    private static boolean tryRenderLocked(RenderFrame renderFrame) {
-        if (disabled) return false;
-        if (GpuRuntime.session() == null) return false;
-        try {
-            render(renderFrame);
-            return true;
-        }
-        catch (RuntimeException | Error exception) {
-            disabled = true;
-            exception.printStackTrace(System.err);
+        private static boolean tryRenderLocked(RenderFrame renderFrame) {
+            if (disabled) return false;
+            if (GpuRuntime.session() == null) return false;
+            try {
+                render(renderFrame);
+                return true;
+            } catch (RuntimeException | Error exception) {
+                disabled = true;
+                exception.printStackTrace(System.err);
                 Project.OpenCl.GpuRuntime.reportFailure(ID, String.valueOf(exception));
-            return false;
-        }
-    }
-    private static void render(RenderFrame renderFrame) {
-        final int width = renderFrame.renderWidth, height = renderFrame.renderHeight;
-        if (width <= 0 || height <= 0) return;
-        if (renderFrame.renderPixels == null || renderFrame.renderPixels.length < width * height) throw new IllegalStateException("render buffer too small");
-
-        prepareSdfFields(renderFrame);
-        if (program == null) program = new GpuProgram(Project.OpenCl.KernelSource.load(RayTracingEngine.class, SkyCeiling.GPU_SOURCE), "rt_render");
-
-        Scene scene = Scene.of(renderFrame);
-        int layers = 1 + scene.floors;
-        SDFField[] fields = new SDFField[layers];
-        for (int l = 0; l < layers; l++) fields[l] = sdfFieldFor(layerMap(renderFrame, l));
-        uploadSdf(fields);
-
-        int[] ip = ipValues(renderFrame, scene, width, height);
-        double[] dp = dpValues(renderFrame, width, height);
-
-        bMaps = ensure(bMaps, 4L * scene.maps.length);
-        bGrid = ensure(bGrid, 4L * scene.grid.length);
-        bMeta = ensure(bMeta, 4L * scene.meta.length);
-        bPortals = ensure(bPortals, 4L * scene.portals.length);
-        bDp = ensure(bDp, 4L * dp.length);
-        bIp = ensure(bIp, 4L * ip.length);
-        bOut = ensure(bOut, 4L * width * height);
-        bWall = ensure(bWall, 4L * renderFrame.wallTexture.pixels().length);
-        bFinish = ensure(bFinish, 4L * renderFrame.finishTexture.pixels().length);
-        bFloor = ensure(bFloor, 4L * renderFrame.floorTexture.pixels().length);
-        bCeil = ensure(bCeil, 4L * renderFrame.ceilingTexture.pixels().length);
-        if (!lutUploaded) {
-            bLut = program.buffer(4L * TONE_LUT.length);
-            program.write(bLut, TONE_LUT, TONE_LUT.length);
-            lutUploaded = true;
+                return false;
+            }
         }
 
-        program.write(bMaps, scene.maps, scene.maps.length);
-        program.write(bGrid, scene.grid, scene.grid.length);
-        program.write(bMeta, scene.meta, scene.meta.length);
-        program.write(bPortals, scene.portals, scene.portals.length);
-        program.write(bDp, dp, dp.length);
-        program.write(bIp, ip, ip.length);
-        if (renderFrame.wallTexture.pixels() != wallSrc) { wallSrc = renderFrame.wallTexture.pixels(); program.write(bWall, wallSrc, wallSrc.length); }
-        if (renderFrame.finishTexture.pixels() != finishSrc) { finishSrc = renderFrame.finishTexture.pixels(); program.write(bFinish, finishSrc, finishSrc.length); }
-        if (renderFrame.floorTexture.pixels() != floorSrc) { floorSrc = renderFrame.floorTexture.pixels(); program.write(bFloor, floorSrc, floorSrc.length); }
-        if (renderFrame.ceilingTexture.pixels() != ceilSrc) { ceilSrc = renderFrame.ceilingTexture.pixels(); program.write(bCeil, ceilSrc, ceilSrc.length); }
+        private static void render(RenderFrame renderFrame) {
+            final int width = renderFrame.renderWidth, height = renderFrame.renderHeight;
+            if (width <= 0 || height <= 0) return;
+            if (renderFrame.renderPixels == null || renderFrame.renderPixels.length < width * height) throw new IllegalStateException("render buffer too small");
 
-        program.run(width, height, bMaps, bGrid, bMeta, bPortals, bWall, bFinish, bFloor, bCeil, bSdfW, bSdfF, bSm, bLut, bDp, bIp, bOut);
-        program.read(bOut, renderFrame.renderPixels, width * height);
-    }
-    private static GpuProgram.Buffer ensure(GpuProgram.Buffer current, long bytes) {
-        long size = Math.max(4L, bytes);
-        if (current != null && current.bytes() == size) return current;
-        if (current != null) program.release(current);
-        return program.buffer(size);
-    }
-    private static int REFLECTION_STEPS_OF(int q) { return REFLECTION_STEPS[q]; }
-    private static int REFLECTION_DEPTH_OF(int q) { return REFLECTION_DEPTH[q]; }
+            prepareSdfFields(renderFrame);
+            if (program == null) program = new GpuProgram(Project.OpenCl.KernelSource.load(RayTracingEngine.class, SkyCeiling.GPU_SOURCE), "rt_render");
 
-    static Sdf buildSdf(SDFField[] fields) {
-        long total = 0;
-        for (SDFField sdfField : fields) total += (long) sdfField.cols * sdfField.rows;
-        if (2L * 8L * total > SDF_BUDGET_BYTES) {
-            throw new IllegalStateException("maze too large for the GPU ray tracer (" + (16L * total >> 20) + " MB of distance fields)");
+            Scene scene = Scene.of(renderFrame);
+            int layers = 1 + scene.floors;
+            SDFField[] fields = new SDFField[layers];
+            for (int l = 0; l < layers; l++) fields[l] = sdfFieldFor(layerMap(renderFrame, l));
+            uploadSdf(fields);
+
+            int[] ip = ipValues(renderFrame, scene, width, height);
+            double[] dp = dpValues(renderFrame, width, height);
+
+            bMaps = ensure(bMaps, 4L * scene.maps.length);
+            bGrid = ensure(bGrid, 4L * scene.grid.length);
+            bMeta = ensure(bMeta, 4L * scene.meta.length);
+            bPortals = ensure(bPortals, 4L * scene.portals.length);
+            bDp = ensure(bDp, 4L * dp.length);
+            bIp = ensure(bIp, 4L * ip.length);
+            bOut = ensure(bOut, 4L * width * height);
+            bWall = ensure(bWall, 4L * renderFrame.wallTexture.pixels().length);
+            bFinish = ensure(bFinish, 4L * renderFrame.finishTexture.pixels().length);
+            bFloor = ensure(bFloor, 4L * renderFrame.floorTexture.pixels().length);
+            bCeil = ensure(bCeil, 4L * renderFrame.ceilingTexture.pixels().length);
+            if (!lutUploaded) {
+                bLut = program.buffer(4L * TONE_LUT.length);
+                program.write(bLut, TONE_LUT, TONE_LUT.length);
+                lutUploaded = true;
+            }
+
+            program.write(bMaps, scene.maps, scene.maps.length);
+            program.write(bGrid, scene.grid, scene.grid.length);
+            program.write(bMeta, scene.meta, scene.meta.length);
+            program.write(bPortals, scene.portals, scene.portals.length);
+            program.write(bDp, dp, dp.length);
+            program.write(bIp, ip, ip.length);
+            if (renderFrame.wallTexture.pixels() != wallSrc) {
+                wallSrc = renderFrame.wallTexture.pixels();
+                program.write(bWall, wallSrc, wallSrc.length);
+            }
+            if (renderFrame.finishTexture.pixels() != finishSrc) {
+                finishSrc = renderFrame.finishTexture.pixels();
+                program.write(bFinish, finishSrc, finishSrc.length);
+            }
+            if (renderFrame.floorTexture.pixels() != floorSrc) {
+                floorSrc = renderFrame.floorTexture.pixels();
+                program.write(bFloor, floorSrc, floorSrc.length);
+            }
+            if (renderFrame.ceilingTexture.pixels() != ceilSrc) {
+                ceilSrc = renderFrame.ceilingTexture.pixels();
+                program.write(bCeil, ceilSrc, ceilSrc.length);
+            }
+
+            program.run(width, height, bMaps, bGrid, bMeta, bPortals, bWall, bFinish, bFloor, bCeil, bSdfW, bSdfF, bSm, bLut, bDp, bIp, bOut);
+            program.read(bOut, renderFrame.renderPixels, width * height);
         }
-        double[] wall = new double[(int) total];
-        double[] finish = new double[(int) total];
-        int[] sm = new int[4 * fields.length];
-        int offset = 0;
-        for (int l = 0; l < fields.length; l++) {
-            SDFField sdfField = fields[l];
-            sm[4 * l] = offset;
-            sm[4 * l + 1] = sdfField.cols;
-            sm[4 * l + 2] = sdfField.rows;
-            sm[4 * l + 3] = sdfField.hasFinish ? 1 : 0;
-            for (int j = 0; j < sdfField.rows; j++)
-                for (int i = 0; i < sdfField.cols; i++) {
-                    wall[offset + j * sdfField.cols + i] = sdfField.value(false, i, j);
-                    if (sdfField.hasFinish) finish[offset + j * sdfField.cols + i] = sdfField.value(true, i, j);
-                }
-            offset += sdfField.cols * sdfField.rows;
-        }
-        return new Sdf(wall, finish, sm);
-    }
-    private static void uploadSdf(SDFField[] fields) {
-        if (sdfKey != null && Arrays.equals(sdfKey, fields)) return;
-        Sdf sdf = buildSdf(fields);
-        bSdfW = ensure(bSdfW, 4L * sdf.wall.length);
-        bSdfF = ensure(bSdfF, 4L * sdf.finish.length);
-        bSm = ensure(bSm, 4L * sdf.sm.length);
-        program.write(bSdfW, sdf.wall, sdf.wall.length);
-        program.write(bSdfF, sdf.finish, sdf.finish.length);
-        program.write(bSm, sdf.sm, sdf.sm.length);
-        sdfKey = fields.clone();
-    }
-    static int[][] layerMap(RenderFrame renderFrame, int l) {
-        return l == 0 ? renderFrame.map : renderFrame.map3D[l - 1];
-    }
-    static int[] ipValues(RenderFrame renderFrame, Scene scene, int width, int height) {
-        int q = Math.clamp(renderFrame.quality, 0, 2);
-        return new int[]{
-                width, height, REFLECTION_STEPS_OF(q), REFLECTION_DEPTH_OF(q), scene.floors, scene.tinted ? 1 : 0,
-                renderFrame.wallTexture.width(), renderFrame.wallTexture.height(),
-                renderFrame.finishTexture.width(), renderFrame.finishTexture.height(),
-                renderFrame.floorTexture.width(), renderFrame.floorTexture.height(),
-                renderFrame.ceilingTexture.width(), renderFrame.ceilingTexture.height(),
-                renderFrame.skyCeiling ? 1 : 0
-        };
-    }
-    static double[] dpValues(RenderFrame renderFrame, int width, int height) {
-        double tanHalfFov = Math.tan(Math.toRadians(60.0) * 0.5);
-        double verticalTan = tanHalfFov / ((double) width / height);
-        return new double[]{ renderFrame.playerX, renderFrame.playerY, renderFrame.cameraHeight, Math.cos(renderFrame.cameraAngle), Math.sin(renderFrame.cameraAngle), Math.cos(renderFrame.cameraPitch), Math.sin(renderFrame.cameraPitch), tanHalfFov, verticalTan, renderFrame.skyTime };
-    }
-    record Sdf(double[] wall, double[] finish, int[] sm) {
 
-    }
-    static final class Scene {
+        private static GpuProgram.Buffer ensure(GpuProgram.Buffer current, long bytes) {
+            long size = Math.max(4L, bytes);
+            if (current != null && current.bytes() == size) return current;
+            if (current != null) program.release(current);
+            return program.buffer(size);
+        }
+
+        private static int REFLECTION_STEPS_OF(int q) { return REFLECTION_STEPS[q]; }
+        private static int REFLECTION_DEPTH_OF(int q) { return REFLECTION_DEPTH[q]; }
+
+        static Sdf buildSdf(SDFField[] fields) {
+            long total = 0;
+            for (SDFField sdfField : fields) total += (long) sdfField.cols * sdfField.rows;
+            if (2L * 8L * total > SDF_BUDGET_BYTES) {
+                throw new IllegalStateException("maze too large for the GPU ray tracer (" + (16L * total >> 20) + " MB of distance fields)");
+            }
+            double[] wall = new double[(int) total];
+            double[] finish = new double[(int) total];
+            int[] sm = new int[4 * fields.length];
+            int offset = 0;
+            for (int l = 0; l < fields.length; l++) {
+                SDFField sdfField = fields[l];
+                sm[4 * l] = offset;
+                sm[4 * l + 1] = sdfField.cols;
+                sm[4 * l + 2] = sdfField.rows;
+                sm[4 * l + 3] = sdfField.hasFinish ? 1 : 0;
+                for (int j = 0; j < sdfField.rows; j++)
+                    for (int i = 0; i < sdfField.cols; i++) {
+                        wall[offset + j * sdfField.cols + i] = sdfField.value(false, i, j);
+                        if (sdfField.hasFinish) finish[offset + j * sdfField.cols + i] = sdfField.value(true, i, j);
+                    }
+                offset += sdfField.cols * sdfField.rows;
+            }
+            return new Sdf(wall, finish, sm);
+        }
+
+        private static void uploadSdf(SDFField[] fields) {
+            if (sdfKey != null && Arrays.equals(sdfKey, fields)) return;
+            Sdf sdf = buildSdf(fields);
+            bSdfW = ensure(bSdfW, 4L * sdf.wall.length);
+            bSdfF = ensure(bSdfF, 4L * sdf.finish.length);
+            bSm = ensure(bSm, 4L * sdf.sm.length);
+            program.write(bSdfW, sdf.wall, sdf.wall.length);
+            program.write(bSdfF, sdf.finish, sdf.finish.length);
+            program.write(bSm, sdf.sm, sdf.sm.length);
+            sdfKey = fields.clone();
+        }
+
+        private static int[][] layerMap(RenderFrame renderFrame, int l) { return l == 0 ? renderFrame.map : renderFrame.map3D[l - 1]; }
+        private static int[] ipValues(RenderFrame renderFrame, Scene scene, int width, int height) {
+            int q = Math.clamp(renderFrame.quality, 0, 2);
+            return new int[]{
+                    width, height, REFLECTION_STEPS_OF(q), REFLECTION_DEPTH_OF(q), scene.floors, scene.tinted ? 1 : 0,
+                    renderFrame.wallTexture.width(), renderFrame.wallTexture.height(),
+                    renderFrame.finishTexture.width(), renderFrame.finishTexture.height(),
+                    renderFrame.floorTexture.width(), renderFrame.floorTexture.height(),
+                    renderFrame.ceilingTexture.width(), renderFrame.ceilingTexture.height(),
+                    renderFrame.skyCeiling ? 1 : 0
+            };
+        }
+
+        private static double[] dpValues(RenderFrame renderFrame, int width, int height) {
+            double tanHalfFov = Math.tan(Math.toRadians(60.0) * 0.5);
+            double verticalTan = tanHalfFov / ((double) width / height);
+            return new double[]{renderFrame.playerX, renderFrame.playerY, renderFrame.cameraHeight, Math.cos(renderFrame.cameraAngle), Math.sin(renderFrame.cameraAngle), Math.cos(renderFrame.cameraPitch), Math.sin(renderFrame.cameraPitch), tanHalfFov, verticalTan, renderFrame.skyTime};
+        }
+        record Sdf(double[] wall, double[] finish, int[] sm) { }
+
+        static final class Scene {
             int[] maps, grid, meta, portals;
             int floors;
             boolean tinted;
+
             static Scene of(RenderFrame renderFrame) {
                 int floors = renderFrame.map3D == null ? 0 : renderFrame.map3D.length;
                 int layerCount = 1 + floors;

@@ -1,12 +1,12 @@
 package Project.MainMenu;
 import Project.Game.*;
 import Project.Helpers.*;
+import Project.Net.NetSettings;
 import Project.StyleUI.*;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 import java.awt.geom.RoundRectangle2D;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -54,13 +54,15 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     //region Option Controls
     private final StyledComboBox languageBox, renderScaleBox, resolutionBox, engineBox, qualityBox;
     private final StyledToggle fullscreenToggle, vsyncToggle, openClToggle;
-    private final StyledToggle doomMovementToggle, noCeilingToggle, textModeToggle;
+    private final StyledToggle doomMovementToggle, noCeilingToggle, textModeToggle, simplePlayerSpriteToggle;
+    private final VolumeSlider musicVolume, effectsVolume;
     //endregion
     //region Labels
     private final StyledLabel heading, sectionInterface, languageCaption, themeCaption, sectionBackground;
     private final StyledLabel sectionDisplay, vsyncHint, openClHint, resolutionCaption, resolutionHint, scaleCaption, scaleHint, sectionRender;
     private final StyledLabel engineCaption, engineHint, qualityCaption, qualityHint;
-    private final StyledLabel sectionGameplay, doomMovementHint, noCeilingHint, textModeHint, soonLabel;
+    private final StyledLabel sectionGameplay, doomMovementHint, noCeilingHint, textModeHint, simplePlayerSpriteHint;
+    private final StyledLabel sectionAudio, musicVolumeCaption, effectsVolumeCaption;
     //endregion
     //region Status And Timers
     private final StatusDot openClDot = new StatusDot();
@@ -88,7 +90,14 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         doomMovementHint = label("mm.doom_movement_hint", MainMenuCanvas.MUTED);
         noCeilingHint = label("mm.no_ceiling_hint", MainMenuCanvas.MUTED);
         textModeHint = label("mm.text_mode_hint", MainMenuCanvas.MUTED);
-        soonLabel = label("SOON...", MainMenuCanvas.MUTED);
+        simplePlayerSpriteHint = label("mm.simple_player_sprite_hint", MainMenuCanvas.MUTED);
+        sectionAudio = label("mm.section_audio", MainMenuCanvas.ACCENT);
+        musicVolumeCaption = label("mm.volume_music", MainMenuCanvas.TEXT);
+        effectsVolumeCaption = label("mm.volume_effects", MainMenuCanvas.TEXT);
+        musicVolume = new VolumeSlider(Project.Helpers.Settings.getInt("music.volume", 35),
+                percent -> saveVolume("music.volume", percent, Project.Audio.Music::volumeChanged));
+        effectsVolume = new VolumeSlider(Project.Helpers.Settings.getInt("sound.volume", 100),
+                percent -> saveVolume("sound.volume", percent, () -> { }));
         languageCaption = label("mm.settings_language", MainMenuCanvas.TEXT);
         themeCaption = label("mm.settings_themes", MainMenuCanvas.TEXT);
         vsyncHint = label("mm.vsync_hint", MainMenuCanvas.MUTED);
@@ -113,6 +122,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         doomMovementToggle = new StyledToggle(style, "mm.doom_movement");
         noCeilingToggle = new StyledToggle(style, "mm.no_ceiling");
         textModeToggle = new StyledToggle(style, "mm.text_mode");
+        simplePlayerSpriteToggle = new StyledToggle(style, "mm.simple_player_sprite");
         backButton = button("mm.back");
         for (int i = 0; i < THEMES.length; i++) {
             themeButtons[i] = new StyledToggleButton(style, THEME_KEYS[i]);
@@ -178,7 +188,13 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         gameplayControls.add(noCeilingHint);
         gameplayControls.add(textModeToggle);
         gameplayControls.add(textModeHint);
-        gameplayControls.add(soonLabel);
+        gameplayControls.add(simplePlayerSpriteToggle);
+        gameplayControls.add(simplePlayerSpriteHint);
+        gameplayControls.add(sectionAudio);
+        gameplayControls.add(musicVolumeCaption);
+        gameplayControls.add(musicVolume);
+        gameplayControls.add(effectsVolumeCaption);
+        gameplayControls.add(effectsVolume);
 
         for (Component component : interfaceControls) add(component);
         for (Component component : displayControls) add(component);
@@ -239,7 +255,13 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         canvas.text(noCeilingHint, 12, 150, 264, 310, 18);
         canvas.place(textModeToggle, 150, 290, 310, 34);
         canvas.text(textModeHint, 12, 150, 328, 310, 18);
-        canvas.text(soonLabel, 26, 500, 240, 310, 40);
+        canvas.place(simplePlayerSpriteToggle, 150, 354, 310, 34);
+        canvas.text(simplePlayerSpriteHint, 12, 150, 392, 310, 18);
+        canvas.text(sectionAudio, 13, 500, 134, 310, 20);
+        canvas.text(musicVolumeCaption, 13, 500, 162, 310, 18);
+        canvas.place(musicVolume, 500, 186, 310, 24);
+        canvas.text(effectsVolumeCaption, 13, 500, 226, 310, 18);
+        canvas.place(effectsVolume, 500, 250, 310, 24);
 
         canvas.place(backButton, 690, 448, 120, 38);
     }
@@ -294,6 +316,7 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         doomMovementToggle.addActionListener(_ -> saveGameplay(() -> GameView.setDoomMovement(doomMovementToggle.isSelected())));
         noCeilingToggle.addActionListener(_ -> saveGameplay(() -> GameView.setNoCeiling(noCeilingToggle.isSelected())));
         textModeToggle.addActionListener(_ -> saveGameplay(() -> GameView.setTextMode(textModeToggle.isSelected())));
+        simplePlayerSpriteToggle.addActionListener(_ -> { if (!syncing) NetSettings.setSimplePlayerSprite(simplePlayerSpriteToggle.isSelected()); });
         languageBox.addActionListener(_ -> {
             int index = languageBox.getSelectedIndex();
             if (!syncing && index >= 0 && index < LANGUAGE_CODES.length) menu.changeLanguage(LANGUAGE_CODES[index]);
@@ -381,6 +404,9 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             doomMovementToggle.setSelected(GameView.isDoomMovement());
             noCeilingToggle.setSelected(GameView.isNoCeiling());
             textModeToggle.setSelected(GameView.isTextMode());
+            simplePlayerSpriteToggle.setSelected(NetSettings.simplePlayerSprite());
+            musicVolume.setValue(Project.Helpers.Settings.getInt("music.volume", 35));
+            effectsVolume.setValue(Project.Helpers.Settings.getInt("sound.volume", 100));
             syncBackgroundSelection();
         } finally { syncing = false; }
     }
@@ -391,6 +417,11 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         try {
             SaveData.saveGameplay(GameView.isDoomMovement(), GameView.isNoCeiling(), GameView.isTextMode());
         } catch (java.io.IOException exception) { System.err.println("[Settings] gameplay not saved: " + exception.getMessage()); }
+    }
+    private void saveVolume(String key, int percent, Runnable apply) {
+        if (syncing) return;
+        Project.Helpers.Settings.set(key, String.valueOf(percent));
+        apply.run();
     }
     private void updateEngineHints(int engine) {
         if (engine >= 0 && engine < engineHintKeys.length && engineHintKeys[engine] != null) {
@@ -543,6 +574,50 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
                 borderG2d.setColor(selected ? MainMenuCanvas.ACCENT : new Color(255, 255, 255, 70));
                 borderG2d.draw(shape);
             } finally { borderG2d.dispose(); }
+        }
+    }
+    private static final class VolumeSlider extends JComponent {
+        private final java.util.function.IntConsumer onChange;
+        private int value;
+
+        VolumeSlider(int percent, java.util.function.IntConsumer onChange) {
+            this.value = clampPercent(percent);
+            this.onChange = onChange;
+            setOpaque(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            MouseAdapter drag = new MouseAdapter() {
+                @Override public void mousePressed(MouseEvent mouseEvent) { setFromX(mouseEvent.getX()); }
+                @Override public void mouseDragged(MouseEvent mouseEvent) { setFromX(mouseEvent.getX()); }
+            };
+            addMouseListener(drag);
+            addMouseMotionListener(drag);
+        }
+        void setValue(int percent) {
+            value = clampPercent(percent);
+            repaint();
+        }
+        private void setFromX(int x) {
+            int next = clampPercent((int) Math.round((x - knobRadius()) * 100.0 / travel()));
+            if (next == value) return;
+            value = next;
+            repaint();
+            onChange.accept(next);
+        }
+        private int knobRadius() { return Math.max(6, getHeight() / 3); }
+        private int travel() { return Math.max(1, getWidth() - 2 * knobRadius()); }
+        private static int clampPercent(int percent) { return Math.clamp(percent, 0, 100); }
+        @Override protected void paintComponent(Graphics graphics) {
+            Graphics2D g2d = (Graphics2D) graphics.create();
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int radius = knobRadius(), track = Math.max(4, getHeight() / 5), top = (getHeight() - track) / 2;
+            int knobX = radius + Math.round(travel() * value / 100f);
+            g2d.setColor(new Color(MainMenuCanvas.MUTED.getRed(), MainMenuCanvas.MUTED.getGreen(), MainMenuCanvas.MUTED.getBlue(), 110));
+            g2d.fill(new RoundRectangle2D.Float(radius, top, travel(), track, track, track));
+            g2d.setColor(MainMenuCanvas.ACCENT);
+            g2d.fill(new RoundRectangle2D.Float(radius, top, knobX - radius, track, track, track));
+            g2d.setColor(MainMenuCanvas.TEXT);
+            g2d.fillOval(knobX - radius, getHeight() / 2 - radius, 2 * radius, 2 * radius);
+            g2d.dispose();
         }
     }
     private static final class StatusDot extends JComponent {

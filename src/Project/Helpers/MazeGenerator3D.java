@@ -9,6 +9,7 @@ public class MazeGenerator3D {
     //endregion
     //region Dimensions
     private final int width, height, floorCount;
+    private MazeAlgorithm algorithm;
     private final Long seed;
     private final Random random;
     private final MazeGenerator.GeometryMode geometryMode;
@@ -23,8 +24,8 @@ public class MazeGenerator3D {
 
     //region Constructors
     public MazeGenerator3D(int width, int height, int floorCount, Long seed, MazeGenerator.GeometryMode geometryMode) {
-        this.width = width;
-        this.height = height;
+        this.width = width % 2 == 0 ? width + 1 : width;
+        this.height = height % 2 == 0 ? height + 1 : height;
         this.floorCount = Math.max(2, floorCount);
         this.seed = seed;
         this.random = seed != null ? new Random(seed) : new Random();
@@ -41,7 +42,7 @@ public class MazeGenerator3D {
 
         for (int f = 0; f < floorCount; f++) {
             Long floorSeed = seed != null ? seed + f * 104729L : null;
-            MazeGenerator generator = floorSeed != null ? new MazeGenerator(width, height, floorSeed, geometryMode) : new MazeGenerator(width, height, geometryMode);
+            MazeGenerator generator = (floorSeed != null ? new MazeGenerator(width, height, floorSeed, geometryMode) : new MazeGenerator(width, height, geometryMode)).useAlgorithm(algorithm);
             generator.setProgressRange(f / (double) floorCount, 1.0 / floorCount);
             floors[f] = generator.generateRaw();
             floorPortals[f] = generator.getPortals();
@@ -63,6 +64,10 @@ public class MazeGenerator3D {
         placeFinish(mode);
         if (geometryMode == MazeGenerator.GeometryMode.LOOPED) addFloorPortals();
         return floors;
+    }
+    public MazeGenerator3D useAlgorithm(MazeAlgorithm chosen) {
+        algorithm = chosen;
+        return this;
     }
     public PortalData getPortals(int floor) { return floorPortals[floor]; }
     //endregion
@@ -232,12 +237,7 @@ public class MazeGenerator3D {
             cx = p % mazeWidth; cy = p / mazeWidth;
         }
     }
-    private void carveDirect(int[][] maze, int fromX, int fromY, int toX, int toY) {
-        int x = fromX, y = fromY;
-        while (x != toX) { if (maze[y][x] != MazeGenerator.PORTAL) maze[y][x] = OPEN; x += Integer.compare(toX, x); }
-        while (y != toY) { if (maze[y][x] != MazeGenerator.PORTAL) maze[y][x] = OPEN; y += Integer.compare(toY, y); }
-        if (maze[toY][toX] != MazeGenerator.PORTAL) maze[toY][toX] = OPEN;
-    }
+    private void carveDirect(int[][] maze, int fromX, int fromY, int toX, int toY) { MazePaths.connect(maze, fromX, fromY, toX, toY); }
     //endregion
 
     //region Finish Placement

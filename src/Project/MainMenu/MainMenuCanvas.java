@@ -16,7 +16,7 @@ public final class MainMenuCanvas {
     static final Color MUTED = new Color(165, 165, 180);
     //endregion
     //region Layout State
-    private final int screenWidth, screenHeight;
+    private int screenWidth, screenHeight;
     private double scale = 1;
     private int originX, originY;
     private int lastWidth = -1, lastHeight = -1;
@@ -39,11 +39,23 @@ public final class MainMenuCanvas {
         originY = (height - (int) Math.round(screenHeight * scale)) / 2;
         return true;
     }
+    public boolean measureWidth(Container host) {
+        int width = host.getWidth(), height = host.getHeight();
+        if (width <= 0 || height <= 0) return false;
+        scale = (double) width / screenWidth;
+        originX = 0;
+        originY = 0;
+        return true;
+    }
     public boolean sizeChanged(Container host) {
         boolean changed = host.getWidth() != lastWidth || host.getHeight() != lastHeight;
         lastWidth = host.getWidth();
         lastHeight = host.getHeight();
         return changed;
+    }
+    public void resize(int designWidth, int designHeight) {
+        screenWidth = designWidth;
+        screenHeight = designHeight;
     }
     public double scale() { return scale; }
     private int size(int designSize) { return Math.max(1, (int) Math.round(designSize * scale)); }
@@ -70,6 +82,12 @@ public final class MainMenuCanvas {
     public void text(StyledLabel label, float designSize, int designX, int designY, int designWidth, int designHeight) {
         label.setFont(font(designSize, Font.BOLD));
         place(label, designX, designY, designWidth, designHeight);
+    }
+    public void textLeft(StyledLabel label, float designSize, int designX, int designY, int maxWidth, int designHeight) {
+        label.setFont(font(designSize, Font.BOLD));
+        int pixels = label.getFontMetrics(label.getFont()).stringWidth(label.getText());
+        int width = (int) Math.ceil(pixels / scale) + 6;
+        place(label, designX, designY, Math.max(1, Math.min(maxWidth, width)), designHeight);
     }
     void combo(StyledComboBox box, int designX, int designY, int designWidth, int designHeight) {
         box.setFontValue(font(13, Font.BOLD));

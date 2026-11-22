@@ -40,6 +40,16 @@ public final class MoriartyEngine implements RenderEngine {
     private static final double[] FLASH_LIGHT = {1.0, 0.88, 0.70};
     private static final double FLASH_STRENGTH = 0.95;
     private static final double FLASH_RANGE_SQ_INV = 1.0 / (FLASH_RANGE * FLASH_RANGE);
+
+    @Override public float[] spriteLight(double distance, boolean hyperbolic) {
+        double att = 1.0 / (1.0 + distance * distance * FLASH_RANGE_SQ_INV);
+        double flash = FLASH_STRENGTH * att * 0.8;
+        float[] light = new float[3];
+        for (int c = 0; c < 3; c++) {
+            light[c] = (float) Math.clamp(AMBIENT_LIGHT[c] + FILL_LIGHT[c] * 0.8 + FLASH_LIGHT[c] * flash, 0.05, 1.0);
+        }
+        return light;
+    }
     private static final int TONE_STEPS = 2048;
     private static final double TONE_MAX = 3.0;
     private static final double[] TONE_LUT = buildToneLut();
@@ -95,7 +105,7 @@ public final class MoriartyEngine implements RenderEngine {
         fr = frame; syncConfig(frame);
         prepareMaps();
     }
-    static void syncConfig(RenderFrame renderFrame) {
+    private static void syncConfig(RenderFrame renderFrame) {
         cfgQuality = renderFrame.quality;
         cfgGeometry = renderFrame.geometry;
         cfgCurvature = renderFrame.curvature;
@@ -188,7 +198,7 @@ public final class MoriartyEngine implements RenderEngine {
         }
         if (rowV.length != height) rowV = new double[height];
     }
-    static void copyRenderBuffer(RenderFrame renderFrame) {
+    private static void copyRenderBuffer(RenderFrame renderFrame) {
         if (renderFrame.renderWidth == renderFrame.bufferedImage.getWidth() && renderFrame.renderHeight == renderFrame.bufferedImage.getHeight()) {
             System.arraycopy(renderFrame.renderPixels, 0, renderFrame.pixels, 0, renderFrame.pixels.length);
         } else {
@@ -198,11 +208,11 @@ public final class MoriartyEngine implements RenderEngine {
             g2d.dispose();
         }
     }
-    static void parallelRange(RenderFrame renderFrame, int end, IntConsumer task) {
+    private static void parallelRange(RenderFrame renderFrame, int end, IntConsumer task) {
         if (end <= 0) return;
         renderFrame.renderWorkers.execute(0, end, task);
     }
-    static boolean is3D(RenderFrame renderFrame) { return renderFrame.map3D != null && renderFrame.map3D.length > 1; }
+    private static boolean hasFloors(RenderFrame renderFrame) { return renderFrame.map3D != null && renderFrame.map3D.length > 1; }
     //region Primary Rays
     private void primaryPixel(int x, int y, TraceHit out) {
         if (columnPath && !columns[x].fallback) columnHitAt(columns[x], rowV[y], out);
@@ -446,7 +456,7 @@ public final class MoriartyEngine implements RenderEngine {
     //endregion
 
     //region Hyperbolic Tracing
-    static void traceHyp(RenderFrame renderFrame, double ox, double oy, double z0, double ux, double uy, double L, double slope, TraceHit result, int maxSteps) {
+    private static void traceHyp(RenderFrame renderFrame, double ox, double oy, double z0, double ux, double uy, double L, double slope, TraceHit result, int maxSteps) {
         result.reset();
         final int[][] m = renderFrame.map;
         final int mapWidth = m[0].length, mapHeight = m.length;
@@ -668,7 +678,7 @@ public final class MoriartyEngine implements RenderEngine {
         return mapData;
     }
     private MapData mapDataOf(int[][] m) { return mapDataFor(m); }
-    public static final class SdfCache {
+    static final class SdfCache {
         static final long BUDGET_BYTES = 256L << 20;
         static final int MAX_FIELDS = 32;
         final java.util.concurrent.ConcurrentHashMap<int[][], SDFField> fields = new java.util.concurrent.ConcurrentHashMap<>();
@@ -700,7 +710,7 @@ public final class MoriartyEngine implements RenderEngine {
             }
         }
     }
-    public static final class SDFField {
+    static final class SDFField {
         private final SdfCache owner;
         private final int[][] m;
         private final int mw, mh;
@@ -1118,7 +1128,7 @@ public final class MoriartyEngine implements RenderEngine {
         double c = g[(j1 * cols + i0) * 2 + channel], d = g[(j1 * cols + i1) * 2 + channel];
         return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
     }
-    public static final class TraceHit {
+    static final class TraceHit {
         double x, y, z, distance;
         int type, side;
         double wallU, wallV;
@@ -1154,7 +1164,7 @@ public final class MoriartyEngine implements RenderEngine {
         if (hit.isPlane) {
             boolean floor = hit.type == -1;
             base = planeColor(floor ? fr.floorTexture : fr.ceilingTexture, hit.x, hit.y, floor ? floorBaseColor : ceilingBaseColor);
-            if (floor && is3D(fr)) base = tintStairs(base, hit.x, hit.y, hit.map);
+            if (floor && hasFloors(fr)) base = tintStairs(base, hit.x, hit.y, hit.map);
             nx = 0; ny = 0; nz = floor ? 1 : -1;
             ao = occlusionMarch(data, hit.x, hit.y, hit.z, nx, ny, nz);
             shininess = floor ? 30 : 16;
@@ -1257,14 +1267,14 @@ public final class MoriartyEngine implements RenderEngine {
         }
         return Math.clamp(1.0 - AO_STRENGTH * occ, AO_FLOOR, 1.0);
     }
-    static double smooth(double t) { t = Math.clamp(t, 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
-    static double glintPow(double x, int exp) {
+    private static double smooth(double t) { t = Math.clamp(t, 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
+    private static double glintPow(double x, int exp) {
         double x2 = x * x, x4 = x2 * x2, x8 = x4 * x4, x16 = x8 * x8;
         if (exp == 16) return x16;
         if (exp == 24) return x16 * x8;
         return x16 * x8 * x4 * x2;
     }
-    static double wallOcclusion(double z, double height) {
+    private static double wallOcclusion(double z, double height) {
         double ao = 1.0 - 0.45 * (1.0 - smooth(z / 0.22));
         ao *= 1.0 - 0.25 * (1.0 - smooth((height - z) / 0.14));
         return ao;
@@ -1278,7 +1288,7 @@ public final class MoriartyEngine implements RenderEngine {
     //endregion
 
     //region Textures
-    static int sampleTexture(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
+    private static int sampleTexture(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
         int width = texture.width(), height = texture.height();
         if (width <= 0 || height <= 0) return baseColor;
         double fracX = worldX - Math.floor(worldX);
@@ -1287,16 +1297,14 @@ public final class MoriartyEngine implements RenderEngine {
         int ty = Math.min((int)(fracY * height), height - 1);
         return texture.pixels()[ty * width + tx];
     }
-    static int planeColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
-        return sampleTexture(texture, worldX, worldY, baseColor);
-    }
-    static int sampleWallTexture(RuntimeTexture texture, TraceHit hit) {
+    private static int planeColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) { return sampleTexture(texture, worldX, worldY, baseColor); }
+    private static int sampleWallTexture(RuntimeTexture texture, TraceHit hit) {
         if (texture.width() <= 0 || texture.height() <= 0) return hit.type == 2 ? finishBaseColor : wallBaseColor;
         int tx = Math.min((int) (hit.wallU * texture.width()), texture.width() - 1);
         int ty = Math.min((int) ((1.0 - hit.wallV) * texture.height()), texture.height() - 1);
         return texture.pixels()[ty * texture.width() + Math.max(0, tx)];
     }
-    static int tintStairs(int color, double worldX, double worldY, int[][] floorMap) {
+    private static int tintStairs(int color, double worldX, double worldY, int[][] floorMap) {
         int fx = (int) Math.floor(worldX), fy = (int) Math.floor(worldY);
         if (fx < 0 || fy < 0 || fy >= floorMap.length || fx >= floorMap[0].length) return color;
         int cell = floorMap[fy][fx];
@@ -1313,7 +1321,7 @@ public final class MoriartyEngine implements RenderEngine {
     //endregion
 
     //region Tone Mapping
-    static double toneCurve(double v) { return v <= 0.7 ? v : 0.7 + 0.3 * (1.0 - Math.exp(-(v - 0.7) / 0.3)); }
+    private static double toneCurve(double v) { return v <= 0.7 ? v : 0.7 + 0.3 * (1.0 - Math.exp(-(v - 0.7) / 0.3)); }
     private static double[] buildToneLut() {
         double[] lut = new double[TONE_STEPS + 1];
         for (int i = 0; i <= TONE_STEPS; i++) lut[i] = toneCurve(i * TONE_MAX / TONE_STEPS);
@@ -1340,9 +1348,7 @@ public final class MoriartyEngine implements RenderEngine {
         private static final java.util.IdentityHashMap<int[][], MapData> mapDataCache = new java.util.IdentityHashMap<>();
         private Object[] worldKey = new Object[0];
 
-        static boolean tryRender(RenderFrame renderFrame) {
-            synchronized (GpuRuntime.LOCK) { return tryRenderLocked(renderFrame); }
-        }
+        static boolean tryRender(RenderFrame renderFrame) { synchronized (GpuRuntime.LOCK) { return tryRenderLocked(renderFrame); } }
         static double[] cameraParams(RenderFrame renderFrame, int width, int height) {
             double dirX = Math.cos(renderFrame.cameraAngle), dirY = Math.sin(renderFrame.cameraAngle);
             double tanHalfFov = Math.tan(Math.toRadians(60.0) * 0.5);
@@ -1398,7 +1404,7 @@ public final class MoriartyEngine implements RenderEngine {
             out = ensure(out, 4L * count);
             int[][][] layers = layersOf(renderFrame);
             shade.write(dp, cameraParams(renderFrame, width, height), DP_COUNT);
-            shade.write(ip, ipValues(renderFrame, width, height, layers.length - 1, is3D(renderFrame)), IP_COUNT);
+            shade.write(ip, ipValues(renderFrame, width, height, layers.length - 1, hasFloors(renderFrame)), IP_COUNT);
 
             GpuProgram.Buffer before = wall;
             wall = ensure(wall, 4L * renderFrame.wallTexture.pixels().length);

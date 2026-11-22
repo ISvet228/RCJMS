@@ -1,5 +1,8 @@
 package Project;
 import Project.Credits.CreditsView;
+import Project.Audio.Music;
+import Project.Audio.Sound;
+import Project.Net.NetSession;
 import Project.Game.GameView;
 import Project.MainMenu.MainMenuView;
 import Project.MapEditor.MapEditorView;
@@ -31,12 +34,8 @@ public class RCJMS extends JFrame {
     private JPanel currentView;
     //endregion
     //region Window Metrics
-    public static final int SCREEN_WIDTH = 960;
-    //DO NOT CHANGE UI WILL BE BROKEN
-    public static final int SCREEN_HEIGHT = 540;
-    //DO NOT CHANGE UI WILL BE BROKEN
-    public static int GAME_WIDTH = SCREEN_WIDTH;
-    public static int GAME_HEIGHT = SCREEN_HEIGHT;
+    public static final int SCREEN_WIDTH = 960, SCREEN_HEIGHT = 540;
+    public static int GAME_WIDTH = SCREEN_WIDTH, GAME_HEIGHT = SCREEN_HEIGHT;
     public static final Color MY_FAV_GRAY = new Color(28, 28, 32);
     //endregion
     //region Fullscreen State
@@ -67,7 +66,9 @@ public class RCJMS extends JFrame {
     //endregion
 
     //region Startup
-    public static void main(String[] args) { SwingUtilities.invokeLater(() -> { try {new RCJMS();} catch (IOException exception){throw new RuntimeException(exception);}}); }
+    public static void main(String[] args) {
+        Project.Update.GameUpdater.start();
+        SwingUtilities.invokeLater(() -> { try {new RCJMS();} catch (IOException exception){throw new RuntimeException(exception);}}); }
     //endregion
 
     //region Window Hotkeys
@@ -142,6 +143,22 @@ public class RCJMS extends JFrame {
         setTitle(nextTitle);
         revalidate();
         repaint();
+        chooseSceneMusic(nextTitle);
+    }
+
+    private static void chooseSceneMusic(String viewName) {
+        if (viewName == null) return;
+        boolean game = "Raycast Me!".equals(viewName) || "RayCast Me!".equals(viewName);
+        Sound.setRunActive(game);
+        if (!game) {
+            NetSession session = NetSession.current();
+            if (session != null) session.close();
+        }
+        switch (viewName) {
+            case "Raycast Me!", "RayCast Me!" -> Music.stop();
+            case "cv.credits" -> Music.showScene(Music.Style.CREDITS);
+            default -> Music.showScene(Music.Style.CALM);
+        }
     }
     //endregion
 }

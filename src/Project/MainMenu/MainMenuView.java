@@ -1,4 +1,7 @@
 package Project.MainMenu;
+
+import Project.Core.RunChoice;
+import Project.Net.MazeSpec;
 import Project.Credits.CreditsView;
 import Project.MapEditor.MapEditorView;
 import Project.RCJMS;
@@ -53,9 +56,14 @@ public class MainMenuView extends JPanel {
     private Screen screen = Screen.MAIN;
     private final ArrayList<MainMenuPanel> screens = new ArrayList<>();
     private final ArrayList<JComponent> mainComponents = new ArrayList<>();
+    private final MazeSettingsPanel maze;
     private final MainMenuPlayScreen playScreen;
     private final MainMenuSettingsScreen settingsScreen;
     private final MainMenuControlsScreen controlsScreen;
+    private final MainMenuAchievementsScreen achievementsScreen;
+    private final MainMenuLeaderboardScreen leaderboardScreen;
+    private final MainMenuRoguelikeScreen roguelikeScreen;
+    private final MainMenuMultiplayerScreen multiplayerScreen;
     //endregion
     //region Window State
     private static final Color DIM = new Color(0, 0, 0, 120);
@@ -68,7 +76,7 @@ public class MainMenuView extends JPanel {
     //endregion
     //region Menu Components
     private final MainMenuCanvas canvas = new MainMenuCanvas(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
-    private final MenuTitle title = new MenuTitle("RCJMS", Animated3DText.AnimationType.ROTATE);
+    private final MenuTitle title = new MenuTitle("FAKE RCJMS", Animated3DText.AnimationType.ROTATE);
     private final StyledLabel tagline = new StyledLabel(currentStyle, "mm.tagline", false, false);
     private final StyledButton playButton = createButton("mm.play");
     private final StyledButton mapEditorButton = createButton("mm.map_editor");
@@ -79,6 +87,10 @@ public class MainMenuView extends JPanel {
     private final StyledButton controlsButton = createButton("controls");
     private final StyledButton engineCreatorButton = createButton("ec.menu");
     private final StyledButton themeCreatorButton = createButton("tc.menu");
+    private final StyledButton achievementsButton = createButton("mm.achievements");
+    private final StyledButton leaderboardButton = createButton("mm.leaderboard");
+    private final StyledButton roguelikeButton = createButton("mode.menu.roguelike");
+    private final StyledButton multiplayerButton = createButton("mode.menu.multiplayer");
     //endregion
     //region Stars
     private final Random random = new Random();
@@ -93,11 +105,20 @@ public class MainMenuView extends JPanel {
         setPreferredSize(new Dimension(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT));
         setLayout(null);
 
+        maze = new MazeSettingsPanel(this);
         playScreen = new MainMenuPlayScreen(this);
         syncGeometryWithEngine();
         settingsScreen = new MainMenuSettingsScreen(this);
         controlsScreen = new MainMenuControlsScreen(this);
+        achievementsScreen = new MainMenuAchievementsScreen(this);
+        leaderboardScreen = new MainMenuLeaderboardScreen(this);
+        roguelikeScreen = new MainMenuRoguelikeScreen(this);
+        multiplayerScreen = new MainMenuMultiplayerScreen(this);
         screens.add(playScreen);
+        screens.add(achievementsScreen);
+        screens.add(leaderboardScreen);
+        screens.add(roguelikeScreen);
+        screens.add(multiplayerScreen);
         screens.add(settingsScreen);
         screens.add(controlsScreen);
 
@@ -176,12 +197,16 @@ public class MainMenuView extends JPanel {
         record(controlsButton, 20, 486, 170, 34);
         record(engineCreatorButton, 700, 486, 240, 34);
         record(themeCreatorButton, 700, 442, 240, 34);
+        record(achievementsButton, 20, 398, 170, 34);
+        record(leaderboardButton, 20, 442, 170, 34);
+        record(roguelikeButton, 20, 310, 170, 34);
+        record(multiplayerButton, 20, 354, 170, 34);
         applyBodies();
     }
     private void syncGeometryWithEngine() {
-        if (playScreen == null) return;
+        if (maze == null) return;
         RenderEngine engine = RenderEngines.find(GameView.getRenderEngineId());
-        playScreen.setHyperbolicGeometryAllowed(engine != null && engine.hasHyperbolicGeometry());
+        maze.setHyperbolicGeometryAllowed(engine != null && engine.hasHyperbolicGeometry());
     }
     //endregion
 
@@ -238,22 +263,44 @@ public class MainMenuView extends JPanel {
     //endregion
 
     //region Screens
-    private enum Screen { MAIN, PLAY, SETTINGS, CONTROLS }
+    private enum Screen { MAIN, PLAY, SETTINGS, CONTROLS, ACHIEVEMENTS, LEADERBOARD, ROGUELIKE, MULTIPLAYER }
     public void showMain() { showScreen(Screen.MAIN); }
+    /** Opens the roguelike screen, for example from the multiplayer screen. */
+    public void showRoguelike() { showScreen(Screen.ROGUELIKE); }
     private void showScreen(Screen next) {
         screen = next;
         for (JComponent component : mainComponents) component.setVisible(next == Screen.MAIN);
         playScreen.setVisible(next == Screen.PLAY);
         settingsScreen.setVisible(next == Screen.SETTINGS);
         controlsScreen.setVisible(next == Screen.CONTROLS);
-        if (next == Screen.PLAY) playScreen.refresh();
+        achievementsScreen.setVisible(next == Screen.ACHIEVEMENTS);
+        leaderboardScreen.setVisible(next == Screen.LEADERBOARD);
+        roguelikeScreen.setVisible(next == Screen.ROGUELIKE);
+        multiplayerScreen.setVisible(next == Screen.MULTIPLAYER);
+        MainMenuPanel host = mazeHost(next);
+        if (host != null) {
+            maze.refresh();
+            maze.attachTo(host);
+        }
         if (next == Screen.SETTINGS) settingsScreen.refresh();
         repaint();
+    }
+    private MainMenuPanel mazeHost(Screen next) {
+        return switch (next) {
+            case PLAY -> playScreen;
+            case ROGUELIKE -> roguelikeScreen;
+            case MULTIPLAYER -> multiplayerScreen;
+            default -> null;
+        };
     }
     private void setupMainButtons() {
         playButton.addActionListener(_ -> showScreen(Screen.PLAY));
         settingsButton.addActionListener(_ -> showScreen(Screen.SETTINGS));
         controlsButton.addActionListener(_ -> showScreen(Screen.CONTROLS));
+        achievementsButton.addActionListener(_ -> showScreen(Screen.ACHIEVEMENTS));
+        leaderboardButton.addActionListener(_ -> showScreen(Screen.LEADERBOARD));
+        roguelikeButton.addActionListener(_ -> showScreen(Screen.ROGUELIKE));
+        multiplayerButton.addActionListener(_ -> showScreen(Screen.MULTIPLAYER));
         mapEditorButton.addActionListener(_ -> RCJMS.instance.changeView(RCJMS.instance.mapEditorView = new MapEditorView(), "map_editor"));
         textureEditorButton.addActionListener(_ -> {
             try { RCJMS.instance.changeView(RCJMS.instance.textureEditorView = new TextureEditorView(), "texture_editor"); }
@@ -294,6 +341,10 @@ public class MainMenuView extends JPanel {
         mainComponents.add(controlsButton);
         mainComponents.add(engineCreatorButton);
         mainComponents.add(themeCreatorButton);
+        mainComponents.add(achievementsButton);
+        mainComponents.add(leaderboardButton);
+        mainComponents.add(roguelikeButton);
+        mainComponents.add(multiplayerButton);
         for (JComponent component : mainComponents) add(component);
     }
     private StyledButton createButton(String key) {
@@ -311,23 +362,26 @@ public class MainMenuView extends JPanel {
     //endregion
 
     //region Game Start
-    public void startGame() {
+    public void startGame() { startGame(maze.roguelikeChoice()); }
+    public void startGame(boolean roguelike) {
         if (RenderEngines.all().isEmpty()) {
             JOptionPane.showMessageDialog(this, NSLocalizedString.get("mm.no_engines"), NSLocalizedString.get("mm.invalid_input"), JOptionPane.ERROR_MESSAGE);
             return;
         }
-        playScreen.saveMazeSettings();
+        RunChoice.setRoguelike(roguelike);
+        RunChoice.setHorror(null);
+        maze.saveMazeSettings();
         final int width, height, finish, geometry, layers;
         final String seed;
         final boolean fog;
         try {
-            width = playScreen.mazeWidth();
-            height = playScreen.mazeHeight();
-            finish = playScreen.finishMode();
-            geometry = playScreen.geometry();
-            seed = playScreen.seed();
-            layers = playScreen.layers();
-            fog = playScreen.fogMinimap();
+            width = maze.mazeWidth();
+            height = maze.mazeHeight();
+            finish = maze.finishMode();
+            geometry = maze.geometry();
+            seed = maze.seed();
+            layers = maze.layers();
+            fog = maze.fogMinimap();
         }
         catch (NumberFormatException exception) {
             JOptionPane.showMessageDialog(this, "mm.maze_size_error", "mm.invalid_input", JOptionPane.ERROR_MESSAGE);
@@ -364,8 +418,48 @@ public class MainMenuView extends JPanel {
         loader.setDaemon(true);
         loader.start();
     }
+    public void startRace(MazeSpec spec, Project.Helpers.MazeData maze) {
+        if (RenderEngines.all().isEmpty()) {
+            JOptionPane.showMessageDialog(this, NSLocalizedString.get("mm.no_engines"), NSLocalizedString.get("mm.invalid_input"), JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        RunChoice.setRoguelike(false);
+        RunChoice.setHorror(null);
+        final Progress progress = new Progress();
+        RCJMS.instance.changeView(new LoadingScreen(progress), "RayCast Me!");
+        Thread loader = new Thread(() -> {
+            Progress.bind(progress);
+            try {
+                GameView gameView = new GameView(maze);
+                gameView.resolveRenderEngine();
+                gameView.setFogOfWarMinimap(spec.fog());
+                SwingUtilities.invokeLater(() -> {
+                    RCJMS.instance.changeView(RCJMS.instance.gameView = gameView, "RayCast Me!");
+                    gameView.start();
+                });
+            }
+            catch (NoRenderEngineException exception) {
+                SwingUtilities.invokeLater(() -> {
+                    RCJMS.instance.changeView(this, "main_menu");
+                    JOptionPane.showMessageDialog(this, NSLocalizedString.get("no_fallback_engine"), NSLocalizedString.get("mm.invalid_input"), JOptionPane.ERROR_MESSAGE);
+                });
+            }
+            catch (IOException | RuntimeException | Error exception) {
+                exception.printStackTrace();
+                SwingUtilities.invokeLater(() -> {
+                    RCJMS.instance.changeView(this, "main_menu");
+                    JOptionPane.showMessageDialog(this, "mm.maze_size_error", "mm.invalid_input", JOptionPane.ERROR_MESSAGE);
+                });
+            }
+            finally { Progress.unbind(); }
+        }, "race-loader");
+        loader.setDaemon(true);
+        loader.start();
+    }
+
+    MazeSettingsPanel maze() { return maze; }
     private GameView createGameView(int w, int h, int mode, int geometry, String seed, int layers) throws IOException {
-        if (playScreen.is3D()) return seed == null ? new GameView(w, h, mode, geometry, layers) : new GameView(w, h, mode, geometry, seed, layers);
+        if (maze.hasFloors()) return seed == null ? new GameView(w, h, mode, geometry, layers) : new GameView(w, h, mode, geometry, seed, layers);
         return seed == null ? new GameView(w, h, mode, geometry) : new GameView(w, h, mode, geometry, seed);
     }
     //endregion
@@ -378,6 +472,7 @@ public class MainMenuView extends JPanel {
         saveSettings();
         canvas.applyStyle(this, currentStyle);
         for (MainMenuPanel panel : screens) panel.applyStyle(currentStyle);
+        maze.applyStyle(currentStyle);
     }
     public MenuTheme getMenuTheme() { return menuTheme; }
     public void setMenuTheme(MenuTheme next) {
@@ -457,9 +552,7 @@ public class MainMenuView extends JPanel {
     }
     private static final class MenuTitle extends Animated3DText {
         double angle;
-
         MenuTitle(String text, AnimationType animationType) { super(text, animationType); }
-
         @Override public boolean contains(int x, int y) { return hitsRotated(this, angle, x, y); }
     }
     //endregion

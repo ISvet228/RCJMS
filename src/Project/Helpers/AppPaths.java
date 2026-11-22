@@ -1,6 +1,5 @@
 package Project.Helpers;
 
-import java.io.IOException;
 import java.nio.file.*;
 
 public final class AppPaths {
@@ -10,7 +9,10 @@ public final class AppPaths {
     public static final Path DATA_DIR = resolveDataDir();
     //endregion
     //region Files
-    public static final Path SAVE_FILE = DATA_DIR.resolve("save.rcjms");
+    public static final Path SETTINGS_FILE = DATA_DIR.resolve("settings.prt");
+    public static final Path MAP_FILE = DATA_DIR.resolve("map.prt");
+    public static final Path ACHIEVEMENTS_FILE = DATA_DIR.resolve("achivements.prt");
+    public static final Path LEADERBOARD_FILE = DATA_DIR.resolve("leaderboard.prt");
     public static final Path WALL_TEXTURE_FILE = DATA_DIR.resolve("walltexture.rctx");
     public static final Path FLOOR_TEXTURE_FILE = DATA_DIR.resolve("floortexture.rctx");
     public static final Path CEILING_TEXTURE_FILE = DATA_DIR.resolve("ceilingtexture.rctx");
@@ -37,14 +39,7 @@ public final class AppPaths {
             String xdgData = System.getenv("XDG_DATA_HOME");
             base = (xdgData != null && !xdgData.isBlank()) ? Paths.get(xdgData) : Paths.get(userHome, ".local", "share");
         }
-
-        Path dataDir = base.resolve(APP_FOLDER_NAME);
-        try { Files.createDirectories(dataDir); } catch (IOException exception) {
-            dataDir = Paths.get(userHome, "." + APP_FOLDER_NAME.toLowerCase());
-            try { Files.createDirectories(dataDir); }
-            catch (IOException ignored) { throw new RuntimeException("Omegatron Fotla"); }
-        }
-        return dataDir;
+        return base.resolve(APP_FOLDER_NAME);
     }
     public static Path file(String name) { return DATA_DIR.resolve(name); }
     //endregion

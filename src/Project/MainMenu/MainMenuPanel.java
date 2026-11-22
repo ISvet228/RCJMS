@@ -32,6 +32,16 @@ public abstract class MainMenuPanel extends JPanel {
         if (!canvas.measure(this)) return;
         if (canvas.sizeChanged(this)) canvas.resetStyleUi(this);
         layoutDesign();
+        raiseControls();
+    }
+    private void raiseControls() {
+        int front = 0;
+        for (Component child : getComponents()) {
+            if (!(child instanceof StyledButton || child instanceof StyledToggle || child instanceof StyledToggleButton
+                    || child instanceof StyledComboBox || child instanceof StyledTextField)) continue;
+            if (getComponentZOrder(child) != front) setComponentZOrder(child, front);
+            front++;
+        }
     }
     protected abstract void layoutDesign();
     //endregion
@@ -63,6 +73,22 @@ public abstract class MainMenuPanel extends JPanel {
     //region Styling
     public void applyStyle(Style style) { canvas.applyStyle(this, style, unstyledComponents()); }
     protected Collection<? extends Component> unstyledComponents() { return List.of(); }
+    //endregion
+
+    //region Maze Panel
+    protected Runnable mazeAction() { return menu::startGame; }
+    protected int mazeHeight() { return menu.maze().designHeight(); }
+    protected boolean mazeRoguelikeOption() { return false; }
+    protected void placeMaze(int designX, int designY) {
+        MazeSettingsPanel maze = menu.maze();
+        if (maze.getParent() != this) return;
+        canvas.place(maze, designX, designY, maze.designWidth(), maze.designHeight());
+        maze.layoutNow();
+    }
+    protected void placeMazeStart(Component button, int mazeX, int mazeY) {
+        MazeSettingsPanel maze = menu.maze();
+        canvas.place(button, mazeX + maze.startX(), mazeY + maze.startY(), maze.startWidth(), 40);
+    }
     //endregion
 
     //region Painting

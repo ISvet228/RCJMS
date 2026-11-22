@@ -9,27 +9,27 @@ import java.util.function.IntConsumer;
 public final class SRCEngine implements RenderEngine {
     //region Variables
     //region Render Configuration
-    static volatile int cfgQuality = 1, cfgOutW = 960, cfgOutH = 540;
-    static volatile MazeGenerator.GeometryMode cfgGeometry = MazeGenerator.GeometryMode.EUCLIDEAN;
-    static volatile double cfgCurvature = HyperbolicMath.DEFAULT_CURVATURE;
+    private static volatile int cfgQuality = 1, cfgOutW = 960, cfgOutH = 540;
+    private static volatile MazeGenerator.GeometryMode cfgGeometry = MazeGenerator.GeometryMode.EUCLIDEAN;
+    private static volatile double cfgCurvature = HyperbolicMath.DEFAULT_CURVATURE;
     private RenderFrame fr;
     //endregion
     //region Caches
     static final SdfCache sdfCache = new SdfCache();
     //endregion
     //region Render Constants
-    static final String ID = "raycasting";
-    static final int wallBaseColor = 0xECD485;
-    static final int ceilingBaseColor = 0x816E1E;
-    static final int floorBaseColor = 0xD3AF63;
-    static final int finishBaseColor = 0x33FF66;
+    private static final String ID = "raycasting";
+    private static final int wallBaseColor = 0xECD485;
+    private static final int ceilingBaseColor = 0x816E1E;
+    private static final int floorBaseColor = 0xD3AF63;
+    private static final int finishBaseColor = 0x33FF66;
     private static final double flashlightDistance = 2;
     private static final double HYP_PLANE_LENGTH = Math.tan(Math.toRadians(140.0) / 2.0);
-    static final int HIT_WALL = 1, HIT_FLOOR = 2, HIT_CEIL = 3;
-    static final double RM_MAX_DISTANCE = 48;
+    private static final int HIT_WALL = 1, HIT_FLOOR = 2, HIT_CEIL = 3;
+    private static final double RM_MAX_DISTANCE = 48;
     private static final double RC_MAX_DISTANCE = 48;
     private static final int SDF_SUB = 8;
-    static final int SDF_TILE = 256;
+    private static final int SDF_TILE = 256;
     //endregion
     //endregion
 
@@ -44,7 +44,7 @@ public final class SRCEngine implements RenderEngine {
     //endregion
 
     //region Frame Lifecycle
-    static void syncConfig(RenderFrame renderFrame) {
+    private static void syncConfig(RenderFrame renderFrame) {
         cfgQuality = renderFrame.quality;
         cfgGeometry = renderFrame.geometry;
         cfgCurvature = renderFrame.curvature;
@@ -60,7 +60,7 @@ public final class SRCEngine implements RenderEngine {
         }
         renderSoftwareRayCasting();
     }
-    static void copyRenderBuffer(RenderFrame renderFrame) {
+    private static void copyRenderBuffer(RenderFrame renderFrame) {
         if (renderFrame.renderWidth == renderFrame.bufferedImage.getWidth() && renderFrame.renderHeight == renderFrame.bufferedImage.getHeight()) {
             System.arraycopy(renderFrame.renderPixels, 0, renderFrame.pixels, 0, renderFrame.pixels.length);
         } else {
@@ -70,22 +70,22 @@ public final class SRCEngine implements RenderEngine {
             g2d.dispose();
         }
     }
-    static void parallelRange(RenderFrame renderFrame, int end, IntConsumer task) {
+    private static void parallelRange(RenderFrame renderFrame, int end, IntConsumer task) {
         if (end <= 0) return;
         renderFrame.renderWorkers.execute(0, end, task);
     }
-    static boolean is3D(RenderFrame renderFrame) { return renderFrame.map3D != null && renderFrame.map3D.length > 1; }
+    private static boolean hasFloors(RenderFrame renderFrame) { return renderFrame.map3D != null && renderFrame.map3D.length > 1; }
     //endregion
 
     //region Ray Setup Caches
-    static void ensureRaycastCaches(RenderFrame renderFrame, int screenWidth, int screenHeight) {
+    private static void ensureRaycastCaches(RenderFrame renderFrame, int screenWidth, int screenHeight) {
         if (renderFrame.wallTopCache == null || renderFrame.wallTopCache.length != screenWidth) {
             renderFrame.wallTopCache = new int[screenWidth]; renderFrame.wallBottomCache = new int[screenWidth];
             renderFrame.portalFloorEdgeCache = new double[screenWidth]; renderFrame.portalCeilEdgeCache = new double[screenWidth];
         }
         if (renderFrame.rowInvACache == null || renderFrame.rowInvACache.length != screenHeight) renderFrame.rowInvACache = new double[screenHeight]; renderFrame.rowZACache = new double[screenHeight];
     }
-    static void fillRowCaches(RenderFrame renderFrame, double focal, double halfHeight, double pitchSin, double pitchCos) {
+    private static void fillRowCaches(RenderFrame renderFrame, double focal, double halfHeight, double pitchSin, double pitchCos) {
         final int screenHeight = renderFrame.renderHeight;
         for (int y = 0; y < screenHeight; y++) {
             double v = (halfHeight - (y + 0.5)) / focal;
@@ -195,12 +195,12 @@ public final class SRCEngine implements RenderEngine {
             }
         }
     }
-    static void addColumnSegment(ColumnRay columnRay, double dist, RayState rayState) {
+    private static void addColumnSegment(ColumnRay columnRay, double dist, RayState rayState) {
         int k = columnRay.segCount++;
         columnRay.segStartDist[k] = dist; columnRay.segStartX[k] = rayState.x; columnRay.segStartY[k] = rayState.y; columnRay.segDirX[k] = rayState.dx; columnRay.segDirY[k] = rayState.dy;
         columnRay.segMap[k] = rayState.map; columnRay.segDistField[k] = rayState.field;
     }
-    static int shadeColumnRow(RenderFrame renderFrame, ColumnRay columnRay, RayState rayState, double z0, double sigma, double lightDistance) {
+    private static int shadeColumnRow(RenderFrame renderFrame, ColumnRay columnRay, RayState rayState, double z0, double sigma, double lightDistance) {
         final double scale = Math.sqrt(1.0 + sigma * sigma);
         final double planeD = sigma < 0 ? z0 / -sigma : sigma > 0 ? (1.0 - z0) / sigma : Double.POSITIVE_INFINITY;
         final boolean floor = sigma < 0;
@@ -367,17 +367,17 @@ public final class SRCEngine implements RenderEngine {
             }
         }
     }
-    static void setWallFraction(RayState rayState) {
+    private static void setWallFraction(RayState rayState) {
         double wallH = wallHeightForType(rayState.hitType);
         rayState.hitFrac = Math.clamp((wallH - rayState.z) / wallH, 0.0, 0.999999);
     }
-    static void setPlaneHit(RayState rayState, int kind) {
+    private static void setPlaneHit(RayState rayState, int kind) {
         rayState.hitKind = kind;
         rayState.hitX = rayState.x;
         rayState.hitY = rayState.y;
         rayState.hitDist = rayState.dist;
     }
-    static boolean enterPortal(RenderFrame renderFrame, RayState rayState, int cx, int cy) {
+    private static boolean enterPortal(RenderFrame renderFrame, RayState rayState, int cx, int cy) {
         if (rayState.hops >= 8 || rayState.portals == null) return false;
         PortalData.Portal portal = rayState.portals.get(cx, cy);
         if (portal == null || !PortalData.entersFromCorrectSide(portal, rayState.dx, rayState.dy)) return false;
@@ -398,15 +398,15 @@ public final class SRCEngine implements RenderEngine {
         rayState.hops++;
         return true;
     }
-    static double wallHeightForType(int type) { return type == 2 ? 0.5 : 1.0; }
+    private static double wallHeightForType(int type) { return type == 2 ? 0.5 : 1.0; }
     //endregion
     //endregion
 
     //region Hyperbolic Geometry
-    static double hypHeight(RayState rayState) {
+    private static double hypHeight(RayState rayState) {
         return rayState.hypZ0 + rayState.slope * HyperbolicMath.hyperbolicDistance(rayState.dist * rayState.invL, cfgCurvature); }
-    static double hypPerceivedOf(RayState rayState) { return HyperbolicMath.hyperbolicDistance(rayState.dist * rayState.invL, cfgCurvature); }
-    static double[] hypPixelRay(double cx, double py, double dirX, double dirY, double focal, double horizon) {
+    private static double hypPerceivedOf(RayState rayState) { return HyperbolicMath.hyperbolicDistance(rayState.dist * rayState.invL, cfgCurvature); }
+    private static double[] hypPixelRay(double cx, double py, double dirX, double dirY, double focal, double horizon) {
         double rdX = dirX - dirY * HYP_PLANE_LENGTH * cx, rdY = dirY + dirX * HYP_PLANE_LENGTH * cx;
         double L = Math.sqrt(rdX * rdX + rdY * rdY);
         return new double[]{rdX / L, rdY / L, L, -(py - horizon) / focal};
@@ -419,7 +419,7 @@ public final class SRCEngine implements RenderEngine {
         if (slope <= 0 || z0 >= 1.0 - 1e-9) return Double.POSITIVE_INFINITY;
         return L * HyperbolicMath.inverseHyperbolicDistance((1.0 - z0) / slope, cfgCurvature);
     }
-    static double effectiveFlashlightDistance(boolean hyperbolic) { return hyperbolic ? flashlightDistance * 1.6 : flashlightDistance; }
+    private static double effectiveFlashlightDistance(boolean hyperbolic) { return hyperbolic ? flashlightDistance * 1.6 : flashlightDistance; }
     private void renderSoftwareRayCastingHyp() {
         final int width = fr.renderWidth, height = fr.renderHeight;
         final double dirX = Math.cos(fr.cameraAngle), dirY = Math.sin(fr.cameraAngle);
@@ -440,7 +440,7 @@ public final class SRCEngine implements RenderEngine {
     //endregion
 
     //region Signed Distance Fields
-    public static final class SdfCache {
+    private static final class SdfCache {
         static final int MAX_FIELDS = 32;
         final java.util.concurrent.ConcurrentHashMap<int[][], SDFField> fields = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -462,7 +462,7 @@ public final class SRCEngine implements RenderEngine {
             fields.clear();
         }
     }
-    public static final class SDFField {
+    private static final class SDFField {
         final int cols, rows, tilesX, tilesY;
         final boolean hasPortals, hasFinish;
         private final java.util.concurrent.atomic.AtomicReferenceArray<double[]> wallTiles, finishTiles;
@@ -494,16 +494,16 @@ public final class SRCEngine implements RenderEngine {
             }
         }
     }
-    static SDFField sdfFieldFor(int[][] m) {
+    private static SDFField sdfFieldFor(int[][] m) {
         return sdfCache.fieldFor(m);
     }
     //endregion
 
     //region Shading
-    static int missColor(RenderFrame renderFrame, RayState rayState) {
+    private static int missColor(RenderFrame renderFrame, RayState rayState) {
         return renderFrame.skyCeiling ? SkyCeiling.colorDir(rayState.dx, rayState.dy, rayState.dz, renderFrame.skyTime) : ceilingBaseColor;
     }
-    static int shadeMarch(RenderFrame renderFrame, RayState rayState, double lightDistance) {
+    private static int shadeMarch(RenderFrame renderFrame, RayState rayState, double lightDistance) {
         if (rayState.hitKind == HIT_WALL) {
             boolean finish = rayState.hitType == 2;
             RuntimeTexture texture = finish ? renderFrame.finishTexture : renderFrame.wallTexture;
@@ -521,11 +521,11 @@ public final class SRCEngine implements RenderEngine {
         boolean floor = rayState.hitKind == HIT_FLOOR;
         if (!floor && renderFrame.skyCeiling) return SkyCeiling.colorDir(rayState.dx, rayState.dy, rayState.dz, renderFrame.skyTime);
         int color = floor ? planeColor(renderFrame.floorTexture, rayState.hitX, rayState.hitY, floorBaseColor) : planeColor(renderFrame.ceilingTexture, rayState.hitX, rayState.hitY, ceilingBaseColor);
-        if (floor && is3D(renderFrame)) color = tintStairs(color, rayState.hitX, rayState.hitY, rayState.map);
+        if (floor && hasFloors(renderFrame)) color = tintStairs(color, rayState.hitX, rayState.hitY, rayState.map);
         double brightness = Math.clamp(1.0 - rayState.hitDist / lightDistance, 0.05, 1.0);
         return applyBrightness(color, brightness);
     }
-    static int applyBrightness(int color, double brightness) {
+    private static int applyBrightness(int color, double brightness) {
         int r = (int) Math.min(255, ((color >> 16) & 255) * brightness);
         int g = (int) Math.min(255, ((color >> 8) & 255) * brightness);
         int b = (int) Math.min(255, (color & 255) * brightness);
@@ -537,7 +537,7 @@ public final class SRCEngine implements RenderEngine {
         r = (int)(r * (1 - 0.45) + tr * 0.45); g = (int)(g * (1 - 0.45) + tg * 0.45); b = (int)(b * (1 - 0.45) + tb * 0.45);
         return (r << 16) | (g << 8) | b;
     }
-    static int tintStairs(int color, double worldX, double worldY, int[][] floorMap) {
+    private static int tintStairs(int color, double worldX, double worldY, int[][] floorMap) {
         int fx = (int) Math.floor(worldX), fy = (int) Math.floor(worldY);
         if (fx < 0 || fy < 0 || fy >= floorMap.length || fx >= floorMap[0].length) return color;
         int cell = floorMap[fy][fx];
@@ -548,7 +548,7 @@ public final class SRCEngine implements RenderEngine {
     //endregion
 
     //region Textures
-    static int sampleTexture(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
+    private static int sampleTexture(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
         int width = texture.width(), height = texture.height();
         if (width <= 0 || height <= 0) return baseColor;
         double fracX = worldX - Math.floor(worldX);
@@ -557,13 +557,11 @@ public final class SRCEngine implements RenderEngine {
         int ty = Math.min((int)(fracY * height), height - 1);
         return texture.pixels()[ty * width + tx];
     }
-    static int planeColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
-        return sampleTexture(texture, worldX, worldY, baseColor);
-    }
+    private static int planeColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) { return sampleTexture(texture, worldX, worldY, baseColor); }
     //endregion
 
     //region Ray State
-    public static final class ColumnRay {
+    private static final class ColumnRay {
         static final int MAX_SEG = 10, MAX_FIN = 4;
         int segCount, finCount;
         final double[] segStartDist = new double[MAX_SEG], segStartX = new double[MAX_SEG], segStartY = new double[MAX_SEG];
@@ -578,7 +576,7 @@ public final class SRCEngine implements RenderEngine {
         final RayState ray = new RayState();
         boolean exhausted;
     }
-    public static final class RayState {
+    private static final class RayState {
         double x, y, z, dx, dy, dz, dist, hitU, hitFrac, hitX, hitY, hitDist, hypZ0, slope, L, invL, floorD, ceilD;
         int[][] map;
         PortalData portals;
@@ -612,7 +610,7 @@ public final class SRCEngine implements RenderEngine {
     //endregion
 
     //region GPU Acceleration
-    static final class Gpu {
+    private static final class Gpu {
         private final String source = Project.OpenCl.KernelSource.load(SRCEngine.class, SkyCeiling.GPU_SOURCE);
         private static Gpu instance;
         private static boolean disabled;
@@ -621,9 +619,7 @@ public final class SRCEngine implements RenderEngine {
         private GpuProgram.Buffer maps, grid, meta, portals, camX, dp, ip, out, wall, finish, floor, ceil;
         private int[] wallSrc, finishSrc, floorSrc, ceilSrc;
 
-        static boolean tryRender(RenderFrame renderFrame) {
-            synchronized (GpuRuntime.LOCK) { return tryRenderLocked(renderFrame); }
-        }
+        private static boolean tryRender(RenderFrame renderFrame) { synchronized (GpuRuntime.LOCK) { return tryRenderLocked(renderFrame); } }
         private static boolean tryRenderLocked(RenderFrame renderFrame) {
             if (disabled || GpuRuntime.session() == null) return false;
             try {
@@ -686,7 +682,7 @@ public final class SRCEngine implements RenderEngine {
             return program.buffer(size);
         }
 
-        static int[] ipValues(RenderFrame renderFrame, Scene scene, int width, int height) {
+        private static int[] ipValues(RenderFrame renderFrame, Scene scene, int width, int height) {
             return new int[]{
                     width, height, scene.floors, scene.tinted ? 1 : 0,
                     renderFrame.wallTexture.width(), renderFrame.wallTexture.height(),
@@ -697,7 +693,7 @@ public final class SRCEngine implements RenderEngine {
                     renderFrame.skyCeiling ? 1 : 0
             };
         }
-        static double[] cameraParams(RenderFrame renderFrame, int width, int height) {
+        private static double[] cameraParams(RenderFrame renderFrame, int width, int height) {
             double dirX = Math.cos(renderFrame.cameraAngle), dirY = Math.sin(renderFrame.cameraAngle);
             double planeLength = Math.tan(Math.PI / 3.0 / 2.0);
             double focal = width / (2.0 * planeLength);
@@ -705,7 +701,7 @@ public final class SRCEngine implements RenderEngine {
             double pitchSin = Math.sin(renderFrame.cameraPitch), pitchCos = Math.cos(renderFrame.cameraPitch);
             return new double[]{ renderFrame.playerX, renderFrame.playerY, renderFrame.cameraHeight, dirX, dirY, planeLength, pitchSin, pitchCos, halfHeight, focal, flashlightDistance, RC_MAX_DISTANCE, renderFrame.skyTime };
         }
-        static final class Scene {
+        private static final class Scene {
             int[] maps, grid, meta, portals;
             int floors;
             boolean tinted;

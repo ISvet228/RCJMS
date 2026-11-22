@@ -1,5 +1,6 @@
 package Project.MapEditor;
 
+import Project.Core.RunChoice;
 import Project.Helpers.FontCache;
 import Project.Game.GameView;
 import Project.MainMenu.MainMenuView;
@@ -86,6 +87,8 @@ public class MapEditorView extends JPanel {
     private final StyledToggle wrongGeometryToggle = new StyledToggle(currentStyle, "wrong_geometry");
     private final StyledToggle skipValidationToggle = new StyledToggle(currentStyle, "me.test_anyway");
     private final StyledToggle fogToggle = new StyledToggle(currentStyle, "me.fog_minimap");
+    private final StyledToggle roguelikeToggle = new StyledToggle(currentStyle, "mode.menu.roguelike");
+    private final StyledToggle horrorToggle = new StyledToggle(currentStyle, "mode.menu.horror");
     //endregion
     //endregion
 
@@ -267,6 +270,13 @@ public class MapEditorView extends JPanel {
         test.put(skipValidationToggle, 1);
         fogToggle.setPreferredSize(new Dimension(100, 24));
         test.put(fogToggle, 1);
+        roguelikeToggle.setPreferredSize(new Dimension(100, 24));
+        test.put(roguelikeToggle, 1);
+        horrorToggle.setPreferredSize(new Dimension(100, 24));
+        test.put(horrorToggle, 1);
+        wrongGeometryToggle.addActionListener(_ -> updateHorrorAvailability());
+        horrorToggle.addActionListener(_ -> updateHorrorAvailability());
+        updateHorrorAvailability();
         column.put(test, 4);
         return column;
     }
@@ -834,10 +844,16 @@ public class MapEditorView extends JPanel {
         }
         pendingPortal = null;
         wrongGeometryToggle.setSelected(data.mapGeometryMode == GEOMETRY_WRONG);
+        if (wrongGeometryToggle.isSelected()) horrorToggle.setSelected(false);
+        updateHorrorAvailability();
         dirty = false;
         syncCanvasSize();
         updateAll();
         hintBar.flash(Tone.OK, L("me.map_loaded"));
+    }
+    private void updateHorrorAvailability() {
+        horrorToggle.setEnabled(!wrongGeometryToggle.isSelected());
+        wrongGeometryToggle.setEnabled(!horrorToggle.isSelected());
     }
     private void writeMap(int geometryIndex) throws IOException {
         SaveData.saveMap(floorMaps.toArray(new int[0][][]), portalLinks, geometryIndex, NSLocalizedString.getLanguage(), currentStyle, GameView.getRenderScale());
@@ -860,7 +876,7 @@ public class MapEditorView extends JPanel {
         if (chosen == null) return;
 
         SeedMapBuilder.Result generated = SeedMapBuilder.build(chosen);
-        lastSeedOptions = new SeedMapBuilder.Options(chosen.width(), chosen.height(), chosen.floors(), chosen.looped(), chosen.finishMode(), generated.seed());
+        lastSeedOptions = new SeedMapBuilder.Options(chosen.width(), chosen.height(), chosen.floors(), chosen.looped(), chosen.finishMode(), generated.seed(), chosen.algorithm());
 
         saveHistoryState();
         floorMaps.clear();
@@ -893,6 +909,8 @@ public class MapEditorView extends JPanel {
             GameView gameView = new GameView(floorsArray, portalsPerFloor, geometryIndex);
             gameView.resolveRenderEngine();
             gameView.setFogOfWarMinimap(fogToggle.isSelected());
+            RunChoice.setRoguelike(roguelikeToggle.isSelected());
+            RunChoice.setHorror(horrorToggle.isSelected());
             RCJMS.instance.gameView = gameView;
             RCJMS.instance.changeView(gameView, "Raycast Me!");
             gameView.start();
@@ -987,7 +1005,7 @@ public class MapEditorView extends JPanel {
         bindHotkey(windowMap, actionMap, KeyEvent.VK_N, () -> chooseBlockRow(5));
         bindHotkey(windowMap, actionMap, KeyEvent.VK_M, () -> chooseBlockRow(6));
         bindHotkey(windowMap, actionMap, KeyEvent.VK_R, this::rotatePortalDirection);
-        bindHotkey(windowMap, actionMap, KeyEvent.VK_G, () -> wrongGeometryToggle.setSelected(!wrongGeometryToggle.isSelected()));
+        bindHotkey(windowMap, actionMap, KeyEvent.VK_G, () -> { if (wrongGeometryToggle.isEnabled()) { wrongGeometryToggle.setSelected(!wrongGeometryToggle.isSelected()); updateHorrorAvailability(); } });
         for (int i = 0; i < 5; i++) { final int index = i; bindHotkey(windowMap, actionMap, KeyEvent.VK_1 + i, () -> { if (blockButtons[index].isEnabled()) chooseBlockRow(index); }); }
         bindHotkey(windowMap, actionMap, KeyEvent.VK_OPEN_BRACKET, () -> sizeSlider.setValue(sizeSlider.getValue() - 1));
         bindHotkey(windowMap, actionMap, KeyEvent.VK_CLOSE_BRACKET, () -> sizeSlider.setValue(sizeSlider.getValue() + 1));
