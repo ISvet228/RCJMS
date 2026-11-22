@@ -76,7 +76,7 @@ public class MainMenuView extends JPanel {
     //endregion
     //region Menu Components
     private final MainMenuCanvas canvas = new MainMenuCanvas(RCJMS.SCREEN_WIDTH, RCJMS.SCREEN_HEIGHT);
-    private final MenuTitle title = new MenuTitle("FAKE RCJMS", Animated3DText.AnimationType.ROTATE);
+    private final MenuTitle title = new MenuTitle("RCJMS", Animated3DText.AnimationType.ROTATE);
     private final StyledLabel tagline = new StyledLabel(currentStyle, "mm.tagline", false, false);
     private final StyledButton playButton = createButton("mm.play");
     private final StyledButton mapEditorButton = createButton("mm.map_editor");
