@@ -133,7 +133,7 @@ public final class GameUpdater {
     static String contentHash(Path path) throws IOException {
         try (ZipFile zip = new ZipFile(path.toFile())) {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            List<String> names = zip.stream().filter(entry -> !entry.isDirectory()).map(ZipEntry::getName).sorted().toList();
+            List<String> names = zip.stream().filter(entry -> !entry.isDirectory() && !entry.getName().startsWith("META-INF/")).map(ZipEntry::getName).sorted().toList();
             for (String name : names) {
                 digest.update(name.getBytes(StandardCharsets.UTF_8));
                 digest.update((byte) 0);
