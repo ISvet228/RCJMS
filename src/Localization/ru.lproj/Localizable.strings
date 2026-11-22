@@ -1920,3 +1920,7 @@
 "update.message" = "Доступна новая версия. Скачать?";
 "update.download" = "Скачать";
 "update.later" = "Позже";
+"mm.fov" = "Поле зрения: %d°";
+"pause.fov" = "Поле зрения: %d°";
+"mm.section_view" = "Вид";
+"pause.section_view" = "Вид";

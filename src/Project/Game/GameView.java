@@ -1691,29 +1691,10 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         g2d.dispose();
         return copy;
     }
-    private void drawPortalCrossfade() {
-        if (!floorSwitchApplied || transitionSnapshot == null) return;
-        double t = smooth(crossPhase());
-        float alpha = (float) (1 - t);
-        if (alpha <= 0.01f) return;
-        double zoom = 1 + 0.12 * t;
-        int width = bufferedImage.getWidth(), height = bufferedImage.getHeight();
-        java.awt.geom.AffineTransform transform = new java.awt.geom.AffineTransform();
-        transform.translate(width / 2.0, height / 2.0);
-        transform.scale(zoom, zoom);
-        transform.translate(-width / 2.0, -height / 2.0);
-        Graphics2D g2d = bufferedImage.createGraphics();
-        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
-        g2d.drawImage(transitionSnapshot, transform, null);
-        g2d.dispose();
-    }
     //endregion
     //region Floor Caption and Effects
     private void drawFloorTransitionEffects() {
-        if (transitionDirection == 0) {
-            drawPortalCrossfade();
-            return;
-        }
+        if (transitionDirection == 0) return;
         if (!floorSwitchApplied) {
             drawDarkness(smooth(stepPhase()));
             return;

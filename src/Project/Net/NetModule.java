@@ -169,8 +169,12 @@ public final class NetModule implements GameModule {
                         context.cameraAngle(), context.cameraPitch(), context.eyeHeight(), width, height, context.map());
                 if (sprite == null) continue;
                 Color color = rivalColor(rival.id(), current);
-                if (NetSettings.simplePlayerSprite()) RivalSprite.paint(g2d, sprite, color, playerName(rival.id()));
-                else PlayerSprite.paint(g2d, sprite, rival, color, playerName(rival.id()), System.nanoTime() / 1e9);
+                String name = playerName(rival.id());
+                double now = System.nanoTime() / 1e9;
+                sprite.paint(g2d, height, g -> {
+                    if (NetSettings.simplePlayerSprite()) RivalSprite.paint(g, sprite, color, name);
+                    else PlayerSprite.paint(g, sprite, rival, color, name, now);
+                });
             }
         }
         drawList(g2d, current);
@@ -254,7 +258,9 @@ public final class NetModule implements GameModule {
     }
     private static MazeSpec canonical(MazeSpec spec) {
         int floors = spec.hasFloors() ? Math.max(2, spec.floors()) : 1;
-        return new MazeSpec(SeedUtil.normalize(spec.seed()), spec.width(), spec.height(), floors, spec.geometry(), spec.hasFloors(), spec.fog(),
+        int width = spec.width() % 2 == 0 ? spec.width() + 1 : spec.width();
+        int height = spec.height() % 2 == 0 ? spec.height() + 1 : spec.height();
+        return new MazeSpec(SeedUtil.normalize(spec.seed()), width, height, floors, spec.geometry(), spec.hasFloors(), spec.fog(),
                 MazeAlgorithms.find(spec.algorithm()).id(), spec.finishMode(), spec.horror());
     }
     private static String playerName(int id) { return format("net.player", id); }

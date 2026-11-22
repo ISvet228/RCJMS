@@ -1,6 +1,6 @@
 package Engines;
+
 import Project.Game.*;
-import Project.Game.SkyCeiling;
 import Project.Helpers.*;
 import java.awt.*;
 import java.util.function.IntConsumer;
@@ -97,7 +97,7 @@ public final class RayTracingEngine implements RenderEngine {
         final int reflectionSteps = REFLECTION_STEPS[quality];
         final int reflectionDepth = REFLECTION_DEPTH[quality];
         final int[] rtPixels = fr.renderPixels;
-        final double tanHalfFov = Math.tan(Math.toRadians(60.0) * 0.5);
+        final double tanHalfFov = Fov.tanHalf();
         final double verticalTan = tanHalfFov / ((double) width / height);
         final double dirX = Math.cos(fr.cameraAngle), dirY = Math.sin(fr.cameraAngle);
         final double cp = Math.cos(fr.cameraPitch), sp = Math.sin(fr.cameraPitch);
@@ -819,7 +819,7 @@ public final class RayTracingEngine implements RenderEngine {
         }
 
         private static double[] dpValues(RenderFrame renderFrame, int width, int height) {
-            double tanHalfFov = Math.tan(Math.toRadians(60.0) * 0.5);
+            double tanHalfFov = Fov.tanHalf();
             double verticalTan = tanHalfFov / ((double) width / height);
             return new double[]{renderFrame.playerX, renderFrame.playerY, renderFrame.cameraHeight, Math.cos(renderFrame.cameraAngle), Math.sin(renderFrame.cameraAngle), Math.cos(renderFrame.cameraPitch), Math.sin(renderFrame.cameraPitch), tanHalfFov, verticalTan, renderFrame.skyTime};
         }

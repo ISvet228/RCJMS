@@ -55,14 +55,14 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     private final StyledComboBox languageBox, renderScaleBox, resolutionBox, engineBox, qualityBox;
     private final StyledToggle fullscreenToggle, vsyncToggle, openClToggle;
     private final StyledToggle doomMovementToggle, noCeilingToggle, textModeToggle, simplePlayerSpriteToggle;
-    private final VolumeSlider musicVolume, effectsVolume;
+    private final VolumeSlider musicVolume, effectsVolume, fovSlider;
     //endregion
     //region Labels
     private final StyledLabel heading, sectionInterface, languageCaption, themeCaption, sectionBackground;
     private final StyledLabel sectionDisplay, vsyncHint, openClHint, resolutionCaption, resolutionHint, scaleCaption, scaleHint, sectionRender;
     private final StyledLabel engineCaption, engineHint, qualityCaption, qualityHint;
     private final StyledLabel sectionGameplay, doomMovementHint, noCeilingHint, textModeHint, simplePlayerSpriteHint;
-    private final StyledLabel sectionAudio, musicVolumeCaption, effectsVolumeCaption;
+    private final StyledLabel sectionAudio, sectionView, musicVolumeCaption, effectsVolumeCaption, fovCaption;
     //endregion
     //region Status And Timers
     private final StatusDot openClDot = new StatusDot();
@@ -94,9 +94,13 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         sectionAudio = label("mm.section_audio", MainMenuCanvas.ACCENT);
         musicVolumeCaption = label("mm.volume_music", MainMenuCanvas.TEXT);
         effectsVolumeCaption = label("mm.volume_effects", MainMenuCanvas.TEXT);
-        musicVolume = new VolumeSlider(Project.Helpers.Settings.getInt("music.volume", 35),
+        sectionView = label("mm.section_view", MainMenuCanvas.ACCENT);
+        fovCaption = label("mm.fov", MainMenuCanvas.TEXT);
+        bindFovCaption();
+        musicVolume = new VolumeSlider(0, 100, Project.Helpers.Settings.getInt("music.volume", 35),
                 percent -> saveVolume("music.volume", percent, Project.Audio.Music::volumeChanged));
-        effectsVolume = new VolumeSlider(Project.Helpers.Settings.getInt("sound.volume", 100),
+        fovSlider = new VolumeSlider(Fov.MIN, Fov.MAX, Fov.degrees(), this::saveFov);
+        effectsVolume = new VolumeSlider(0, 100, Project.Helpers.Settings.getInt("sound.volume", 100),
                 percent -> saveVolume("sound.volume", percent, () -> { }));
         languageCaption = label("mm.settings_language", MainMenuCanvas.TEXT);
         themeCaption = label("mm.settings_themes", MainMenuCanvas.TEXT);
@@ -195,6 +199,9 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         gameplayControls.add(musicVolume);
         gameplayControls.add(effectsVolumeCaption);
         gameplayControls.add(effectsVolume);
+        gameplayControls.add(sectionView);
+        gameplayControls.add(fovCaption);
+        gameplayControls.add(fovSlider);
 
         for (Component component : interfaceControls) add(component);
         for (Component component : displayControls) add(component);
@@ -262,6 +269,9 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         canvas.place(musicVolume, 500, 186, 310, 24);
         canvas.text(effectsVolumeCaption, 13, 500, 226, 310, 18);
         canvas.place(effectsVolume, 500, 250, 310, 24);
+        canvas.text(sectionView, 13, 500, 290, 310, 20);
+        canvas.text(fovCaption, 13, 500, 318, 310, 18);
+        canvas.place(fovSlider, 500, 342, 310, 24);
 
         canvas.place(backButton, 690, 448, 120, 38);
     }
@@ -407,6 +417,8 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             simplePlayerSpriteToggle.setSelected(NetSettings.simplePlayerSprite());
             musicVolume.setValue(Project.Helpers.Settings.getInt("music.volume", 35));
             effectsVolume.setValue(Project.Helpers.Settings.getInt("sound.volume", 100));
+            fovSlider.setValue(Fov.degrees());
+            bindFovCaption();
             syncBackgroundSelection();
         } finally { syncing = false; }
     }
@@ -414,10 +426,15 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
     private void saveGameplay(Runnable apply) {
         if (syncing) return;
         apply.run();
-        try {
-            SaveData.saveGameplay(GameView.isDoomMovement(), GameView.isNoCeiling(), GameView.isTextMode());
-        } catch (java.io.IOException exception) { System.err.println("[Settings] gameplay not saved: " + exception.getMessage()); }
+        try { SaveData.saveGameplay(GameView.isDoomMovement(), GameView.isNoCeiling(), GameView.isTextMode()); }
+        catch (java.io.IOException exception) { System.err.println("[Settings] gameplay not saved: " + exception.getMessage()); }
     }
+    private void saveFov(int degrees) {
+        if (syncing) return;
+        Fov.set(degrees);
+        bindFovCaption();
+    }
+    private void bindFovCaption() { fovCaption.setLocalizationFormat("mm.fov", () -> new Object[] { Fov.degrees() }); }
     private void saveVolume(String key, int percent, Runnable apply) {
         if (syncing) return;
         Project.Helpers.Settings.set(key, String.valueOf(percent));
@@ -577,11 +594,14 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         }
     }
     private static final class VolumeSlider extends JComponent {
+        private final int min, max;
         private final java.util.function.IntConsumer onChange;
         private int value;
 
-        VolumeSlider(int percent, java.util.function.IntConsumer onChange) {
-            this.value = clampPercent(percent);
+        VolumeSlider(int min, int max, int value, java.util.function.IntConsumer onChange) {
+            this.min = min;
+            this.max = max;
+            this.value = clampValue(value);
             this.onChange = onChange;
             setOpaque(false);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -592,12 +612,12 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
             addMouseListener(drag);
             addMouseMotionListener(drag);
         }
-        void setValue(int percent) {
-            value = clampPercent(percent);
+        void setValue(int next) {
+            value = clampValue(next);
             repaint();
         }
         private void setFromX(int x) {
-            int next = clampPercent((int) Math.round((x - knobRadius()) * 100.0 / travel()));
+            int next = clampValue((int) Math.round(min + (x - knobRadius()) * (max - min) / (double) travel()));
             if (next == value) return;
             value = next;
             repaint();
@@ -605,12 +625,12 @@ public final class MainMenuSettingsScreen extends MainMenuPanel {
         }
         private int knobRadius() { return Math.max(6, getHeight() / 3); }
         private int travel() { return Math.max(1, getWidth() - 2 * knobRadius()); }
-        private static int clampPercent(int percent) { return Math.clamp(percent, 0, 100); }
+        private int clampValue(int candidate) { return Math.clamp(candidate, min, max); }
         @Override protected void paintComponent(Graphics graphics) {
             Graphics2D g2d = (Graphics2D) graphics.create();
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int radius = knobRadius(), track = Math.max(4, getHeight() / 5), top = (getHeight() - track) / 2;
-            int knobX = radius + Math.round(travel() * value / 100f);
+            int knobX = radius + Math.round(travel() * (value - min) / (float) (max - min));
             g2d.setColor(new Color(MainMenuCanvas.MUTED.getRed(), MainMenuCanvas.MUTED.getGreen(), MainMenuCanvas.MUTED.getBlue(), 110));
             g2d.fill(new RoundRectangle2D.Float(radius, top, travel(), track, track, track));
             g2d.setColor(MainMenuCanvas.ACCENT);

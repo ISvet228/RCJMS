@@ -3,12 +3,7 @@ package Project.Horror;
 import Project.Roguelike.Projection;
 import Project.Helpers.*;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 
 public final class Stalker {
     //region Constants
@@ -50,6 +45,8 @@ public final class Stalker {
         }
     }
     private boolean planned;
+    private Set<Integer> claims = new HashSet<>();
+    private static final int SPREAD = 5;
     private boolean moving;
     private double replanIn, lostFor, watchFor, windupFor, searchFor, stateTime, clock, nearFor;
     private double lastX, lastY;
@@ -59,6 +56,8 @@ public final class Stalker {
 
     //region Constructors
     public Stalker(Random random) { this.random = random; }
+    /** Ambush cells picked by the other stalkers of the run; this stalker keeps away from them. */
+    public void shareClaims(Set<Integer> shared) { claims = shared; }
     //endregion
 
     //region State
@@ -284,9 +283,10 @@ public final class Stalker {
             int cx = id % width, cy = id / width;
             double own = entry.getValue();
             double score;
+            if (claimed(id, width)) continue;
             if (hasPlayer) {
                 Integer playerSteps = theirs.get(id);
-                if (playerSteps == null || playerSteps < 4 || playerSteps > 12) continue;
+                if (playerSteps == null || playerSteps < 8 || playerSteps > 18) continue;
                 if (Projection.clearLine(map, px, py, cx + 0.5, cy + 0.5)) continue;
                 double straight = Math.hypot(cx + 0.5 - px, cy + 0.5 - py);
                 score = own * 0.25 + Math.abs(playerSteps - 7) + Math.max(0, straight - 8) * 2 + (wallsAround(map, cx, cy) >= 2 ? 0 : 1.5) + random.nextDouble();
@@ -312,11 +312,19 @@ public final class Stalker {
             }
             return;
         }
+        claims.add(bestId);
         setRoute(map, bestId % width, bestId / width);
         if (path.isEmpty()) {
             state = State.WATCH;
             watchFor = 1.5;
         }
+    }
+    private boolean claimed(int id, int width) {
+        int cx = id % width, cy = id / width;
+        for (int other : claims) {
+            if (Math.abs(other % width - cx) <= SPREAD && Math.abs(other / width - cy) <= SPREAD) return true;
+        }
+        return false;
     }
     private void approach(int[][] map, double px, double py) {
         setRoute(map, cellOf(px), cellOf(py));
@@ -383,7 +391,7 @@ public final class Stalker {
     private boolean inView(double viewAngle, double px, double py) {
         double bearing = Math.atan2(y - py, x - px) - viewAngle;
         bearing = Math.atan2(Math.sin(bearing), Math.cos(bearing));
-        return Math.abs(bearing) < Projection.HALF_FOV + 0.1;
+        return Math.abs(bearing) < Projection.halfFov() + 0.1;
     }
 
     private void animate(double dt) {

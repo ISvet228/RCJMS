@@ -1,6 +1,6 @@
 package Engines;
+
 import Project.Game.*;
-import Project.Game.SkyCeiling;
 import Project.OpenCl.*;
 import Project.Helpers.*;
 import java.awt.*;
@@ -133,7 +133,7 @@ public final class MoriartyEngine implements RenderEngine {
         hyperbolic = cfgGeometry == MazeGenerator.GeometryMode.WRONG;
         columnPath = !hyperbolic && fr.cameraPitch == 0;
 
-        tanHalfFov = Math.tan(Math.toRadians(60.0) * 0.5);
+        tanHalfFov = Fov.tanHalf();
         verticalTan = tanHalfFov / ((double) width / height);
         dirX = Math.cos(fr.cameraAngle);
         dirY = Math.sin(fr.cameraAngle);
@@ -1351,7 +1351,7 @@ public final class MoriartyEngine implements RenderEngine {
         static boolean tryRender(RenderFrame renderFrame) { synchronized (GpuRuntime.LOCK) { return tryRenderLocked(renderFrame); } }
         static double[] cameraParams(RenderFrame renderFrame, int width, int height) {
             double dirX = Math.cos(renderFrame.cameraAngle), dirY = Math.sin(renderFrame.cameraAngle);
-            double tanHalfFov = Math.tan(Math.toRadians(60.0) * 0.5);
+            double tanHalfFov = Fov.tanHalf();
             double verticalTan = tanHalfFov / ((double) width / height);
             return new double[]{
                     renderFrame.playerX, renderFrame.playerY, renderFrame.cameraHeight,

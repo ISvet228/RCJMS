@@ -14,6 +14,8 @@ import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Random;
 
 public final class HorrorModule implements GameModule {
@@ -77,12 +79,14 @@ public final class HorrorModule implements GameModule {
         int blocks = (context.mazeWidth() * context.mazeHeight() + CELLS_PER_HUNTER - 1) / CELLS_PER_HUNTER;
         int perFloor = Math.max(1, blocks) * players;
         hunters = new ArrayList<>();
+        Set<Integer> claims = ConcurrentHashMap.newKeySet();
         for (int floor = 0; floor < context.floorCount(); floor++) {
             int[][] map = context.floorMap(floor);
             for (int i = 0; i < perFloor; i++) {
                 int[] cell = freeCell(map);
                 if (cell == null) continue;
                 Stalker hunter = new Stalker(random);
+                hunter.shareClaims(claims);
                 hunter.place(cell, floor);
                 hunters.add(hunter);
             }
@@ -256,7 +260,7 @@ public final class HorrorModule implements GameModule {
             if (hunter.floor() != floor) continue;
             Projection.Sprite sprite = Projection.projectFigure(context.playerX(), context.playerY(), context.cameraAngle(),
                     context.cameraPitch(), context.eyeHeight(), hunter.x(), hunter.y(), width, height, context.map(), Stalker.FIGURE_SCREEN);
-            if (sprite != null) StalkerSprite.paint(g2d, sprite, hunter);
+            if (sprite != null) sprite.paint(g2d, height, g -> StalkerSprite.paint(g, sprite, hunter));
         }
     }
 

@@ -1919,3 +1919,7 @@
 "update.message" = "A new version is available. Download it?";
 "update.download" = "Download";
 "update.later" = "Later";
+"mm.fov" = "Field of view: %d°";
+"pause.fov" = "Field of view: %d°";
+"mm.section_view" = "View";
+"pause.section_view" = "View";

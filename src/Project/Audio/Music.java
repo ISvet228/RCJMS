@@ -17,6 +17,7 @@ public final class Music {
     private static final float BASE_GAIN = 0.3f;
     private static final String VOLUME_KEY = "music.volume";
     private static final int DEFAULT_VOLUME = 35;
+    private static final long PREVIEW_MILLIS = 1200;
     private static final long LEASE_NANOS = 2_000_000_000L;
     private static final long WATCH_MILLIS = 250;
     private static final ExecutorService WORKER = Executors.newSingleThreadExecutor(runnable -> {
@@ -123,9 +124,26 @@ public final class Music {
             synchronized (Music.class) {
                 if (clip == null || wanted == null || !wanted.equals(cachedKey)) return;
                 startClip(cachedPcm, clip.getFramePosition());
+                if (paused) previewWhilePaused();
             }
         }
         catch (RuntimeException ignored) { }
+    }
+
+    private static int previewGeneration;
+    private static void previewWhilePaused() {
+        if (clip == null) return;
+        int generation = ++previewGeneration;
+        clip.loop(Clip.LOOP_CONTINUOUSLY);
+        clip.start();
+        Thread.ofVirtual().start(() -> {
+            try { Thread.sleep(PREVIEW_MILLIS); } catch (InterruptedException exception) { Thread.currentThread().interrupt(); }
+            synchronized (Music.class) {
+                if (generation != previewGeneration || !paused || clip == null) return;
+                pausedFrame = clip.getFramePosition();
+                clip.stop();
+            }
+        });
     }
 
     private static byte[] pcmFor(String key) {

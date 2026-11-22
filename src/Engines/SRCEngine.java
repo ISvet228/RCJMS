@@ -1,6 +1,6 @@
 package Engines;
+
 import Project.Game.*;
-import Project.Game.SkyCeiling;
 import Project.Helpers.*;
 import Project.OpenCl.*;
 import java.awt.*;
@@ -103,7 +103,7 @@ public final class SRCEngine implements RenderEngine {
         if (cfgGeometry == MazeGenerator.GeometryMode.WRONG) { renderSoftwareRayCastingHyp(); return; }
         if (fr.cameraPitch == 0) { renderSoftwareRayCastingColumns(); return; }
         final double dirX = Math.cos(fr.cameraAngle), dirY = Math.sin(fr.cameraAngle);
-        final double planeLength = Math.tan(Math.PI / 3.0 / 2.0);
+        final double planeLength = Fov.tanHalf();
         final int width = fr.renderWidth, height = fr.renderHeight;
         final double focal = width / (2.0 * planeLength);
         final double halfHeight = height / 2.0;
@@ -129,7 +129,7 @@ public final class SRCEngine implements RenderEngine {
     private void renderSoftwareRayCastingColumns() {
         final int width = fr.renderWidth, height = fr.renderHeight;
         final double dirX = Math.cos(fr.cameraAngle), dirY = Math.sin(fr.cameraAngle);
-        final double planeLength = Math.tan(Math.PI / 3.0 / 2.0);
+        final double planeLength = Fov.tanHalf();
         final double focal = width / (2.0 * planeLength), halfHeight = height / 2.0;
         ensureRaycastCaches(fr, width, height);
         fillRowCaches(fr, focal, halfHeight, 0.0, 1.0);

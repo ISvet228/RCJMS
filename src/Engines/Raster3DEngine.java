@@ -510,7 +510,7 @@ public final class Raster3DEngine implements RenderEngine {
             this.out = renderFrame.renderPixels;
             this.sky = renderFrame.skyCeiling;
             this.skyTime = renderFrame.skyTime;
-            this.focal = w / (2.0 * Math.tan(Math.PI / 6.0));
+            this.focal = w / (2.0 * Math.tan(Fov.halfRadians()));
             RuntimeTexture[] textures = {renderFrame.wallTexture, renderFrame.finishTexture, renderFrame.floorTexture, renderFrame.ceilingTexture};
             for (int i = 0; i < 4; i++) {
                 if (textures[i] == null) continue;

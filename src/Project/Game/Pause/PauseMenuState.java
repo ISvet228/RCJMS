@@ -1,12 +1,14 @@
 package Project.Game.Pause;
 
+import Project.Game.Fov;
+
 import java.util.List;
 
 public final class PauseMenuState {
     //region Types
     public enum Page { MAIN, SETTINGS, CONTROLS }
     public enum Item { RESUME, RESTART, SETTINGS, CONTROLS, TOGGLE_HUD, CYCLE_FILTER, MAIN_MENU }
-    public enum Row { MUSIC, EFFECTS, BACK }
+    public enum Row { MUSIC, EFFECTS, FOV, BACK }
     //endregion
 
     //region Variables
@@ -16,7 +18,7 @@ public final class PauseMenuState {
     private Page page = Page.MAIN;
     private int selected;
     private int homeIndex;
-    private int musicVolume = DEFAULT_MUSIC_VOLUME, effectsVolume = DEFAULT_EFFECTS_VOLUME;
+    private int musicVolume = DEFAULT_MUSIC_VOLUME, effectsVolume = DEFAULT_EFFECTS_VOLUME, fov = Fov.DEFAULT;
     //endregion
 
     //region Constructors
@@ -39,7 +41,17 @@ public final class PauseMenuState {
     public synchronized Item selectedItem() { return page == Page.MAIN ? items.get(selected) : null; }
     public synchronized int musicVolume() { return musicVolume; }
     public synchronized int effectsVolume() { return effectsVolume; }
-    public synchronized int volumeOf(Row row) { return row == Row.MUSIC ? musicVolume : row == Row.EFFECTS ? effectsVolume : -1; }
+    public synchronized int fov() { return fov; }
+    public synchronized int volumeOf(Row row) {
+        return switch (row) {
+            case MUSIC -> musicVolume;
+            case EFFECTS -> effectsVolume;
+            case FOV -> fov;
+            case BACK -> -1;
+        };
+    }
+    public static int minOf(Row row) { return row == Row.FOV ? Fov.MIN : VOLUME_MIN; }
+    public static int maxOf(Row row) { return row == Row.FOV ? Fov.MAX : VOLUME_MAX; }
     public static int clamp(int value) { return Math.clamp(value, VOLUME_MIN, VOLUME_MAX); }
     //endregion
 
@@ -77,7 +89,7 @@ public final class PauseMenuState {
         return setVolume(row, volumeOf(row) + steps * VOLUME_STEP);
     }
     public synchronized boolean setVolume(Row row, int value) {
-        int clamped = clamp(value);
+        int clamped = Math.clamp(value, minOf(row), maxOf(row));
         if (row == Row.MUSIC) {
             boolean changed = clamped != musicVolume;
             musicVolume = clamped;
@@ -88,8 +100,14 @@ public final class PauseMenuState {
             effectsVolume = clamped;
             return changed;
         }
+        if (row == Row.FOV) {
+            boolean changed = clamped != fov;
+            fov = clamped;
+            return changed;
+        }
         return false;
     }
+    public synchronized void setFov(int value) { fov = Math.clamp(value, Fov.MIN, Fov.MAX); }
     public synchronized void setVolumes(int music, int effects) {
         musicVolume = clamp(music);
         effectsVolume = clamp(effects);

@@ -206,11 +206,11 @@ public final class RoguelikeModule implements GameModule {
         int[][] map = context.map();
         for (int[] cell : dungeon.potions(floor)) {
             Projection.Sprite sprite = Projection.project(context.playerX(), context.playerY(), context.cameraAngle(), context.cameraPitch(), context.eyeHeight(), cell[0] + 0.5, cell[1] + 0.5, width, height, map);
-            if (sprite != null) EnemySprite.paintPotion(g2d, sprite);
+            if (sprite != null) sprite.paint(g2d, height, g -> EnemySprite.paintPotion(g, sprite));
         }
         for (Enemy enemy : dungeon.enemies(floor)) {
             Projection.Sprite sprite = Projection.project(context.playerX(), context.playerY(), context.cameraAngle(), context.cameraPitch(), context.eyeHeight(), enemy.x(), enemy.y(), width, height, map);
-            if (sprite != null) EnemySprite.paintEnemy(g2d, sprite, enemy.variant(), enemy.hp() / (double) enemy.maxHp());
+            if (sprite != null) sprite.paint(g2d, height, g -> EnemySprite.paintEnemy(g, sprite, enemy.variant(), enemy.hp() / (double) enemy.maxHp()));
         }
     }
     //endregion

@@ -1,4 +1,5 @@
 package Engines;
+
 import Project.Game.*;
 import Project.Game.SkyCeiling;
 import Project.Helpers.*;
@@ -206,7 +207,7 @@ public final class DDAEngine implements RenderEngine {
     private void renderRayCasting() {
         final boolean hyperbolic = cfgGeometry == MazeGenerator.GeometryMode.WRONG;
         final double dirX = Math.cos(fr.cameraAngle), dirY = Math.sin(fr.cameraAngle);
-        final double planeLength = Math.tan((hyperbolic ? Math.toRadians(140) : Math.PI / 3.0) / 2.0);
+        final double planeLength = hyperbolic ? Math.tan(Math.toRadians(140) / 2.0) : Fov.tanHalf();
         final double planeX = -dirY * planeLength, planeY = dirX * planeLength;
         final double focal = hyperbolic ? fr.renderHeight : fr.renderWidth / (2.0 * planeLength);
         final double halfHeight = fr.renderHeight / 2.0;
@@ -908,7 +909,7 @@ public final class DDAEngine implements RenderEngine {
         }
         static double[] cameraParams(RenderFrame renderFrame, int width, int height) {
             double dirX = Math.cos(renderFrame.cameraAngle), dirY = Math.sin(renderFrame.cameraAngle);
-            double planeLength = Math.tan((Math.PI / 3.0) / 2.0);
+            double planeLength = Fov.tanHalf();
             double focal = width / (2.0 * planeLength);
             double halfHeight = height / 2.0;
             double pitchSin = Math.sin(renderFrame.cameraPitch), pitchCos = Math.cos(renderFrame.cameraPitch);

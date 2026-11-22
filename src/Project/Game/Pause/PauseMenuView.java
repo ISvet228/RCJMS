@@ -1,9 +1,9 @@
 package Project.Game.Pause;
 
 import Project.Core.KeyBindings;
-import Project.Helpers.Settings;
-import Project.Helpers.FontCache;
-import Project.Helpers.NSLocalizedString;
+import Project.Helpers.*;
+import Project.Audio.Music;
+import Project.Game.Fov;
 
 import java.awt.*;
 import java.awt.event.KeyEvent;
@@ -34,6 +34,7 @@ public final class PauseMenuView {
     public void open(boolean hudVisible, String currentFilterName) {
         state.reset();
         state.setVolumes(Settings.getInt(MUSIC_KEY, PauseMenuState.DEFAULT_MUSIC_VOLUME), Settings.getInt(EFFECTS_KEY, PauseMenuState.DEFAULT_EFFECTS_VOLUME));
+        state.setFov(Fov.degrees());
         setStatus(hudVisible, currentFilterName);
     }
     public void setStatus(boolean hudVisible, String currentFilterName) {
@@ -97,8 +98,10 @@ public final class PauseMenuView {
         Rectangle track = trackRects[row];
         if (track == null || track.width <= 0) return;
         double fraction = (x - track.x) / (double) track.width;
-        int value = (int) Math.round(PauseMenuState.VOLUME_MIN + fraction * (PauseMenuState.VOLUME_MAX - PauseMenuState.VOLUME_MIN));
-        state.setVolume(PauseMenuState.Row.values()[row], value);
+        PauseMenuState.Row volumeRow = PauseMenuState.Row.values()[row];
+        int min = PauseMenuState.minOf(volumeRow), max = PauseMenuState.maxOf(volumeRow);
+        int value = (int) Math.round(min + fraction * (max - min));
+        state.setVolume(volumeRow, value);
     }
     //endregion
 
@@ -106,6 +109,8 @@ public final class PauseMenuView {
     private void saveVolumes() {
         Settings.set(MUSIC_KEY, String.valueOf(state.musicVolume()));
         Settings.set(EFFECTS_KEY, String.valueOf(state.effectsVolume()));
+        Fov.set(state.fov());
+        Music.volumeChanged();
     }
     //endregion
 
@@ -137,9 +142,10 @@ public final class PauseMenuView {
         paintTitle(g2d, m, NSLocalizedString.get("pause.settings"));
         Rectangle[] rects = new Rectangle[PauseMenuState.Row.values().length];
         Rectangle[] tracks = new Rectangle[rects.length];
-        for (int i = 0; i < rects.length; i++) rects[i] = m.row(i);
+        for (int i = 0; i < rects.length; i++) rects[i] = m.settingsRow(i);
         for (int i = 0; i < rects.length - 1; i++) tracks[i] = m.track(rects[i]);
         publishRects(rects, tracks);
+        paintSectionDivider(g2d, m, rects[PauseMenuState.Row.EFFECTS.ordinal()], rects[PauseMenuState.Row.FOV.ordinal()]);
         for (int i = 0; i < rects.length; i++) {
             boolean selected = i == state.selected();
             if (i == PauseMenuState.Row.BACK.ordinal()) {
@@ -147,14 +153,30 @@ public final class PauseMenuView {
                 continue;
             }
             PauseMenuState.Row row = PauseMenuState.Row.values()[i];
-            String key = row == PauseMenuState.Row.MUSIC ? "pause.music_volume" : "pause.effects_volume";
+            String key = switch (row) {
+                case MUSIC -> "pause.music_volume";
+                case EFFECTS -> "pause.effects_volume";
+                default -> "pause.fov";
+            };
             int value = state.volumeOf(row);
             drawRow(g2d, m, rects[i], selected, NSLocalizedString.format(key, value));
-            drawSlider(g2d, tracks[i], value);
+            drawSlider(g2d, tracks[i], value, PauseMenuState.minOf(row), PauseMenuState.maxOf(row));
         }
         paintHint(g2d, m, NSLocalizedString.format("pause.hint_settings", pauseKeyName()));
     }
-
+    private void paintSectionDivider(Graphics2D g2d, Metrics m, Rectangle above, Rectangle below) {
+        int top = above.y + above.height, bottom = below.y;
+        int middle = (top + bottom) / 2;
+        g2d.setColor(new Color(120, 120, 128));
+        g2d.drawLine(above.x, middle, above.x + above.width, middle);
+        String heading = NSLocalizedString.get("pause.section_view");
+        g2d.setFont(m.hintFont);
+        FontMetrics fm = g2d.getFontMetrics();
+        int labelX = above.x + m.pad;
+        int baseline = middle - fm.getDescent() - 2;
+        g2d.setColor(new Color(170, 170, 178));
+        g2d.drawString(heading, labelX, baseline);
+    }
     private void paintControls(Graphics2D g2d, Metrics m) {
         paintTitle(g2d, m, NSLocalizedString.get("pause.controls"));
         KeyBindings.Action[] actions = KeyBindings.all();
@@ -221,12 +243,12 @@ public final class PauseMenuView {
         g2d.drawString(label, rect.x + m.pad, rect.y + (rect.height - fm.getHeight()) / 2 + fm.getAscent());
     }
 
-    private void drawSlider(Graphics2D g2d, Rectangle track, int value) {
+    private void drawSlider(Graphics2D g2d, Rectangle track, int value, int min, int max) {
         int barHeight = Math.max(4, track.height / 5);
         int barY = track.y + (track.height - barHeight) / 2;
         g2d.setColor(new Color(90, 90, 98));
         g2d.fillRoundRect(track.x, barY, track.width, barHeight, barHeight, barHeight);
-        int filled = (int) Math.round(track.width * value / (double) PauseMenuState.VOLUME_MAX);
+        int filled = (int) Math.round(track.width * (value - min) / (double) (max - min));
         g2d.setColor(Color.WHITE);
         g2d.fillRoundRect(track.x, barY, Math.max(0, filled), barHeight, barHeight, barHeight);
         int knob = Math.max(8, track.height / 3);
@@ -263,6 +285,10 @@ public final class PauseMenuView {
         }
 
         Rectangle row(int index) { return new Rectangle(rowX, rowTop + index * rowStep, rowWidth, rowHeight); }
+        Rectangle settingsRow(int index) {
+            int extra = index >= PauseMenuState.Row.FOV.ordinal() ? rowStep : 0;
+            return new Rectangle(rowX, rowTop + index * rowStep + extra, rowWidth, rowHeight);
+        }
         Rectangle track(Rectangle row) {
             int left = row.x + (int) (row.width * 0.55);
             int right = row.x + row.width - pad;
