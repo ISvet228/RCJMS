@@ -83,19 +83,28 @@ public final class GameUpdater {
         String tag = remoteTag(jarUrl());
         String local = contentHash(jar);
         if (tag.equals(state.getProperty("tag")) && local.equals(state.getProperty("remoteHash"))) return false;
-        if (!tag.isEmpty() && tag.equals(declinedTag)) return false;
-        if (!asker.test(tag)) {
-            declinedTag = tag;
-            return false;
-        }
+        if (!tag.isEmpty() && (tag.equals(declinedTag) || tag.equals(state.getProperty("declined")))) return false;
         download(jarUrl(), pending);
         String remote = isJar(pending) ? contentHash(pending) : "";
         state.setProperty("tag", tag);
         state.setProperty("remoteHash", remote);
+        if (remote.isEmpty() || remote.equals(local)) {
+            Files.deleteIfExists(pending);
+            state.remove("declined");
+            saveState(state);
+            return false;
+        }
+        if (!asker.test(tag)) {
+            declinedTag = tag;
+            Files.deleteIfExists(pending);
+            state.setProperty("tag", "");
+            state.setProperty("declined", tag);
+            saveState(state);
+            return false;
+        }
+        state.remove("declined");
         saveState(state);
-        if (!remote.isEmpty() && !remote.equals(local)) return true;
-        Files.deleteIfExists(pending);
-        return false;
+        return true;
     }
     static String remoteTag(String url) throws IOException {
         HttpURLConnection connection = open(url);
@@ -116,7 +125,7 @@ public final class GameUpdater {
             Files.move(part, target, StandardCopyOption.REPLACE_EXISTING);
         } finally {
             connection.disconnect();
-            Files.deleteIfExists(part);   // nothing is left behind after a failed or oversized download
+            Files.deleteIfExists(part);
         }
     }
     private static final class LimitedInputStream extends FilterInputStream {
