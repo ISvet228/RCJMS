@@ -3,6 +3,7 @@ package Project.Roguelike;
 import Project.Game.Fov;
 
 import java.awt.Graphics2D;
+import java.awt.image.*;
 import java.util.function.Consumer;
 
 public final class Projection {
@@ -17,13 +18,35 @@ public final class Projection {
     //endregion
 
     //region Variables
-    public record Sprite(int centerX, int bottomY, int size, double distance, int clipLeft, int clipRight) {
+    public record Sprite(int centerX, int bottomY, int size, double distance, int clipLeft, int clipRight, int feather) {
         public void paint(Graphics2D g2d, int height, Consumer<Graphics2D> painter) {
-            Graphics2D g = (Graphics2D) g2d.create();
+            int width = Math.max(1, clipRight - clipLeft);
+            if (feather <= 0) {
+                Graphics2D g = (Graphics2D) g2d.create();
+                try {
+                    g.clip(new java.awt.Rectangle(clipLeft, 0, width, height));
+                    painter.accept(g);
+                } finally { g.dispose(); }
+                return;
+            }
+            BufferedImage layer = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D lg = layer.createGraphics();
             try {
-                g.clip(new java.awt.Rectangle(clipLeft, 0, Math.max(1, clipRight - clipLeft), height));
-                painter.accept(g);
-            } finally { g.dispose(); }
+                lg.setRenderingHints(g2d.getRenderingHints());
+                lg.translate(-clipLeft, 0);
+                painter.accept(lg);
+            } finally { lg.dispose(); }
+            int[] pixels = ((DataBufferInt) layer.getRaster().getDataBuffer()).getData();
+            for (int x = 0; x < width; x++) {
+                double fade = Math.min(1.0, Math.min(x, width - 1 - x) / (double) feather);
+                if (fade >= 1) continue;
+                for (int y = 0; y < height; y++) {
+                    int argb = pixels[y * width + x];
+                    int alpha = (int) Math.round((argb >>> 24) * fade);
+                    pixels[y * width + x] = (alpha << 24) | (argb & 0xFFFFFF);
+                }
+            }
+            g2d.drawImage(layer, clipLeft, 0, null);
         }
     }
     //endregion
@@ -63,7 +86,7 @@ public final class Projection {
         if (size < 1) return null;
         int[] span = visibleSpan(px, py, angle, pitch, eyeHeight, ex, ey, width, map, focal, cosP, sinP);
         if (span == null) return null;
-        return new Sprite(centerX, bottomY, size, distance, span[0], span[1]);
+        return new Sprite(centerX, bottomY, size, distance, span[0], span[1], span[2]);
     }
     private static int[] visibleSpan(double px, double py, double angle, double pitch, double eyeHeight, double ex, double ey,
                                      int width, int[][] map, double focal, double cosP, double sinP) {
@@ -84,8 +107,8 @@ public final class Projection {
             visible++;
         }
         if (visible == 0) return null;
-        if (visible == SPAN_SAMPLES + 1) return new int[] { 0, width };
-        return new int[] { left - 2, right + 2 };
+        if (visible == SPAN_SAMPLES + 1) return new int[] { 0, width, 0 };
+        return new int[] { left - 2, right + 2, Math.max(3, (right - left) / SPAN_SAMPLES) };
     }
     private static double figureHeight(int width, int height, double figureScreen) {
         double focal = width / (2 * Math.tan(halfFov()));

@@ -12,6 +12,7 @@ public final class Fov {
     public static int degrees() { return degrees; }
     public static double halfRadians() { return Math.toRadians(degrees) / 2.0; }
     public static double tanHalf() { return Math.tan(halfRadians()); }
+
     public static void set(int value) {
         degrees = Math.clamp(value, MIN, MAX);
         Settings.set(KEY, String.valueOf(degrees));

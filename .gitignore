@@ -28,3 +28,9 @@ replay_pid*
 /out/
 /output/
 /Mods/
+/dist/
+/rcjms-obfuscator/
+/build/
+build.bat
+RCJMS-obf.jar.map
+sources.txt

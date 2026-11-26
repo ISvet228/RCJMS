@@ -7,7 +7,7 @@ import java.util.*;
 
 public final class Stalker {
     //region Constants
-    public static final double FIGURE_SCREEN = 0.85;
+    public static final double FIGURE_SCREEN = 0.55;
     static final double NOTICE_RANGE = 10, SEE_RANGE = 12, HEAR_RANGE = 1.5, CLOSE_RANGE = 3.5;
     static final double PATROL_SPEED = 0.9, RETREAT_SPEED = 1.6, CHASE_SPEED = 1.1, SEARCH_SPEED = 0.9;
     static final double LOSE_SECONDS = 5, SEARCH_SECONDS = 4, WINDUP_SECONDS = 0.9;
@@ -17,7 +17,8 @@ public final class Stalker {
     static final double SCENT_RANGE = 14;
     static final double NEAR_RANGE = 12, NEAR_SECONDS = 6;
     static final double TRACK_RANGE = 3;
-    static final int AMBUSH_RADIUS = 16, ROUTE_NODES = 12000;
+    static final int AMBUSH_RADIUS = 16, ROUTE_NODES = 12000, STAIRS_CLEARANCE = 6;
+    static final double ADJACENT_HEAR = 1.0;
     private static final int[][] DIRECTIONS = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
     //endregion
 
@@ -125,7 +126,7 @@ public final class Stalker {
             nearFor = sameFloor && distance <= NEAR_RANGE ? nearFor + dt : Math.max(0, nearFor - dt * 0.5);
             if (sameFloor && nearFor >= NEAR_SECONDS) {
                 animate(dt);
-                return hunt(px, py);
+                return hunt(px, py, false);
             }
         }
         Event event = switch (state) {
@@ -142,7 +143,7 @@ public final class Stalker {
 
     private Event ambush(int[][] map, double px, double py, boolean sameFloor, boolean seen, boolean sees, double distance, double dt) {
         if (seen) return retreatFrom(map, px, py);
-        if (sameFloor && (heard(map, px, py, distance) || (sees && distance <= CLOSE_RANGE))) return hunt(px, py);
+        if (sameFloor && (heard(map, px, py, distance) || (sees && distance <= CLOSE_RANGE))) return hunt(px, py, sees && distance <= CLOSE_RANGE);
         if (followPath(map, dt, PATROL_SPEED)) {
             if (sameFloor) {
                 state = State.WATCH;
@@ -161,14 +162,14 @@ public final class Stalker {
             startAmbush(map, px, py, false);
             return Event.NONE;
         }
-        if (heard(map, px, py, distance) || (sees && distance <= CLOSE_RANGE)) return hunt(px, py);
-        if (watchFor <= 0 && sees && distance <= NOTICE_RANGE) return hunt(px, py);
+        if (heard(map, px, py, distance) || (sees && distance <= CLOSE_RANGE)) return hunt(px, py, sees && distance <= CLOSE_RANGE);
+        if (watchFor <= 0 && sees && distance <= NOTICE_RANGE) return hunt(px, py, true);
         if (watchFor <= 0) startAmbush(map, px, py, true);
         return Event.NONE;
     }
 
     private Event retreat(int[][] map, double px, double py, boolean sameFloor, boolean sees, double distance, double dt) {
-        if (sameFloor && heard(map, px, py, distance)) return hunt(px, py);
+        if (sameFloor && heard(map, px, py, distance)) return hunt(px, py, false);
         if (followPath(map, dt, RETREAT_SPEED)) startAmbush(map, px, py, sameFloor);
         return Event.NONE;
     }
@@ -193,6 +194,7 @@ public final class Stalker {
             return Event.NONE;
         }
         if (!tracks && lostFor > LOSE_SECONDS) return beginSearch(map);
+        if (tracks && path.isEmpty()) stepToward(map, px, py, CHASE_SPEED, dt);
         if (followPath(map, dt, CHASE_SPEED) && !tracks) return beginSearch(map);
         return Event.NONE;
     }
@@ -203,13 +205,8 @@ public final class Stalker {
             replanIn = 0;
             return Event.NONE;
         }
-        if (distance > STRIKE_RANGE) {
-            double step = Math.min(WINDUP_CREEP * dt, distance - STRIKE_RANGE);
-            x += (px - x) / distance * step;
-            y += (py - y) / distance * step;
-            moving = true;
-        }
-        else moving = false;
+        moving = false;
+        if (distance > STRIKE_RANGE) stepToward(map, px, py, WINDUP_CREEP, dt);
         if (windupFor >= WINDUP_SECONDS) {
             if (distance <= STRIKE_RANGE + 0.3) return Event.KILL;
             state = State.CHASE;
@@ -219,7 +216,7 @@ public final class Stalker {
     }
 
     private Event search(int[][] map, double px, double py, boolean sameFloor, boolean sees, double dt) {
-        if (sees) return hunt(px, py);
+        if (sees) return hunt(px, py, true);
         if (!path.isEmpty()) {
             followPath(map, dt, SEARCH_SPEED);
             return Event.NONE;
@@ -228,8 +225,10 @@ public final class Stalker {
         if (searchFor >= SEARCH_SECONDS) startAmbush(map, px, py, sameFloor);
         return Event.NONE;
     }
-    private boolean heard(int[][] map, double px, double py, double distance) { return distance <= HEAR_RANGE && Projection.clearLine(map, px, py, x, y); }
-    private Event hunt(double px, double py) {
+    private boolean heard(int[][] map, double px, double py, double distance) {
+        return distance <= HEAR_RANGE && (distance <= ADJACENT_HEAR || Projection.clearLine(map, px, py, x, y));
+    }
+    private Event hunt(double px, double py, boolean noticed) {
         state = State.CHASE;
         stateTime = 0;
         replanIn = 0;
@@ -239,7 +238,7 @@ public final class Stalker {
         hasLast = true;
         nearFor = 0;
         path.clear();
-        return Event.NOTICED;
+        return noticed ? Event.NOTICED : Event.NONE;
     }
 
     private Event beginSearch(int[][] map) {
@@ -283,7 +282,7 @@ public final class Stalker {
             int cx = id % width, cy = id / width;
             double own = entry.getValue();
             double score;
-            if (claimed(id, width)) continue;
+            if (claimed(id, width) || wallsAround(map, cx, cy) >= 3) continue;
             if (hasPlayer) {
                 Integer playerSteps = theirs.get(id);
                 if (playerSteps == null || playerSteps < 8 || playerSteps > 18) continue;
@@ -345,8 +344,10 @@ public final class Stalker {
     }
     private void roamTo(int[][] map) {
         List<Integer> open = new ArrayList<>();
+        int width = map[0].length;
         for (Map.Entry<Integer, Integer> entry : reach(map, cellOf(x), cellOf(y), 10).entrySet()) {
-            if (entry.getValue() >= 3) open.add(entry.getKey());
+            int id = entry.getKey();
+            if (entry.getValue() >= 3 && wallsAround(map, id % width, id / width) < 3) open.add(id);
         }
         if (open.isEmpty()) return;
         int id = open.get(random.nextInt(open.size()));
@@ -413,6 +414,26 @@ public final class Stalker {
     //region Routes
     public static boolean passable(int[][] map, int x, int y) {
         return y >= 0 && y < map.length && x >= 0 && x < map[0].length && map[y][x] != MazeGenerator.WALL;
+    }
+    public static boolean spawnable(int[][] map, int x, int y) {
+        if (!passable(map, x, y) || map[y][x] == MazeGenerator.PORTAL) return false;
+        if (wallsAround(map, x, y) >= 3) return false;
+        for (int dy = -STAIRS_CLEARANCE; dy <= STAIRS_CLEARANCE; dy++)
+            for (int dx = -STAIRS_CLEARANCE; dx <= STAIRS_CLEARANCE; dx++) {
+                int cx = x + dx, cy = y + dy;
+                if (cy >= 0 && cy < map.length && cx >= 0 && cx < map[0].length && map[cy][cx] == MazeGenerator.PORTAL) return false;
+            }
+        return true;
+    }
+    private void stepToward(int[][] map, double tx, double ty, double speed, double dt) {
+        double dx = tx - x, dy = ty - y, distance = Math.hypot(dx, dy);
+        if (distance < 1e-6) return;
+        double step = Math.min(distance, speed * dt);
+        double nx = x + dx / distance * step, ny = y + dy / distance * step;
+        if (!passable(map, cellOf(nx), cellOf(ny))) return;
+        x = nx;
+        y = ny;
+        moving = true;
     }
     private static int cellOf(double coordinate) { return (int) Math.floor(coordinate); }
     private static int wallsAround(int[][] map, int x, int y) {

@@ -1,5 +1,6 @@
 package Project.Net;
 
+import Project.Helpers.Log;
 import java.io.*;
 import java.net.*;
 
@@ -43,7 +44,7 @@ final class RoomBeacon {
                 socket.receive(packet);
                 answer(packet);
             } catch (IOException exception) { break; }
-            catch (RuntimeException ignored) { }
+            catch (RuntimeException ignored) { Log.debug(ignored); }
         }
     }
     private void answer(DatagramPacket probe) throws IOException {

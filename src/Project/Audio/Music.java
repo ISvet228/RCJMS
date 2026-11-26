@@ -1,6 +1,6 @@
 package Project.Audio;
 
-import Project.Helpers.Settings;
+import Project.Helpers.*;
 
 import javax.sound.sampled.*;
 import java.util.Random;
@@ -90,7 +90,7 @@ public final class Music {
             clip.loop(Clip.LOOP_CONTINUOUSLY);
             clip.start();
         }
-        catch (RuntimeException ignored) { }
+        catch (RuntimeException ignored) { Log.debug(ignored); }
     }
     public static synchronized void muteChanged(boolean muted) {
         if (muted) { stopClip(); return; }
@@ -117,7 +117,7 @@ public final class Music {
                 if (key.equals(wanted) && !Sound.isMuted()) startClip(pcm, 0);
             }
         }
-        catch (RuntimeException ignored) { }
+        catch (RuntimeException ignored) { Log.debug(ignored); }
     }
     private static void restartAtVolume() {
         try {
@@ -127,7 +127,7 @@ public final class Music {
                 if (paused) previewWhilePaused();
             }
         }
-        catch (RuntimeException ignored) { }
+        catch (RuntimeException ignored) { Log.debug(ignored); }
     }
 
     private static int previewGeneration;
@@ -177,7 +177,7 @@ public final class Music {
     private static synchronized void stopClip() {
         if (clip == null) return;
         try { clip.stop(); clip.close(); }
-        catch (RuntimeException ignored) { }
+        catch (RuntimeException ignored) { Log.debug(ignored); }
         clip = null;
     }
     public static float volume() {

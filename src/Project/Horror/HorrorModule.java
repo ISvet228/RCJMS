@@ -98,7 +98,7 @@ public final class HorrorModule implements GameModule {
         for (int attempt = 0; attempt < 600; attempt++) {
             int x = 1 + random.nextInt(Math.max(1, map[0].length - 2));
             int y = 1 + random.nextInt(Math.max(1, map.length - 2));
-            if (!Stalker.passable(map, x, y) || map[y][x] == MazeGenerator.PORTAL) continue;
+            if (!Stalker.spawnable(map, x, y)) continue;
             if (Math.hypot(x - 1, y - 1) < 12) continue;
             return new int[] { x, y };
         }

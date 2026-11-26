@@ -22,6 +22,7 @@ public final class GameUpdater {
     private static final long CHECK_MILLIS = 30L * 60 * 1000;
     private static final long RACE_WAIT_MILLIS = 5000;
     private static final int TIMEOUT_MILLIS = 15000;
+    private static final long MAX_DOWNLOAD_BYTES = 1L << 30;   // 1 GiB is far above any real build
     private static volatile BooleanSupplier restartBlocker = () -> false;
     private static volatile String declinedTag = "";
     //endregion
@@ -56,20 +57,20 @@ public final class GameUpdater {
         while (true) {
             try {
                 if (prepare(jar, GameUpdater::askToDownload)) {
-                    while (restartBlocker.getAsBoolean()) sleep(RACE_WAIT_MILLIS);
+                    while (restartBlocker.getAsBoolean()) if (!sleep(RACE_WAIT_MILLIS)) return;
                     restart(jar, jar.resolveSibling(PENDING_NAME));
                 }
             } catch (Exception exception) { System.err.println("RCJMS update: " + exception.getMessage()); }
-            sleep(CHECK_MILLIS);
+            if (!sleep(CHECK_MILLIS)) return;
         }
     }
     static boolean askToDownload(String tag) {
-        while (RCJMS.instance == null) sleep(1000);
+        while (RCJMS.instance == null) if (!sleep(1000)) return false;
         return UpdatePrompt.ask();
     }
-    private static void sleep(long millis) {
-        try { Thread.sleep(millis); }
-        catch (InterruptedException exception) { Thread.currentThread().interrupt(); }
+    private static boolean sleep(long millis) {
+        try { Thread.sleep(millis); return true; }
+        catch (InterruptedException exception) { Thread.currentThread().interrupt(); return false; }
     }
     //endregion
 
@@ -77,7 +78,7 @@ public final class GameUpdater {
     static boolean prepare(Path jar) throws IOException { return prepare(jar, tag -> true); }
     static boolean prepare(Path jar, Predicate<String> asker) throws IOException {
         Path pending = jar.resolveSibling(PENDING_NAME);
-        if (Files.exists(pending)) return true;   // accepted earlier and not applied yet
+        if (Files.exists(pending)) return true;
         Properties state = loadState();
         String tag = remoteTag(jarUrl());
         String local = contentHash(jar);
@@ -110,12 +111,33 @@ public final class GameUpdater {
     static void download(String url, Path target) throws IOException {
         Path part = target.resolveSibling(target.getFileName() + ".part");
         HttpURLConnection connection = open(url);
-        try (InputStream in = connection.getInputStream()) { Files.copy(in, part, StandardCopyOption.REPLACE_EXISTING); }
-        finally { connection.disconnect(); }
-        Files.move(part, target, StandardCopyOption.REPLACE_EXISTING);
+        try (InputStream in = new LimitedInputStream(connection.getInputStream(), MAX_DOWNLOAD_BYTES)) {
+            Files.copy(in, part, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(part, target, StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            connection.disconnect();
+            Files.deleteIfExists(part);   // nothing is left behind after a failed or oversized download
+        }
+    }
+    private static final class LimitedInputStream extends FilterInputStream {
+        private long left;
+        LimitedInputStream(InputStream in, long limit) { super(in); left = limit; }
+        @Override public int read() throws IOException {
+            int b = super.read();
+            if (b >= 0 && --left < 0) throw new IOException("update is larger than " + MAX_DOWNLOAD_BYTES + " bytes");
+            return b;
+        }
+        @Override public int read(byte[] buffer, int off, int len) throws IOException {
+            int n = super.read(buffer, off, len);
+            if (n > 0 && (left -= n) < 0) throw new IOException("update is larger than " + MAX_DOWNLOAD_BYTES + " bytes");
+            return n;
+        }
     }
     private static HttpURLConnection open(String url) throws IOException {
-        HttpURLConnection connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
+        URI uri = URI.create(url);
+        if (!"https".equalsIgnoreCase(uri.getScheme()) && !Boolean.getBoolean("rcjms.update.allowInsecure"))
+            throw new IOException("update URL must use https: " + url);
+        HttpURLConnection connection = (HttpURLConnection) uri.toURL().openConnection();
         connection.setInstanceFollowRedirects(true);
         connection.setConnectTimeout(TIMEOUT_MILLIS);
         connection.setReadTimeout(TIMEOUT_MILLIS);

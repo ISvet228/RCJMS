@@ -1,9 +1,10 @@
 package Project.Net;
 
+import Project.Helpers.Log;
 import java.io.*;
 import java.net.Socket;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.*;
 
 final class NetLink {
     //region Variables
@@ -15,6 +16,7 @@ final class NetLink {
     private final int id;
     private final BlockingQueue<byte[]> outbox = new ArrayBlockingQueue<>(OUTBOX_CAPACITY);
     private final AtomicBoolean closed = new AtomicBoolean();
+    private final AtomicInteger unwritten = new AtomicInteger();
     private volatile boolean replaced;
     //endregion
 
@@ -39,10 +41,23 @@ final class NetLink {
     boolean isClosed() { return closed.get(); }
     void markReplaced() { replaced = true; }
     boolean isReplaced() { return replaced; }
-    boolean send(byte[] packet) { return !closed.get() && outbox.offer(packet); }
+    boolean send(byte[] packet) {
+        if (closed.get()) return false;
+        unwritten.incrementAndGet();
+        if (outbox.offer(packet)) return true;
+        unwritten.decrementAndGet();
+        return false;
+    }
+    void awaitFlushed(long millis) {
+        long until = System.nanoTime() + millis * 1_000_000L;
+        while (unwritten.get() > 0 && !closed.get() && System.nanoTime() < until) {
+            try { Thread.sleep(5); }
+            catch (InterruptedException exception) { Thread.currentThread().interrupt(); return; }
+        }
+    }
     void close() {
         if (!closed.compareAndSet(false, true)) return;
-        try { socket.close(); } catch (IOException ignored) { }
+        try { socket.close(); } catch (IOException ignored) { Log.debug(ignored); }
         owner.linkClosed(this);
     }
     //endregion
@@ -54,7 +69,7 @@ final class NetLink {
                 int type = in.readUnsignedByte();
                 owner.received(this, type, in);
             }
-        } catch (IOException | RuntimeException ignored) {}
+        } catch (IOException | RuntimeException ignored) { Log.debug(ignored); }
         finally { close(); }
     }
 
@@ -62,10 +77,12 @@ final class NetLink {
         try {
             while (!closed.get()) {
                 byte[] packet = outbox.take();
-                out.write(packet);
-                out.flush();
+                try {
+                    out.write(packet);
+                    out.flush();
+                } finally { unwritten.decrementAndGet(); }
             }
-        } catch (IOException | InterruptedException | RuntimeException ignored) { }
+        } catch (IOException | InterruptedException | RuntimeException ignored) { Log.debug(ignored); }
         finally { close(); }
     }
     //endregion

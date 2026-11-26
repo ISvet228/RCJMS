@@ -6,8 +6,8 @@ import java.util.*;
 
 public final class Dungeon {
     //region Constants
-    public static final int MIN_ENEMIES = 6;
-    public static final int MAX_ENEMIES = 12;
+    public static final int MIN_ENEMIES = 14;
+    public static final int MAX_ENEMIES = 30;
     public static final int POTIONS_PER_FLOOR = 2;
     private static final double SPAWN_DISTANCE = 8.0;
     private static final int EXIT_DISTANCE = 4;
@@ -28,7 +28,7 @@ public final class Dungeon {
     }
     public static int enemyTotal(int width, int height, int floors) {
         long cells = (long) width * height * Math.max(1, floors);
-        return Math.clamp(MIN_ENEMIES + cells / 400, MIN_ENEMIES, MAX_ENEMIES);
+        return Math.clamp(MIN_ENEMIES + cells / 200, MIN_ENEMIES, MAX_ENEMIES);
     }
     public static int quota(int total, int floors, int floor) { return total / floors + (floor < total % floors ? 1 : 0); }
     private static final class FloorState {

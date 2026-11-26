@@ -58,7 +58,7 @@ public final class Presets {
     private static void walls(CkProject ckProject, int pass, boolean hyperbolic) {
         Builder builder = new Builder(ckProject, pass);
         int out = ensureOutput(ckProject, pass);
-        double fov = hyperbolic ? 140 : 60;
+        double fov = hyperbolic ? 140 : 0;
 
         int sx = builder.n("screenX"), ca = builder.n("cameraAngle");
         int rd = builder.n("rayDirection", "fov", String.valueOf((int) fov));

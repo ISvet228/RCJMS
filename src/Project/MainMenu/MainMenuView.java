@@ -234,7 +234,7 @@ public class MainMenuView extends JPanel {
             if (!backgroundReported) {
                 backgroundReported = true;
                 System.err.println("menu background could not be painted, showing the plain menu: " + exception);
-                exception.printStackTrace();
+                Log.error(exception);
             }
         }
         finally { g2d.dispose(); }
@@ -307,7 +307,7 @@ public class MainMenuView extends JPanel {
             catch (IOException exception) { throw new RuntimeException(exception); }
         });
         creditsButton.addActionListener(_ -> RCJMS.instance.changeView(RCJMS.instance.creditsView = new CreditsView(), "cv.credits"));
-        exitButton.addActionListener(_ -> System.exit(0));
+        exitButton.addActionListener(_ -> RCJMS.quit());
         engineCreatorButton.addActionListener(_ -> RCJMS.instance.changeView(
                 RCJMS.instance.renderEngineCreatorView = new Project.EngineCreator.RenderEngineCreatorView(currentStyle,
                         () -> RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu")),
@@ -407,7 +407,7 @@ public class MainMenuView extends JPanel {
                 });
             }
             catch (IOException | RuntimeException | Error exception) {
-                exception.printStackTrace();
+                Log.error(exception);
                 SwingUtilities.invokeLater(() -> {
                     RCJMS.instance.changeView(this, "main_menu");
                     JOptionPane.showMessageDialog(this, "mm.maze_size_error", "mm.invalid_input", JOptionPane.ERROR_MESSAGE);
@@ -445,7 +445,7 @@ public class MainMenuView extends JPanel {
                 });
             }
             catch (IOException | RuntimeException | Error exception) {
-                exception.printStackTrace();
+                Log.error(exception);
                 SwingUtilities.invokeLater(() -> {
                     RCJMS.instance.changeView(this, "main_menu");
                     JOptionPane.showMessageDialog(this, "mm.maze_size_error", "mm.invalid_input", JOptionPane.ERROR_MESSAGE);
@@ -479,7 +479,7 @@ public class MainMenuView extends JPanel {
         if (next == null || next == menuTheme) return;
         menuTheme = next;
         try { SaveData.saveMenuTheme(menuTheme.id()); }
-        catch (IOException exception) { exception.printStackTrace(); }
+        catch (IOException exception) { Log.error(exception); }
         repaint();
     }
     public void changeLanguage(String code) {
@@ -490,7 +490,7 @@ public class MainMenuView extends JPanel {
     public void saveSettings() { saveSettings(NSLocalizedString.getLanguage(), currentStyle); }
     private void saveSettings(String language, Style style) {
         try { SaveData.saveSettings(language, style, GameView.getRenderScale(), GameView.isVSyncEnabled(), GameView.getRenderEngineId(), GameView.getRenderEngineQuality(), windowWidth, windowHeight, fullscreen, GameView.isOpenClAcceleration()); }
-        catch (IOException exception) { exception.printStackTrace(); }
+        catch (IOException exception) { Log.error(exception); }
     }
     private void applySavedSettings() {
         SaveData.Data savedData = SaveData.load();

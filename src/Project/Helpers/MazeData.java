@@ -2,8 +2,8 @@ package Project.Helpers;
 
 import Project.Helpers.maze.MazeAlgorithms;
 
-public record MazeData(String seed, int width, int height, int floors, boolean hasFloors, int geometry, String algorithm,
-                       int finishMode, int[][][] cells, PortalData[] portals) {
+public record MazeData(String seed, int width, int height, int floors, boolean hasFloors, int geometry, String algorithm, int finishMode, int[][][] cells, PortalData[] portals) {
+    public static final String CUSTOM_SEED = "~map~";
     public static MazeData generate(String seed, int width, int height, int floors, int geometry, boolean hasFloors, String algorithm, int finishMode) {
         String text = SeedUtil.normalize(seed);
         long value = SeedUtil.toLong(text);

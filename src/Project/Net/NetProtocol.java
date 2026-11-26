@@ -11,7 +11,7 @@ import Project.Helpers.MazeGenerator;
 final class NetProtocol {
     //region Constants
     static final int MAGIC = 0x52434A4D;
-    static final int VERSION = 4;
+    static final int VERSION = 8;
     static final int MAX_PLAYERS = 8;
     static final int CONNECT_TIMEOUT_MILLIS = 3000;
     static final int HANDSHAKE_TIMEOUT_MILLIS = 3000;
@@ -22,6 +22,7 @@ final class NetProtocol {
     static final int MAX_ID_BYTES = 64;
     static final int MAX_SIZE = 1000;
     static final int MAX_FLOORS = 32;
+    static final long MAX_CELLS = 8_000_000L;
     static final int MAX_HUNTERS = 4096;
 
     static final byte ACCEPT = 1;
@@ -75,6 +76,7 @@ final class NetProtocol {
         boolean horror = in.readBoolean();
         if (width < 1 || height < 1 || width > MAX_SIZE || height > MAX_SIZE) throw new IOException("bad maze size");
         if (floors < 1 || floors > MAX_FLOORS || geometry < 0) throw new IOException("bad maze shape");
+        if ((long) width * height * floors > MAX_CELLS) throw new IOException("maze too large");
         if (finishMode < 0 || finishMode >= MazeGenerator.FinishMode.values().length) throw new IOException("bad finish mode");
         return new MazeSpec(new String(seed, StandardCharsets.UTF_8), width, height, floors, geometry, hasFloors, fog,
                 new String(algorithm, StandardCharsets.UTF_8), finishMode, horror);

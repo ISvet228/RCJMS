@@ -1,5 +1,6 @@
 package Project.Net;
 
+import Project.Helpers.Log;
 import java.io.*;
 import java.net.*;
 import java.util.*;
@@ -16,8 +17,13 @@ public final class NetSession {
     private static final int NO_ID = 0;
     private static final long MIGRATE_WAIT_NANOS = 8_000_000_000L;
     private static final long RETRY_MILLIS = 200;
+    private static final int OPEN_ATTEMPTS = 10;
+    private static final int BEACON_RETRY_TICKS = 10;
+    private static final long FLUSH_MILLIS = 400;
+    private static final long STALE_FORGET_MILLIS = 30_000;
     private static final long PENDING_MILLIS = 15_000;
     private static final double MAX_STEP_CELLS = 1.0;
+    private static final double SMOOTH_SECONDS = 0.1, SNAP_CELLS = 2.5;
     private static final Map<String, Long> LAST_TOKENS = new ConcurrentHashMap<>();
     private static final Set<String> JOINED_ROOMS = ConcurrentHashMap.newKeySet();
     private static final Set<NetSession> OPEN = ConcurrentHashMap.newKeySet();
@@ -39,6 +45,7 @@ public final class NetSession {
     private final Object lock = new Object();
     private final List<NetLink> links = new CopyOnWriteArrayList<>();
     private final Map<Integer, Remote> remotes = new ConcurrentHashMap<>();
+    private final Map<Integer, double[]> shown = new HashMap<>();
     private volatile List<Member> pending = List.of();
     private volatile long pendingUntil;
     private final ScheduledExecutorService ticker;
@@ -52,6 +59,7 @@ public final class NetSession {
     private final AtomicInteger runSerial = new AtomicInteger();
     private volatile List<Hunter> hunters = List.of();
     private int nextId = HOST_ID + 1;
+    private int ticks;
     private volatile Pose pose = new Pose(Double.NaN, Double.NaN, 0, 0, Double.NaN);
     //endregion
 
@@ -66,7 +74,7 @@ public final class NetSession {
     //endregion
 
     //region Constructors
-    private NetSession(MazeSpec spec, boolean host, String room, int localId, int port, ServerSocket server, int maxPlayers, long roomId, long token, MazeData maze) {
+    private NetSession(MazeSpec spec, boolean host, String room, int localId, int hostId, int port, ServerSocket server, int maxPlayers, long roomId, long token, MazeData maze) {
         this.spec = spec;
         this.maze = maze;
         this.host = host;
@@ -83,7 +91,7 @@ public final class NetSession {
 
     //region Starting
     public static NetSession host(int port, MazeSpec spec) throws IOException { return host(port, spec, buildMaze(spec)); }
-    public static NetSession host(int port, MazeSpec spec, MazeData maze) throws IOException { return open(port, spec, HOST_ID, 0, List.of(), maze); }
+    public static NetSession host(int port, MazeSpec spec, MazeData maze) throws IOException { return open(port, spec, HOST_ID, 0, List.of(), maze, 0, null); }
     public static MazeData buildMaze(MazeSpec spec) {
         return MazeData.generate(spec.seed(), spec.width(), spec.height(), spec.floors(), spec.geometry(), spec.hasFloors(), spec.algorithm(), spec.finishMode());
     }
@@ -93,12 +101,12 @@ public final class NetSession {
         long token = reserved ? LAST_TOKENS.computeIfAbsent(room, key -> ThreadLocalRandom.current().nextLong()) : ThreadLocalRandom.current().nextLong();
         boolean joined = false;
         try {
-            NetSession session = connect(host, port, token, reserved ? room : null);
+            NetSession session = connect(host, port, token, reserved ? room : null, null);
             joined = true;
             return new Joined(session.spec, session.maze);
         } finally { if (reserved && !joined) JOINED_ROOMS.remove(room); }
     }
-    private static NetSession connect(String address, int port, long token, String room) throws IOException {
+    private static NetSession connect(String address, int port, long token, String room, NetSession previous) throws IOException {
         Socket socket = new Socket();
         try {
             socket.connect(new InetSocketAddress(address, port), CONNECT_TIMEOUT_MILLIS);
@@ -116,12 +124,15 @@ public final class NetSession {
             if (status == REJECT_FULL) throw new IOException("the game is full");
             if (status != ACCEPT) throw new IOException("the host refused the join");
             int id = in.readInt();
+            int hostId = in.readInt();
+            long roomId = in.readLong();
             MazeSpec spec = readSpec(in);
             MazeData maze = readMaze(in, spec);
             socket.setSoTimeout(READ_TIMEOUT_MILLIS);
-            NetSession session = new NetSession(spec, false, room, id, port, null, MAX_PLAYERS, 0, token, maze);
-            NetLink link = new NetLink(session, socket, in, out, HOST_ID);
+            NetSession session = new NetSession(spec, false, room, id, hostId, port, null, MAX_PLAYERS, roomId, token, maze);
+            NetLink link = new NetLink(session, socket, in, out, hostId);
             session.links.add(link);
+            if (previous != null) session.inherit(previous);
             session.startThreads(link::start);
             register(session);
             return session;
@@ -133,7 +144,7 @@ public final class NetSession {
             throw exception;
         }
     }
-    private static NetSession open(int port, MazeSpec spec, int localId, long token, List<Member> roster, MazeData maze) throws IOException {
+    private static NetSession open(int port, MazeSpec spec, int localId, long token, List<Member> roster, MazeData maze, long keepRoomId, NetSession previous) throws IOException {
         ServerSocket server = new ServerSocket();
         try {
             server.setReuseAddress(true);
@@ -142,9 +153,10 @@ public final class NetSession {
             closeQuietly(server);
             throw exception;
         }
-        long roomId = ThreadLocalRandom.current().nextLong();
-        NetSession session = new NetSession(spec, true, null, localId, server.getLocalPort(), server, NetSettings.maxPlayers(), roomId, token, maze);
+        long roomId = keepRoomId != 0 ? keepRoomId : ThreadLocalRandom.current().nextLong();
+        NetSession session = new NetSession(spec, true, null, localId, localId, server.getLocalPort(), server, NetSettings.maxPlayers(), roomId, token, maze);
         session.adopt(roster);
+        if (previous != null) session.inherit(previous);
         session.startThreads(() -> daemon(session::acceptLoop, "rcjms-net-accept").start());
         session.beacon = RoomBeacon.start(session);
         register(session);
@@ -182,6 +194,12 @@ public final class NetSession {
     private void inherit(NetSession previous) {
         runSerial.set(previous.runSerial.get());
         caughtSerial.putAll(previous.caughtSerial);
+        remotes.putAll(previous.remotes);
+        remotes.remove(localId);
+        synchronized (previous.shown) { synchronized (shown) { shown.putAll(previous.shown); } }
+        pose = previous.pose;
+        if (previous.localCaught.get()) localCaught.set(true);
+        news.addAll(previous.news);
     }
     private void startThreads(Runnable openSockets) {
         OPEN.add(this);
@@ -198,21 +216,49 @@ public final class NetSession {
     public int localId() { return localId; }
     public boolean isClosed() { return closed.get(); }
     public int playerCount() { return 1 + rivals().size(); }
-    int seats() { return 1 + links.size(); }
+    int seats() { return 1 + links.size() + reservedSeats(); }
+    private int reservedSeats() {
+        if (System.currentTimeMillis() >= pendingUntil) return 0;
+        int waiting = 0;
+        for (Member member : pending) if (linkOf(member.id()) == null) waiting++;
+        return waiting;
+    }
     int maxPlayers() { return maxPlayers; }
     long roomId() { return roomId; }
 
     public List<Rival> rivals() {
         long now = System.currentTimeMillis();
         List<Rival> list = new ArrayList<>();
-        for (Map.Entry<Integer, Remote> entry : remotes.entrySet()) {
-            Remote remote = entry.getValue();
-            if (now - remote.heardAt() <= STALE_MILLIS)
-                list.add(new Rival(entry.getKey(), remote.x(), remote.y(), remote.floor(), remote.angle(), remote.finishSeconds(),remote.speed(), remote.walked()));
-
+        synchronized (shown) {
+            shown.keySet().retainAll(remotes.keySet());
+            for (Map.Entry<Integer, Remote> entry : remotes.entrySet()) {
+                Remote remote = entry.getValue();
+                if (now - remote.heardAt() > STALE_MILLIS) continue;
+                double[] at = smoothed(entry.getKey(), remote, now);
+                list.add(new Rival(entry.getKey(), at[0], at[1], remote.floor(), at[2], remote.finishSeconds(), remote.speed(), remote.walked()));
+            }
         }
         list.sort(Comparator.comparingInt(Rival::id));
         return list;
+    }
+    private double[] smoothed(int id, Remote remote, long now) {
+        if (!Double.isFinite(remote.x()) || !Double.isFinite(remote.y())) {
+            shown.remove(id);
+            return new double[] { remote.x(), remote.y(), remote.angle(), remote.floor(), now };
+        }
+        double[] at = shown.get(id);
+        if (at == null || !Double.isFinite(at[0]) || !Double.isFinite(at[1]) || at[3] != remote.floor() || Math.hypot(remote.x() - at[0], remote.y() - at[1]) > SNAP_CELLS) {
+            at = new double[] { remote.x(), remote.y(), remote.angle(), remote.floor(), now };
+        } else {
+            double dt = Math.min(0.25, Math.max(0, now - at[4]) / 1000.0);
+            double k = 1 - Math.exp(-dt / SMOOTH_SECONDS);
+            at[0] += (remote.x() - at[0]) * k;
+            at[1] += (remote.y() - at[1]) * k;
+            at[2] += Math.IEEEremainder(remote.angle() - at[2], 2 * Math.PI) * k;
+            at[4] = now;
+        }
+        shown.put(id, at);
+        return at;
     }
     public void publish(double x, double y, int floor, double angle, double finishSeconds) { pose = new Pose(x, y, floor, angle, finishSeconds); }
     public void newRun() {
@@ -241,6 +287,15 @@ public final class NetSession {
     }
     public void publishHunters(List<Hunter> list) { if (host) hunters = List.copyOf(list); }
     public List<Hunter> hunters() { return hunters; }
+    public void leaveGracefully() {
+        if (!closed.get()) {
+            Pose last = pose;
+            byte[] packet = state(localId, (float) last.x(), (float) last.y(), last.floor(), (float) last.angle(), last.finishSeconds(), runSerial.get());
+            for (NetLink link : links) link.send(packet);
+            for (NetLink link : links) link.awaitFlushed(FLUSH_MILLIS);
+        }
+        close();
+    }
     public void close() {
         List<NetLink> toClose;
         synchronized (lock) {
@@ -278,7 +333,7 @@ public final class NetSession {
     private void runMigration() {
         try {
             NetSession next = takeOver();
-            if (next != null) next.inherit(this);
+            if (next != null && closed.get()) next.close();
         } finally { close(); }
     }
     private NetSession takeOver() {
@@ -291,18 +346,26 @@ public final class NetSession {
         for (Member candidate : order) {
             if (closed.get()) return null;
             if (candidate.id() == localId) {
-                try { return open(port, spec, localId, token, last, maze); }
-                catch (IOException | RuntimeException exception) { continue; }
+                NetSession opened = openOwnRoom(last);
+                if (opened != null) return opened;
+                continue;
             }
             NetSession joined = reach(candidate);
             if (joined != null) return joined;
         }
         return null;
     }
+    private NetSession openOwnRoom(List<Member> last) {
+        for (int attempt = 0; attempt < OPEN_ATTEMPTS && !closed.get(); attempt++) {
+            try { return open(port, spec, localId, token, last, maze, roomId, this); }
+            catch (IOException | RuntimeException exception) { sleepQuietly(RETRY_MILLIS); }
+        }
+        return null;
+    }
     private NetSession reach(Member candidate) {
         long deadline = System.nanoTime() + MIGRATE_WAIT_NANOS;
         while (!closed.get() && System.nanoTime() < deadline) {
-            try { return connect(candidate.address(), port, token, null); }
+            try { return connect(candidate.address(), port, token, null, this); }
             catch (IOException exception) { sleepQuietly(RETRY_MILLIS); }
         }
         return null;
@@ -347,6 +410,8 @@ public final class NetSession {
             }
             out.writeByte(ACCEPT);
             out.writeInt(seat.id());
+            out.writeInt(localId);
+            out.writeLong(roomId);
             writeSpec(out, spec);
             writeMaze(out, maze);
             out.flush();
@@ -356,6 +421,8 @@ public final class NetSession {
             if (seat.replaced() != null) seat.replaced().close();
             link.start();
             broadcastRoster();
+            for (Map.Entry<Integer, Integer> entry : caughtSerial.entrySet())
+                if (isCaught(entry.getKey())) link.send(caughtPacket(entry.getKey(), entry.getValue()));
         } catch (IOException | RuntimeException exception) { closeQuietly(socket); }
     }
 
@@ -364,7 +431,7 @@ public final class NetSession {
             if (closed.get()) return null;
             Integer known = seats.get(token);
             NetLink replaced = known == null ? null : linkOf(known);
-            if (replaced == null && links.size() + 1 >= maxPlayers) return null;
+            if (replaced == null && links.size() + 1 + (known == null ? reservedSeats() : 0) >= maxPlayers) return null;
             if (known != null) return new Seat(known, replaced);
             int id = nextId++;
             seats.put(token, id);
@@ -416,7 +483,7 @@ public final class NetSession {
     //region Messages
     void received(NetLink from, int type, DataInputStream in) throws IOException {
         if (type == TYPE_LEAVE && !host) {
-            remotes.remove(in.readInt());
+            forget(in.readInt());
             return;
         }
         if (type == TYPE_CAUGHT && !host) {
@@ -479,23 +546,38 @@ public final class NetSession {
         }
         hunters = List.copyOf(list);
     }
+    private void forget(int id) {
+        Remote remote = remotes.get(id);
+        if (remote == null || Double.isNaN(remote.finishSeconds())) remotes.remove(id);
+    }
     void linkClosed(NetLink link) {
         links.remove(link);
         if (closed.get() || link.isReplaced()) return;
-        remotes.remove(link.id());
+        forget(link.id());
         if (host) {
             relay(leave(link.id()), null);
             broadcastRoster();
         }
         else migrate();
     }
-
+    private void maintain() {
+        long now = System.currentTimeMillis();
+        remotes.values().removeIf(remote -> now - remote.heardAt() > STALE_FORGET_MILLIS);
+        if (host && beacon == null && !closed.get()) {
+            RoomBeacon started = RoomBeacon.start(this);
+            if (started != null) {
+                beacon = started;
+                if (closed.get()) started.close();
+            }
+        }
+    }
     private void tick() {
         try {
             if (host && !pending.isEmpty() && System.currentTimeMillis() >= pendingUntil) {
                 pending = List.of();
                 broadcastRoster();
             }
+            if (++ticks % BEACON_RETRY_TICKS == 0) maintain();
             Pose now = pose;
             byte[] packet = state(localId, (float) now.x(), (float) now.y(), now.floor(), (float) now.angle(), now.finishSeconds(), runSerial.get());
             for (NetLink link : links) link.send(packet);
@@ -503,7 +585,7 @@ public final class NetSession {
                 byte[] monsters = huntersPacket(hunters);
                 for (NetLink link : links) link.send(monsters);
             }
-        } catch (RuntimeException ignored) { }
+        } catch (RuntimeException ignored) { Log.debug(ignored); }
     }
     //endregion
 
@@ -511,7 +593,7 @@ public final class NetSession {
     private static Thread daemon(Runnable runnable, String name) { return Thread.ofPlatform().daemon(true).name(name).unstarted(runnable); }
     private static void closeQuietly(Closeable closeable) {
         if (closeable == null) return;
-        try { closeable.close(); } catch (IOException ignored) { }
+        try { closeable.close(); } catch (IOException ignored) { Log.debug(ignored); }
     }
     //endregion
 }

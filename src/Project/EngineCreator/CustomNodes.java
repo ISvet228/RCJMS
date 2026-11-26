@@ -1,7 +1,7 @@
 package Project.EngineCreator;
 
 import Project.CreatorKit.*;
-import Project.Helpers.AppPaths;
+import Project.Helpers.*;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -155,7 +155,7 @@ public final class CustomNodes {
         Nodes.unregisterCustom(kind);
         save();
     }
-    public static void save() throws IOException { Files.writeString(AppPaths.file(FILE), fileText(DEFS.values()), StandardCharsets.UTF_8); }
+    public static void save() throws IOException { AtomicFiles.writeString(AppPaths.file(FILE), fileText(DEFS.values())); }
     public static String fileText(Collection<Def> defs) {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append("{\n  \"format\": ").append(Json.quote(FORMAT)).append(",\n  \"version\": 1,\n  \"nodes\": [\n");

@@ -305,7 +305,7 @@ public final class MazeSettingsPanel extends JPanel {
         try {
             SaveData.saveMazeSettings(parseOr(xField.getText(), saved.mazeWidth), parseOr(yField.getText(), saved.mazeHeight),
                     finishBox.getSelectedIndex(), geometry(), floorsToggle.isSelected(), parseOr(floorsField.getText(), saved.mazeFloors), fogToggle.isSelected());
-        } catch (IOException exception) { exception.printStackTrace(); }
+        } catch (IOException exception) { Log.error(exception); }
     }
     private void saveAlgorithm() {
         if (loadingValues) return;

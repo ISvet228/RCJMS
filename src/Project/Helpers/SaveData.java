@@ -44,7 +44,7 @@ public final class SaveData {
     private static void read(Path file, Data data) {
         if (!Files.isRegularFile(file)) return;
         try { parse(Files.readAllLines(file, StandardCharsets.UTF_8), data); }
-        catch (IOException ignored) { }
+        catch (IOException ignored) { Log.debug(ignored); }
     }
 
     private static void parse(List<String> lines, Data data) {
@@ -80,7 +80,7 @@ public final class SaveData {
                 case "mapmeta" -> {
                     if (eq > 0 && line.substring(0, eq).trim().equals("geometry")) {
                         try { data.mapGeometryMode = Math.max(0, Integer.parseInt(line.substring(eq + 1).trim())); }
-                        catch (NumberFormatException ignored) { }
+                        catch (NumberFormatException ignored) { Log.debug(ignored); }
                     }
                 }
                 case "portals" -> {
@@ -141,7 +141,7 @@ public final class SaveData {
                 case "fullscreen" -> data.fullscreen = Boolean.parseBoolean(value);
                 case "menuTheme" -> { if (!value.isBlank()) data.menuTheme = value; }
             }
-        } catch (IllegalArgumentException ignored) { }
+        } catch (IllegalArgumentException ignored) { Log.debug(ignored); }
     }
 
     private static void readMaze(String key, String value, Data data) {
@@ -155,7 +155,7 @@ public final class SaveData {
                 case "floors" -> data.mazeFloors = Math.clamp(Integer.parseInt(value), 2, 20);
                 case "fog" -> data.mazeFog = Boolean.parseBoolean(value);
             }
-        } catch (NumberFormatException ignored) { }
+        } catch (NumberFormatException ignored) { Log.debug(ignored); }
     }
 
     private static void readVictory(String key, String value, Data data) {
@@ -307,10 +307,7 @@ public final class SaveData {
         return text.toString();
     }
     private static void writeFile(Path file, String text) throws IOException {
-        Path temp = file.resolveSibling(file.getFileName() + ".tmp");
-        Files.writeString(temp, text, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-        try { Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
-        catch (AtomicMoveNotSupportedException exception) { Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING); }
+        AtomicFiles.writeString(file, text);
     }
 
     private static String formatScale(double scale) {

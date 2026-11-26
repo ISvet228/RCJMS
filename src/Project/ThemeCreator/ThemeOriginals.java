@@ -15,7 +15,7 @@ public final class ThemeOriginals {
     //endregion
 
     //region Template Registry
-    public static List<ThemeDoc> originals() { return arranged(List.of(space(), nebula(), blackhole(), sunset(), aurora(), ocean())); }
+    public static List<ThemeDoc> originals() { return arranged(List.of(space(), nebula(), blackhole(), sunset(), aurora(), ocean(), ember(), matrix())); }
     public static List<ThemeDoc> templates() {
         return arranged(List.of(blank(), starfield(), gradientSun()));
     }
@@ -159,6 +159,62 @@ public final class ThemeOriginals {
                     .v("color", "#C8F0FF").v("alpha", 90 / 255.0);
             ring.drivePosition(ring.add(ring.mul(ring.sin(ring.add(ring.time(1.5), b[2] * 10)), 6), b[0] * W - size / 2),
                     ring.add(ring.sub(H, ring.mod(ring.add(ring.time(speed), b[1] * H), H + 20)), -size / 2));
+        }
+        return themeDoc;
+    }
+    static ThemeDoc matrix() {
+        ThemeDoc themeDoc = doc("matrix", "Matrix", 7, "mm.bg_matrix");
+        rect(themeDoc, "Base", -100, 0, 0, W, H, "#000602");
+        int columns = (int) (W / 14) + 1;
+        for (int c = 0; c < columns; c++) {
+            int length = 6 + (int) (unit(c, 1) * 14);
+            double speed = 40 + 90 * unit(c, 2);
+            double span = H + length * 16.0;
+            double offset = unit(c, 3) * span;
+            double x = c * 14.0 + 2;
+            Obj trail = rect(themeDoc, "Trail " + (c + 1), -50, x, 0, 10, length * 16.0, "#0F7A3A");
+            Obj head = rect(themeDoc, "Head " + (c + 1), -49, x, 0, 10, 12, "#E1FFE1");
+            // the head glyph's top moves down the column; the trail hangs above it (its top is the head minus length-1 cells)
+            head.drivePosition(x, head.sub(head.mod(head.add(head.time(speed), offset), span), length * 16.0));
+            trail.drivePosition(x, trail.sub(trail.mod(trail.add(trail.time(speed), offset), span), (2 * length - 1) * 16.0));
+        }
+        return themeDoc;
+    }
+    static ThemeDoc ember() {
+        ThemeDoc themeDoc = doc("ember", "Ember", 6, "mm.bg_ember");
+        int bands = 24;
+        for (int i = 0; i < bands; i++) {
+            double t = (i + 0.5) / bands;
+            int r = (int) Math.round(14 + (44 - 14) * t), g = (int) Math.round(5 + (16 - 5) * t), b = (int) Math.round(2 + (4 - 2) * t);
+            rect(themeDoc, "Sky band " + (i + 1), -100, 0, i * H / bands, W, H / bands + 1, hex(r, g, b));
+        }
+        Obj bed = glow(themeDoc, "Bed glow", -90, W / 2.0, H * 1.05, W * 0.75, "#FF781E", 0);
+        bed.drive("alpha", bed.mul(bed.add(bed.add(bed.mul(bed.sin(bed.time(1.4)), 0.15), 0.85), bed.mul(bed.sin(bed.time(3.1)), 0.05)), 120 / 255.0));
+        Obj hot = glow(themeDoc, "Hot glow", -89, W * 0.5, H * 1.1, W * 0.3, "#FFC85A", 0);
+        hot.drive("alpha", hot.mul(hot.add(hot.add(hot.mul(hot.sin(hot.time(1.4)), 0.15), 0.85), hot.mul(hot.sin(hot.time(3.1)), 0.05)), 70 / 255.0));
+        for (int i = 0; i < 110; i++) {
+            double speed = 0.04 + 0.08 * unit(i, 2), offset = unit(i, 3);
+            double baseX = unit(i, 4) * W, wobbleSpeed = 0.6 + unit(i, 5), wobble = 12 + 20 * unit(i, 6);
+            double size = 1.2 + 2.8 * unit(i, 7);
+            Obj group = obj(themeDoc, "empty", "Ember " + (i + 1), -50, 0);
+            N phase = group.mod(group.add(group.time(speed), offset), 1);
+            group.drivePosition(group.add(baseX, group.mul(group.sin(group.add(group.time(wobbleSpeed), i)), wobble)),
+                    group.sub(H * 1.02, group.mul(phase, H * 1.1)));
+            Obj halo = obj(themeDoc, "dot", "Ember " + (i + 1) + " halo", -50, group.o.id).v("color", "#FF9B3C");
+            Obj core = obj(themeDoc, "dot", "Ember " + (i + 1) + " core", -50, group.o.id).v("color", "#FFD27A");
+            for (Obj dot : new Obj[]{halo, core}) {
+                N p = dot.mod(dot.add(dot.time(speed), offset), 1);
+                N life = dot.sin(dot.mul(p, Math.PI));
+                N flicker = dot.add(0.7, dot.mul(dot.sin(dot.add(dot.time(9), i)), 0.3));
+                N grow = dot.sub(1, dot.mul(p, 0.5));
+                if (dot == halo) {
+                    dot.drive("radius", dot.mul(dot.mul(grow, size), 2.5));
+                    dot.drive("alpha", dot.mul(dot.mul(life, flicker), 1 / 5.0));
+                } else {
+                    dot.drive("radius", dot.mul(grow, size));
+                    dot.drive("alpha", dot.mul(life, flicker));
+                }
+            }
         }
         return themeDoc;
     }
@@ -312,6 +368,13 @@ public final class ThemeOriginals {
         return rows;
     }
     private static String pt(double x, double y) { return x + "," + y; }
+    private static double unit(long key, int salt) {
+        long z = key * 0x9E3779B97F4A7C15L + salt * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+        z ^= z >>> 31;
+        return (z >>> 11) * 0x1.0p-53;
+    }
     private static String hex(int r, int g, int b) { return String.format("#%02X%02X%02X", r, g, b); }
     private static String fmt(double v) { return String.valueOf(v); }
     //endregion

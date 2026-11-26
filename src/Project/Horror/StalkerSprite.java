@@ -36,9 +36,9 @@ final class StalkerSprite {
             double alert = stalker.alert(), scan = stalker.scan(), clock = stalker.clock();
 
             g.setColor(new Color(0, 0, 0, 110));
-            g.fill(new Ellipse2D.Double(cx - 26 * s, bottom - 3 * s, 52 * s, 7 * s));
+        g.fill(new Ellipse2D.Double(cx - 26 * s, bottom - 3 * s, 52 * s, 7 * s));
 
-            double breath = Math.sin(clock * 2.2) * 1.4 * (1 - stride);
+        double breath = Math.sin(clock * 2.2) * 1.4 * (1 - stride);
             double crouch = duck * 26;
             double hipY = 40 - crouch * 0.6, shoulderY = 76 - crouch + breath, headY = 92 - crouch + breath * 1.2;
             double leanX = lean * 5 + duck * 5;
@@ -73,10 +73,6 @@ final class StalkerSprite {
                 g.fill(new Ellipse2D.Double(3.5 * s, -2 * s, 3 * s, 3 * s));
                 g.setColor(withAlpha(glow, (int) (60 * alert)));
                 g.fill(new Ellipse2D.Double(-12 * s, -8 * s, 24 * s, 14 * s));
-            }
-            if (alert > 0.35) {
-                g.setColor(new Color(20, 0, 0));
-                g.fill(new Ellipse2D.Double(-5 * s, -9 * s, 10 * s, (3 + 6 * alert) * s));
             }
             g.setTransform(saved);
         } finally { g.dispose(); }

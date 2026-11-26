@@ -35,6 +35,7 @@ public final class Nodes {
         pure("height", CAT_IN, List.of(), I, _ -> "pi[1]");
         pure("quality", CAT_IN, List.of(), I, _ -> "pi[2]");
         pure("cameraAngle", CAT_IN, List.of(), F, _ -> "pf[0]");
+        pure("gameTanHalfFov", CAT_IN, List.of(), F, _ -> "pf[8]");
         pure("cameraHeight", CAT_IN, List.of(), F, _ -> "pf[1]");
         pure("cameraPitch", CAT_IN, List.of(), F, _ -> "pf[2]");
         pure("playerX", CAT_IN, List.of(), F, _ -> "pf[3]");
@@ -101,6 +102,9 @@ public final class Nodes {
         });
         pure("mixColor", CAT_COLOR, List.of(p("a", C), p("b", C), p("t", F)), C, emit -> "rf_mixColor(" + emit.in(0) + ", " + emit.in(1) + ", " + emit.in(2) + ")");
         pure("brightness", CAT_COLOR, List.of(p("c", C), p("k", F)), C, emit -> "rf_brightness(" + emit.in(0) + ", " + emit.in(1) + ")");
+        pure("skyCeiling", CAT_IN, List.of(), B, _ -> "(pf[7] != 0.0)");
+        pure("skyColor", CAT_COLOR, List.of(p("x", F), p("y", F), p("z", F)), C,
+                emit -> "rf_skyColor(" + emit.in(0) + ", " + emit.in(1) + ", " + emit.in(2) + ", pf[6])");
         pure("fog", CAT_COLOR, List.of(p("c", C), p("fogColor", C), p("distance", F), p("density", F)), C, emit -> "rf_fog(" + emit.in(0) + ", " + emit.in(1) + ", " + emit.in(2) + ", " + emit.in(3) + ")");
         pure("posterize", CAT_COLOR, List.of(p("c", C), p("levels", F)), C, emit -> "rf_posterize(" + emit.in(0) + ", " + emit.in(1) + ")");
 
@@ -111,7 +115,7 @@ public final class Nodes {
 
         // ---- rays ----
         custom("rayDirection", CAT_RAY, List.of(p("screenX", F), p("cameraAngle", F)),
-                List.of(p("dirX", F), p("dirY", F)), Nodes::emitRayDirection, Param.num("fov", 60, 1, 170));
+                List.of(p("dirX", F), p("dirY", F)), Nodes::emitRayDirection, Param.num("fov", 60, 0, 170));
         custom("rayGrid", CAT_RAY, List.of(p("originX", F), p("originY", F), p("dirX", F), p("dirY", F)),
                 List.of(p("hit", B), p("distance", F), p("side", I), p("cell", I), p("hitU", F)),
                 Nodes::emitRayGrid, Param.whole("maxSteps", 64, 1, 2000));
@@ -473,10 +477,10 @@ String of(Emit emit);
     //endregion
     //region Ray Casting
     private static void emitRayDirection(Emit emit) {
-        double fov = Math.clamp(emit.fparam("fov"), 1, 170);
-        double t = Math.tan(Math.toRadians(fov) / 2);
+        double fov = emit.fparam("fov");
+        String tan = fov <= 0 ? "pf[8]" : emit.flit(Math.tan(Math.toRadians(Math.clamp(fov, 1, 170)) / 2));
         String a = "a" + emit.id;
-        emit.line(emit.ft() + " " + a + " = " + emit.in(1) + " + rf_atan(" + emit.in(0) + " * " + emit.flit(t) + ");");
+        emit.line(emit.ft() + " " + a + " = " + emit.in(1) + " + rf_atan(" + emit.in(0) + " * " + tan + ");");
         emit.decl(0, "rf_cos(" + a + ")");
         emit.decl(1, "rf_sin(" + a + ")");
     }

@@ -49,9 +49,9 @@ public final class NetModule implements GameModule {
         int port = values.isEmpty() ? NetSettings.port() : portOf(values, 0);
         if (port < 0) { args.warn(get("net.usage.host")); return; }
         if (NetSession.current() != null) { args.warn(get("net.alreadyActive")); return; }
-        if (context.isCustomMap()) { args.warn(get("net.customMap")); return; }
         try {
-            session = NetSession.host(port, specOf(context));
+            MazeData maze = context.currentMaze();
+            session = maze == null ? NetSession.host(port, specOf(context)) : NetSession.host(port, specOf(context), maze);
             args.info(format("net.hosting", session.port()));
         } catch (IOException | RuntimeException exception) { args.warn(format("net.error", exception.getMessage())); }
     }
@@ -110,7 +110,7 @@ public final class NetModule implements GameModule {
         publish(context, current);
     }
     private void matchRace(GameContext context, NetSession current) {
-        if (handingOff || context.isCustomMap()) {
+        if (handingOff) {
             leave(context, current);
             return;
         }
@@ -132,7 +132,7 @@ public final class NetModule implements GameModule {
         NetSession current = session(context);
         if (current == null) return;
         publish(context, current);
-        current.close();
+        current.leaveGracefully();
         session = null;
         context.clearMaze();
     }
@@ -253,7 +253,7 @@ public final class NetModule implements GameModule {
     }
 
     private static MazeSpec specOf(GameContext context) {
-        return new MazeSpec(context.seed(), context.mazeWidth(), context.mazeHeight(), context.floorCount(),
+        return new MazeSpec(context.isCustomMap() ? MazeData.CUSTOM_SEED : context.seed(), context.mazeWidth(), context.mazeHeight(), context.floorCount(),
                 context.geometry(), context.hasFloors(), context.fogOfWar(), context.algorithm(), context.finishMode(), HorrorModule.wanted());
     }
     private static MazeSpec canonical(MazeSpec spec) {

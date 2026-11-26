@@ -1,11 +1,9 @@
 package Project.Audio;
 
-import Project.Helpers.Settings;
+import Project.Helpers.*;
 
 import javax.sound.sampled.*;
-import java.util.EnumMap;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -47,7 +45,7 @@ public final class Sound {
         synchronized (Sound.class) {
             muted = value;
             try { Settings.set(MUTE_KEY, String.valueOf(value)); }
-            catch (RuntimeException ignored) { }
+            catch (RuntimeException ignored) { Log.debug(ignored); }
         }
         if (value) silence();
         Music.muteChanged(value);
@@ -58,7 +56,7 @@ public final class Sound {
         SourceDataLine line = activeLine;
         if (line != null) {
             try { line.flush(); }
-            catch (RuntimeException ignored) { }
+            catch (RuntimeException ignored) { Log.debug(ignored); }
         }
     }
     public static float effectLevel() {
@@ -73,7 +71,7 @@ public final class Sound {
             QUEUE.offer(scale(samples(effect), effectLevel()));
             ensurePlayer();
         }
-        catch (RuntimeException ignored) { }
+        catch (RuntimeException ignored) { Log.debug(ignored); }
     }
 
     public static void clearQueue() { QUEUE.clear(); }

@@ -11,7 +11,6 @@ public final class OriginalEngines {
             new Original("raymarch"),
             new Original("raytrace"),
             new Original("moriarty"));
-    private static final double TAN_HALF_FOV = Math.tan(Math.toRadians(30));
     private static final double HYP_PLANE_LENGTH = Math.tan(Math.toRadians(70));
     private static final double AMBIENT = 0.015, FLASH = 0.5, FLAT_LIGHT = 0.12;
     //endregion
@@ -170,10 +169,11 @@ public final class OriginalEngines {
         if (!hyper) {
             int cosA = un(b, "cos", pose, "angle"), sinA = un(b, "sin", pose, "angle");
             int cosP = un(b, "cos", pose, "pitch"), sinP = un(b, "sin", pose, "pitch");
-            int xT = bin(b, "mul", sx, "out", b.c(TAN_HALF_FOV), "out");
+            int tanFov = b.n("gameTanHalfFov");
+            int xT = bin(b, "mul", sx, "out", tanFov, "out");
             int hF = un(b, "toFloat", b.n("height"), "out");
             int wF = un(b, "toFloat", b.n("width"), "out");
-            int vScale = bin(b, "mul", bin(b, "div", hF, "out", wF, "out"), "out", b.c(TAN_HALF_FOV), "out");
+            int vScale = bin(b, "mul", bin(b, "div", hF, "out", wF, "out"), "out", tanFov, "out");
             int yV = bin(b, "mul", sy, "out", vScale, "out");
             int fwd = bin(b, "sub", cosP, "out", bin(b, "mul", yV, "out", sinP, "out"), "out");
             int up = bin(b, "add", sinP, "out", bin(b, "mul", yV, "out", cosP, "out"), "out");
@@ -257,19 +257,15 @@ public final class OriginalEngines {
         int wallShade = bin(b, "mul", sideShade(b, scene), "out", light(b, scene, scene.P(), facing(b, scene)), "out");
         int wallPix = fogWhenQuality(b, scene, with(b, "brightness", wallTexture(b, scene), "out", "c", wallShade, "out", "k"), scene.P());
         Along along = floorAlong(b, scene), ce = ceilingAlong(b, scene);
-        int floorPix = fogAlways(b, with(b, "brightness", surfaceTexture(b, scene, along, false), "out", "c",
-                light(b, scene, along.planeDist(), -1), "out", "k"), along.planeDist());
-        int ceilPix = fogAlways(b, with(b, "brightness", surfaceTexture(b, scene, ce, true), "out", "c",
-                bin(b, "mul", b.c(0.6), "out", light(b, scene, ce.planeDist(), -1), "out"), "out", "k"), ce.planeDist());
+        int floorPix = planeShade(b, scene, surfaceTexture(b, scene, along, false), along, 0.05);
+        int ceilPix = planeShade(b, scene, surfaceTexture(b, scene, ce, true), ce, 0.05);
         return compose(b, scene, wallPix, ceilPix, floorPix);
     }
     private static int src(B b, Scene scene) {
         Along along = floorAlong(b, scene), ce = ceilingAlong(b, scene);
         int wallPix = with(b, "brightness", wallTexture(b, scene), "out", "c", light(b, scene, scene.P(), facing(b, scene)), "out", "k");
-        int floorPix = fogAlways(b, with(b, "brightness", surfaceTexture(b, scene, along, false), "out", "c",
-                light(b, scene, along.planeDist(), -1), "out", "k"), along.planeDist());
-        int ceilPix = fogAlways(b, with(b, "brightness", surfaceTexture(b, scene, ce, true), "out", "c",
-                bin(b, "mul", b.c(0.5), "out", light(b, scene, ce.planeDist(), -1), "out"), "out", "k"), ce.planeDist());
+        int floorPix = planeShade(b, scene, surfaceTexture(b, scene, along, false), along, 0.05);
+        int ceilPix = planeShade(b, scene, surfaceTexture(b, scene, ce, true), ce, 0.05);
         return compose(b, scene, wallPix, ceilPix, floorPix);
     }
     private static int raymarch(B b, Scene scene) {
@@ -277,10 +273,8 @@ public final class OriginalEngines {
         int shaded = sel(b, qualityAtLeast(b, scene.qualityF(), 2), bin(b, "mul", shade, "out", occlusion(b, scene), "out"), shade);
         int wallPix = fogWhenQuality(b, scene, with(b, "brightness", wallTexture(b, scene), "out", "c", shaded, "out", "k"), scene.P());
         Along along = floorAlong(b, scene), ce = ceilingAlong(b, scene);
-        int floorPix = fogAlways(b, with(b, "brightness", surfaceTexture(b, scene, along, false), "out", "c",
-                light(b, scene, along.planeDist(), -1), "out", "k"), along.planeDist());
-        int ceilPix = fogAlways(b, with(b, "brightness", surfaceTexture(b, scene, ce, true), "out", "c",
-                bin(b, "mul", b.c(0.6), "out", light(b, scene, ce.planeDist(), -1), "out"), "out", "k"), ce.planeDist());
+        int floorPix = planeShade(b, scene, surfaceTexture(b, scene, along, false), along, 0.05);
+        int ceilPix = planeShade(b, scene, surfaceTexture(b, scene, ce, true), ce, 0.05);
         return compose(b, scene, wallPix, ceilPix, floorPix);
     }
     private static int dirZ(B b, Scene scene) {
@@ -321,8 +315,20 @@ public final class OriginalEngines {
         return bin(b, "max", dot, "out", b.c(0), "out");
     }
     private static int compose(B b, Scene scene, int wall, int ceiling, int floor) {
-        int upper = sel(b, bin(b, "greaterEq", scene.r(), "out", b.c(0), "out"), ceiling, floor);
+        int sky = with(b, "skyColor", scene.dxN(), scene.dxP(), "x", scene.dyN(), scene.dyP(), "y", scene.r(), "out", "z");
+        int upperCeiling = sel(b, b.n("skyCeiling"), sky, ceiling);
+        int upper = sel(b, bin(b, "greaterEq", scene.r(), "out", b.c(0), "out"), upperCeiling, floor);
         return sel(b, scene.isWall(), wall, upper);
+    }
+    private static int planeShade(B b, Scene scene, int tex, Along along, double lowest) {
+        double flashlight = scene.hyper() ? 2.0 * 1.6 : 2.0;
+        int k = with(b, "clamp", bin(b, "sub", b.c(1), "out", bin(b, "div", planeDistance(b, scene, along), "out", b.c(flashlight), "out"), "out"), "out",
+                "x", b.c(lowest), "out", "lo", b.c(1), "out", "hi");
+        return with(b, "brightness", tex, "out", "c", k, "out", "k");
+    }
+    private static int planeDistance(B b, Scene scene, Along along) {
+        if (scene.hyper()) return along.rayDist();
+        return bin(b, "mul", along.rayDist(), "out", un(b, "sqrt", bin(b, "add", b.c(1), "out", bin(b, "mul", scene.r(), "out", scene.r(), "out"), "out"), "out"), "out");
     }
     private static int occlusion(B b, Scene scene) {
         int s1 = with(b, "smoothstep", b.c(0), "out", "edge0", b.c(0.22), "out", "edge1", scene.hgt(), "out", "x");

@@ -1,15 +1,14 @@
 package Project.Progress;
 
-import Project.Helpers.AppPaths;
+import Project.Helpers.*;
 
 import java.awt.*;
 import java.awt.geom.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.List;
-import java.util.Properties;
 import java.util.function.Predicate;
 
 public final class Achievements {
@@ -253,9 +252,10 @@ public final class Achievements {
     }
     private static void save() {
         try {
-            Files.createDirectories(root);
-            try (Writer writer = Files.newBufferedWriter(root.resolve(FILE_NAME), StandardCharsets.UTF_8)) { PROPERTIES.store(writer, "RCJMS achievements"); }
-        } catch (IOException ignored) { }
+            StringWriter writer = new StringWriter();
+            PROPERTIES.store(writer, "RCJMS achievements");
+            AtomicFiles.writeString(root.resolve(FILE_NAME), writer.toString());
+        } catch (IOException exception) { System.err.println("RCJMS: could not save achievements: " + exception.getMessage()); }
     }
     //endregion
 }

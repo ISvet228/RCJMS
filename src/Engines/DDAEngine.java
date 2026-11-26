@@ -230,7 +230,7 @@ public final class DDAEngine implements RenderEngine {
             for (int y = 0; y < screenHeight; y++) {
                 double v = (halfHeight - (y + 0.5)) / focal;
                 double a = pitchCos - pitchSin * v;
-                if (Math.abs(a) < 0.02) a = a < 0 ? -0.02 : 0.02;
+                if (Math.abs(a) < 1e-6) { rowInvA[y] = 0; rowZA[y] = 0; continue; }
                 rowInvA[y] = 1.0 / a;
                 rowZA[y] = (pitchSin + pitchCos * v) / a;
             }
@@ -532,6 +532,13 @@ public final class DDAEngine implements RenderEngine {
         if (forward <= 1e-6) return up < 0 ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
         return halfHeight - focal * up / forward;
     }
+    private static double floorRowDepth(int y, double horizon, double focal, double halfHeight, double sinP, double cosP, double planeOffset, boolean hyperbolic) {
+        if (hyperbolic) return rowDepth(y, horizon, focal, halfHeight, sinP, cosP, planeOffset, true);
+        double v = (halfHeight - (y + 0.5)) / focal;
+        double den = sinP + v * cosP;
+        if (den >= -1e-9) return Double.NaN;
+        return planeOffset * (cosP - v * sinP) / den;
+    }
     private static double rowDepth(int y, double horizon, double focal, double halfHeight, double sinP, double cosP, double planeOffset, boolean hyperbolic) {
         if (hyperbolic) {
             double delta = planeOffset < 0 ? y - horizon : horizon - y;
@@ -540,8 +547,7 @@ public final class DDAEngine implements RenderEngine {
         double v = (halfHeight - (y + 0.5)) / focal;
         double den = sinP + v * cosP;
         if (Math.abs(den) < 1e-9) return Double.NaN;
-        double depth = planeOffset * (cosP - v * sinP) / den;
-        return depth > 0 ? depth : Double.NaN;
+        return planeOffset * (cosP - v * sinP) / den;
     }
     private static double[] castWallForRow(double ox, double oy, double rx, double ry, int[][] map, int mapWidth, int mapHeight) {
         int mapX = (int) Math.floor(ox), mapY = (int) Math.floor(oy);
@@ -578,8 +584,10 @@ public final class DDAEngine implements RenderEngine {
         final int[] wallPixels = fr.wallTexture.pixels(), finishPixels = fr.finishTexture.pixels();
 
         parallelRange(fr, height, y -> {
-            final double rowZ = rowZA[y];
-            final double rowScale = rowInvA[y];
+            if (rowInvA[y] == 0) { java.util.Arrays.fill(fr.renderPixels, y * width, y * width + width, 0xFF000000); return; }
+            final double sign = rowInvA[y] > 0 ? 1.0 : -1.0;
+            final double rowZ = rowZA[y] * sign;
+            final double rowScale = Math.abs(rowInvA[y]);
             final boolean floorPlane = rowZ < 0;
             final double tPlane;
             if (rowZ < -1e-12) tPlane = -h / rowZ;
@@ -588,7 +596,7 @@ public final class DDAEngine implements RenderEngine {
 
             for (int x = 0; x < width; x++) {
                 double lateralRow = fr.cameraXCache[x] * planeLength * rowScale;
-                double rx = dirX - lateralRow * dirY, ry = dirY + lateralRow * dirX;
+                double rx = sign * dirX - lateralRow * dirY, ry = sign * dirY + lateralRow * dirX;
                 int offset = y * width + x;
                 final double norm = Math.sqrt(rx * rx + ry * ry + rowZ * rowZ);
 
@@ -680,11 +688,12 @@ public final class DDAEngine implements RenderEngine {
         final double planeLength2 = planeX * planeX + planeY * planeY;
 
         parallelRange(fr, fr.renderHeight, y -> {
-            double depth = rowDepth(y, horizon, focal, halfHeight, sinP, cosP, (-fr.cameraHeight), hyperbolic);
-            boolean floor = depth > 0;
+            if (rowInvA[y] == 0) return;
+            double depth = floorRowDepth(y, horizon, focal, halfHeight, sinP, cosP, (-fr.cameraHeight), hyperbolic);
+            boolean floor = !Double.isNaN(depth);
             if (!floor) {
                 depth = rowDepth(y, horizon, focal, halfHeight, sinP, cosP, (1.0 - fr.cameraHeight), hyperbolic);
-                if (!(depth > 0)) {
+                if (Double.isNaN(depth)) {
                     if (fr.skyCeiling) skyRow(y, dirX, dirY, planeX, planeY, rowInvA[y], rowZA[y], wallTop, wallBottom, ceilEdge);
                     return;
                 }
@@ -693,7 +702,7 @@ public final class DDAEngine implements RenderEngine {
             double vecX = planeX * rowScale, vecY = planeY * rowScale;
             double leftRayX = dirX - vecX, leftRayY = dirY - vecY;
             double rayStepX = (2.0 * vecX) / width, rayStepY = (2.0 * vecY) / width;
-            double perceived = depth;
+            double perceived = Math.abs(depth);
             double flatDepth = hyperbolic ? HyperbolicMath.inverseHyperbolicDistance(perceived, cfgCurvature) : depth;
             double brightness = Math.clamp(1.0 - perceived / lightDistance, 0.05, 1.0);
             final double rowV = rowZA[y];
@@ -710,7 +719,7 @@ public final class DDAEngine implements RenderEngine {
                     double pixelBrightness = brightness;
                     if (!hyperbolic) {
                         double c = fr.cameraXCache[x];
-                        pixelBrightness = Math.clamp(1.0 - depth * Math.sqrt(1.0 + planeLength2 * c * c + rowV * rowV) / lightDistance, 0.05, 1.0);
+                        pixelBrightness = Math.clamp(1.0 - Math.abs(depth) * Math.sqrt(1.0 + planeLength2 * c * c + rowV * rowV) / lightDistance, 0.05, 1.0);
                     }
                     fr.renderPixels[offset + x] = applyBrightness(color, pixelBrightness);
                 }
@@ -774,22 +783,6 @@ public final class DDAEngine implements RenderEngine {
         int ty = Math.min((int)(fracY * height), height - 1);
         return texture.pixels()[ty * width + tx];
     }
-    private int sampleTextureBilinear(RuntimeTexture texture, double worldX, double worldY, int baseColor) {
-        int width = texture.width(), height = texture.height();
-        if (width <= 0 || height <= 0) return baseColor;
-        double u = (worldX - Math.floor(worldX)) * width - 0.5;
-        double v = (worldY - Math.floor(worldY)) * height - 0.5;
-        int x0 = Math.floorMod((int) Math.floor(u), width), x1 = Math.floorMod(x0 + 1, width);
-        int y0 = Math.floorMod((int) Math.floor(v), height), y1 = Math.floorMod(y0 + 1, height);
-        double fx = u - Math.floor(u), fy = v - Math.floor(v);
-        int[] p = texture.pixels();
-        int c00 = p[y0 * width + x0], c10 = p[y0 * width + x1], c01 = p[y1 * width + x0], c11 = p[y1 * width + x1];
-        double w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy), w01 = (1 - fx) * fy, w11 = fx * fy;
-        int r = (int) (((c00 >> 16) & 255) * w00 + ((c10 >> 16) & 255) * w10 + ((c01 >> 16) & 255) * w01 + ((c11 >> 16) & 255) * w11);
-        int g = (int) (((c00 >> 8) & 255) * w00 + ((c10 >> 8) & 255) * w10 + ((c01 >> 8) & 255) * w01 + ((c11 >> 8) & 255) * w11);
-        int b = (int) ((c00 & 255) * w00 + (c10 & 255) * w10 + (c01 & 255) * w01 + (c11 & 255) * w11);
-        return (r << 16) | (g << 8) | b;
-    }
     static int sampleWallTexture(RuntimeTexture texture, TraceHit hit) {
         if (texture.width() <= 0 || texture.height() <= 0) return hit.type == 2 ? finishBaseColor : wallBaseColor;
         int tx = Math.min((int) (hit.wallU * texture.width()), texture.width() - 1);
@@ -799,7 +792,6 @@ public final class DDAEngine implements RenderEngine {
     private int surfacePlaneColor(RuntimeTexture texture, double worldX, double worldY, int baseColor) { return surfaceColor(texture, worldX, worldY, baseColor, cfgQuality); }
     private int surfaceColor(RuntimeTexture texture, double worldX, double worldY, int baseColor, int quality) {
         if (quality == 0) return baseColor;
-        if (quality == 2) return sampleTextureBilinear(texture, worldX, worldY, baseColor);
         return sampleTexture(texture, worldX, worldY, baseColor);
     }
     //endregion

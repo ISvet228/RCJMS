@@ -87,7 +87,7 @@ public class VictoryView extends JPanel {
 
         restartButton.addActionListener(_ -> RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "main_menu"));
         add(restartButton);
-        exitButton.addActionListener(_ -> System.exit(0));
+        exitButton.addActionListener(_ -> RCJMS.quit());
         add(exitButton);
 
         animationTimer = new Timer(16, _ -> { tick(); repaint(); });
@@ -164,7 +164,7 @@ public class VictoryView extends JPanel {
     private GameView createShowcase() {
         try { return new GameView(buildRoomMap()); }
         catch (IOException exception) {
-            exception.printStackTrace();
+            Log.error(exception);
             return null;
         }
     }

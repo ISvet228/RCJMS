@@ -4,12 +4,6 @@ import Project.CreatorKit.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
-record Issue(boolean error, int node, String text) {
-//region Formatting
-@Override public String toString() { return (error ? L.t("ec.issue.error") : L.t("ec.issue.warning")) + " " + text; }
-//endregion
- }
-
 /** Checks a project before code is generated. Errors block saving; warnings do not. */
 public final class Validator {
     //region Variables

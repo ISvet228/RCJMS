@@ -30,6 +30,7 @@ public interface GameContext {
     void startSeeded(String seed, int width, int height, int floors, int geometry, boolean hasFloors, boolean fog, String algorithm, int finishMode);
     void useMaze(MazeData maze, boolean fog);
     void clearMaze();
+    default MazeData currentMaze() { return null; }
     //endregion
 
     boolean isPaused();

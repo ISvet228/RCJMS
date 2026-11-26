@@ -1,5 +1,7 @@
 package Project.ThemeCreator;
 
+import Project.Helpers.AtomicFiles;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -34,13 +36,7 @@ public final class ThemeStore {
         return out;
     }
     public static ThemeDoc load(String id) throws IOException { return ThemeIO.fromJson(Files.readString(file(id), StandardCharsets.UTF_8)); }
-    public static void save(ThemeDoc doc) throws IOException {
-        Files.createDirectories(folder());
-        Path target = file(doc.id);
-        Path temp = folder().resolve(doc.id + ".tmp");
-        Files.writeString(temp, ThemeIO.toJson(doc), StandardCharsets.UTF_8);
-        Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-    }
+    public static void save(ThemeDoc doc) throws IOException { AtomicFiles.writeString(file(doc.id), ThemeIO.toJson(doc)); }
     public static String slug(String name) {
         String s = name == null ? "" : name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-+|-+$", "");
         return s.isEmpty() ? "theme" : s;

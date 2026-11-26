@@ -1,6 +1,6 @@
 package Project.Credits;
 
-import Project.Helpers.FontCache;
+import Project.Helpers.*;
 import Project.MainMenu.MainMenuView;
 import Project.RCJMS;
 import Project.Helpers.NSLocalizedString;
@@ -112,7 +112,7 @@ public class CreditsView extends JPanel {
         if (scrollTimer != null) scrollTimer.stop();
 
         try {RCJMS.instance.changeView(RCJMS.instance.mainMenuView = new MainMenuView(), "Main Menu");}
-        catch (Exception exception) {exception.printStackTrace();}
+        catch (Exception exception) {Log.error(exception);}
     }
     //endregion
 
@@ -267,7 +267,7 @@ public class CreditsView extends JPanel {
                 Desktop desktop = Desktop.getDesktop();
                 if (desktop.isSupported(Desktop.Action.BROWSE)) desktop.browse(new URI(url));
             }
-        } catch (Exception exception) {exception.printStackTrace();}
+        } catch (Exception exception) {Log.error(exception);}
     }
     //endregion
 }

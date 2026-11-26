@@ -166,23 +166,8 @@
         int ty = min((int)(fracY * th), th - 1);
         return tex[ty * tw + tx];
     }
-    static int sampleBilinear(__global const int* tex, int tw, int th, float wx, float wy, int base) {
-        if (tw <= 0 || th <= 0) return base;
-        float u = (wx - floor(wx)) * tw - 0.5f;
-        float v = (wy - floor(wy)) * th - 0.5f;
-        int x0 = (((int)floor(u)) % tw + tw) % tw, x1 = (x0 + 1) % tw;
-        int y0 = (((int)floor(v)) % th + th) % th, y1 = (y0 + 1) % th;
-        float fx = u - floor(u), fy = v - floor(v);
-        int c00 = tex[y0 * tw + x0], c10 = tex[y0 * tw + x1], c01 = tex[y1 * tw + x0], c11 = tex[y1 * tw + x1];
-        float w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy), w01 = (1 - fx) * fy, w11 = fx * fy;
-        int r = (int)(((c00 >> 16) & 255) * w00 + ((c10 >> 16) & 255) * w10 + ((c01 >> 16) & 255) * w01 + ((c11 >> 16) & 255) * w11);
-        int g = (int)(((c00 >> 8) & 255) * w00 + ((c10 >> 8) & 255) * w10 + ((c01 >> 8) & 255) * w01 + ((c11 >> 8) & 255) * w11);
-        int b = (int)((c00 & 255) * w00 + (c10 & 255) * w10 + (c01 & 255) * w01 + (c11 & 255) * w11);
-        return (r << 16) | (g << 8) | b;
-    }
     static int surfaceColorGpu(__global const int* tex, int tw, int th, float wx, float wy, int base, int quality) {
         if (quality == 0) return base;
-        if (quality == 2) return sampleBilinear(tex, tw, th, wx, wy, base);
         return sampleNearest(tex, tw, th, wx, wy, base);
     }
     static int shadeHit(Hit h, float lightDistance, int tinted, int quality, __global const int* maps, __global const int* meta,

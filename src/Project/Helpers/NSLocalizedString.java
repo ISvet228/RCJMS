@@ -109,7 +109,7 @@ public final class NSLocalizedString {
             Path dir = Files.isDirectory(where) ? where : where.getParent();
             for (int i = 0; dir != null && i < 7; i++, dir = dir.getParent()) if (!roots.contains(dir)) roots.add(dir);
         }
-        catch (Exception ignored) {}
+        catch (Exception ignored) { Log.debug(ignored); }
         return roots;
     }
     private static List<Path> filesystemCandidates(String lang) {
@@ -140,13 +140,13 @@ public final class NSLocalizedString {
         for (Path path : paths) {
             if (!Files.isRegularFile(path)) continue;
             try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) { parse(reader, target); return; }
-            catch (IOException ignored) {}
+            catch (IOException ignored) { Log.debug(ignored); }
         }
         for (String resource : resources) {
             try (InputStream in = NSLocalizedString.class.getResourceAsStream(resource)) {
                 if (in == null) continue;
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) { parse(reader, target); return; }
-            } catch (IOException ignored) {}
+            } catch (IOException ignored) { Log.debug(ignored); }
         }
     }
     private static void parse(BufferedReader reader, Map<String, String> target) throws IOException {
@@ -213,7 +213,7 @@ public final class NSLocalizedString {
         }
         try {
             Method setText = component.getClass().getMethod("setText", String.class);
-            bind(component, key, value -> {try {setText.invoke(component, value);} catch (ReflectiveOperationException ignored) {}});
+            bind(component, key, value -> {try {setText.invoke(component, value);} catch (ReflectiveOperationException ignored) { Log.debug(ignored); }});
             return true;
         }
         catch (NoSuchMethodException ignored) { return false; }
@@ -238,7 +238,7 @@ public final class NSLocalizedString {
         Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
             try {if (event instanceof WindowEvent windowEvent && windowEvent.getID() == WindowEvent.WINDOW_OPENED) registerComponentTree(windowEvent.getWindow());
                 else if (event instanceof HierarchyEvent hierarchyEvent && (hierarchyEvent.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0) registerComponentTree(hierarchyEvent.getComponent());
-            } catch (RuntimeException ignored) {}
+            } catch (RuntimeException ignored) { Log.debug(ignored); }
         }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.HIERARCHY_EVENT_MASK);
     }
     private static void registerComponentTree(Component component) {
@@ -296,7 +296,7 @@ public final class NSLocalizedString {
             synchronized (bindings) { copy = new ArrayList<>(bindings.values()); }
             for (Binding binding : copy) {
                 try { binding.refresh.run(); }
-                catch (RuntimeException ignored) {}
+                catch (RuntimeException ignored) { Log.debug(ignored); }
             }
             synchronized (trackedText) {
                 for (Map.Entry<Object, String> entry : new ArrayList<>(trackedText.entrySet())) {
@@ -321,7 +321,7 @@ public final class NSLocalizedString {
             }
             for (Runnable listener : listeners) {
                 try { listener.run(); }
-                catch (RuntimeException ignored) {}
+                catch (RuntimeException ignored) { Log.debug(ignored); }
             }
         });
     }

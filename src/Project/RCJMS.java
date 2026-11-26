@@ -1,7 +1,8 @@
 package Project;
+
+import Project.Helpers.*;
 import Project.Credits.CreditsView;
-import Project.Audio.Music;
-import Project.Audio.Sound;
+import Project.Audio.*;
 import Project.Net.NetSession;
 import Project.Game.GameView;
 import Project.MainMenu.MainMenuView;
@@ -10,7 +11,6 @@ import Project.EngineCreator.RenderEngineCreatorView;
 import Project.ThemeCreator.ThemeCreatorView;
 import Project.TextureEditor.TextureEditorView;
 import Project.Victory.VictoryView;
-import Project.Helpers.SaveData;
 
 import javax.swing.*;
 import java.awt.*;
@@ -69,6 +69,14 @@ public class RCJMS extends JFrame {
     public static void main(String[] args) {
         Project.Update.GameUpdater.start();
         SwingUtilities.invokeLater(() -> { try {new RCJMS();} catch (IOException exception){throw new RuntimeException(exception);}}); }
+    //endregion
+
+    //region Shutdown
+    public static void quit() {
+        NetSession session = NetSession.current();
+        if (session != null) session.leaveGracefully();
+        System.exit(0);
+    }
     //endregion
 
     //region Window Hotkeys
@@ -131,7 +139,7 @@ public class RCJMS extends JFrame {
         try {
             SaveData.Data data = SaveData.load();
             SaveData.saveSettings(data.language, data.theme, data.renderScale, data.vsync, data.renderEngine, data.renderEngineQuality, GAME_WIDTH, GAME_HEIGHT, fullscreen, data.openCl);
-        } catch (IOException exception) { exception.printStackTrace(); }
+        } catch (IOException exception) { Log.error(exception); }
     }
     //endregion
 

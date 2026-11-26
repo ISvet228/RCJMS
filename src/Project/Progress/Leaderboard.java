@@ -1,6 +1,6 @@
 package Project.Progress;
 
-import Project.Helpers.AppPaths;
+import Project.Helpers.*;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -89,7 +89,7 @@ public final class Leaderboard {
             long millis = Long.parseLong(line.substring(last + 1).trim());
             if (!Double.isFinite(seconds) || seconds <= 0) return;
             BOARDS.computeIfAbsent(line.substring(0, first), unused -> new ArrayList<>()).add(new Entry(seconds, millis));
-        } catch (NumberFormatException ignored) { }
+        } catch (NumberFormatException ignored) { Log.debug(ignored); }
     }
     private static void save() {
         StringBuilder text = new StringBuilder();
@@ -97,10 +97,8 @@ public final class Leaderboard {
             for (Entry entry : board.getValue())
                 text.append(board.getKey()).append('\t').append(entry.seconds()).append('\t').append(entry.epochMillis()).append('\n');
         }
-        try {
-            Files.createDirectories(root);
-            Files.writeString(root.resolve(FILE_NAME), text, StandardCharsets.UTF_8);
-        } catch (IOException ignored) { }
+        try { AtomicFiles.writeString(root.resolve(FILE_NAME), text); }
+        catch (IOException exception) { System.err.println("RCJMS: could not save the leaderboard: " + exception.getMessage()); }
     }
     //endregion
 }

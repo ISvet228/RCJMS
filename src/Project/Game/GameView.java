@@ -24,10 +24,10 @@ import java.io.IOException;
 public class GameView extends JPanel implements Runnable, KeyListener, MouseMotionListener, MouseListener, MouseWheelListener {
     //region Variables
     //region Maze Configuration
-    private static MazeGenerator.FinishMode MAZE_MODE = MazeGenerator.FinishMode.RANDOM_EDGE;
+    private MazeGenerator.FinishMode MAZE_MODE = MazeGenerator.FinishMode.RANDOM_EDGE;
     private String mazeAlgorithmId = MazeAlgorithms.selected().id();
-    private static boolean MAZE_HAS_FLOORS = false;
-    private static int MAZE_FLOORS = 1;
+    private boolean MAZE_HAS_FLOORS = false;
+    private int MAZE_FLOORS = 1;
     private String customSeed;
     private String mazeSeedText = "";
     private final boolean isCustomMap;
@@ -112,54 +112,19 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
     //region Mini Map State
     public static int MINI_MAP_WIDTH = 180, MINI_MAP_HEIGHT = 180;
-    private static final double MINI_MAP_MIN_CELL_PIXELS = 4.0;
-    private static volatile int miniMapCellPixels = 6;
     //endregion
     //region Fonts
-    private final Font fpsFont = FontCache.get(Font.MONOSPACED, Font.BOLD, 20);
-    private final Font openClFont = FontCache.get(Font.MONOSPACED, Font.BOLD, 16);
-    private final Font timerFont = FontCache.get(Font.MONOSPACED, Font.BOLD, 24);
-    private static final Font BADGE_FONT = FontCache.get(Font.MONOSPACED, Font.BOLD, 16);
-    private static final Font BIG_SANS_FONT = FontCache.get(Font.SANS_SERIF, Font.BOLD, 80);
     private static final Font SMALL_SANS_FONT = FontCache.get(Font.SANS_SERIF, Font.PLAIN, 20);
-    private static final Font BIG_MONO_FONT = FontCache.get(Font.MONOSPACED, Font.BOLD, 56);
-    private static final Font FOG_HINT_FONT = FontCache.get(Font.MONOSPACED, Font.BOLD, 12);
     //endregion
-    //region Fog Of War State
-    private static final double FOG_REVEAL_RADIUS = 4.5, FOG_REVEAL_SPEED = 3.0, FOG_RAY_STEP = 0.08;
-    private static final int FOG_RAY_COUNT = 120;
-    private boolean fogMinimap = false;
-    private boolean fogMapVisible = true;
-    private float[][][] explored;
-    private int[][] fogVisitStamp;
-    private int fogFrame = 0;
-    //endregion
+    private final MiniMap miniMap = new MiniMap();
+    private final Hud hud = new Hud();
     //region Text Mode State
     private final StringBuilder textInput = new StringBuilder();
     private String textStatus = "type f, b, l, r (tiles) or tl, tr (quarter turns), e.g. f3 tr f2";
     private BufferedImage textScreen;
     private static final java.util.regex.Pattern TEXT_MOVE = java.util.regex.Pattern.compile("(t[lr]|[fblr])(\\d*)");
     //endregion
-    //region Floor Transition State
-    private static final double STAIR_ANIMATION_SPEED = 1.0;
-    private static final double STEP_DURATION = 1.6;
-    private static final double CROSS_DURATION = 1.1;
-    private static final double STEP_HEIGHT = 0.3;
-    private static final double STEP_LEAN = 0.12;
-    private static final double STEP_WALK = 0.3;
-    private static final int STAIR_STEPS = 5;
-    private static final double FOOTFALL = 0.03;
-    private static final double LAND_SHAKE = 0.03;
-    private static final double CAPTION_ROLL_DURATION = 0.5;
-    private static final double CAPTION_HOLD_DURATION = 0.9;
-    private static final double CAPTION_FADE_DURATION = 0.4;
-    private boolean isFloorTransitioning = false, floorSwitchApplied = false;
-    private double floorTransitionTime = 0;
-    private int transitionFromFloor = 0, transitionToFloor = 0;
-    private int transitionDirection = 0;
-    private BufferedImage transitionSnapshot;
-    private double climbStartX, climbStartY;
-    //endregion
+    private final FloorTransition transition = new FloorTransition();
     //region Loading State
     private volatile boolean renderPrepPending = true;
     private volatile Thread busyWorker;
@@ -174,12 +139,15 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private Thread gameThread;
     private boolean isGameRunning = false;
     private boolean isPaused = false, isDebugMode = false;
+    private volatile boolean pauseFreezesWorld = true;
     private long gameStartTime = System.currentTimeMillis();
     private long pauseStartTime = 0, pausedTime = 0, elapsedSeconds;
     //endregion
     //region Game Modules
     private final java.util.List<GameModule> features = ModuleRegistry.create();
     private final java.util.Set<GameModule> brokenModules = new java.util.HashSet<>();
+    private final java.util.Map<GameModule, Integer> moduleFailures = new java.util.HashMap<>();
+    private static final int MODULE_FAILURE_LIMIT = 120;
     private final GameContext gameContext = new ModuleContext();
     private volatile String flashText = "";
     private volatile long flashUntilMillis = 0;
@@ -190,8 +158,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private String pauseFilterName = "";
     //endregion
     //region FPS Counter State
-    private int frameCounter = 0, currentFps = 0;
-    private long fpsWindowStart = System.currentTimeMillis();
     //endregion
     //region Console State
     private final DevConsole console = new DevConsole();
@@ -268,7 +234,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         addMouseWheelListener(this);
 
         try { cursorRobot = new Robot(); }
-        catch (Exception exception) { exception.printStackTrace(); }
+        catch (Exception exception) { Log.error(exception); }
 
         Toolkit toolkit = Toolkit.getDefaultToolkit();
         invisibleCursor = toolkit.createCustomCursor(toolkit.createImage(new byte[0]), new Point(0, 0), "hidden");
@@ -313,7 +279,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         addMouseWheelListener(this);
 
         try { cursorRobot = new Robot(); }
-        catch (Exception exception) { exception.printStackTrace(); }
+        catch (Exception exception) { Log.error(exception); }
 
         Toolkit toolkit = Toolkit.getDefaultToolkit();
         invisibleCursor = toolkit.createCustomCursor(toolkit.createImage(new byte[0]), new Point(0, 0), "hidden");
@@ -344,7 +310,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         addMouseWheelListener(this);
 
         try {cursorRobot = new Robot();}
-        catch (Exception exception) {exception.printStackTrace();}
+        catch (Exception exception) {Log.error(exception);}
 
         Toolkit toolkit = Toolkit.getDefaultToolkit();
         invisibleCursor = toolkit.createCustomCursor(toolkit.createImage(new byte[0]), new Point(0, 0), "hidden");
@@ -359,7 +325,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         isGameRunning = true;
         if (!consoleReady) {
             consoleReady = true;
-            registerConsoleCommands();
+            new GameConsoleCommands(new ConsoleBridge()).register();
             eachModule(feature -> feature.onConsoleReady(gameContext));
             Project.OpenCl.GpuRuntime.setLogSink(line -> console.log(line.contains("disabled") || line.contains("unavailable") ? DevConsole.Level.WARN : DevConsole.Level.INFO, line));
             console.log(DevConsole.Level.INFO, "developer console: press ~ and type --help");
@@ -395,6 +361,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                             update(deltaTime);
                             autoRender.update(frameSeconds);
                         }
+                        else if (!pauseFreezesWorld) notifyUpdate(deltaTime);   // live multiplayer: the room (stalker, other players) keeps going while this player is in the pause menu
                         render();
                     }
                     if (isVSyncEnabled()) {
@@ -410,11 +377,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
                         Thread.sleep(busyWorker != null ? BUSY_FRAME_MS : 1);
                         nextVSyncTime = System.nanoTime();
                     }
-                    trackFps();
+                    hud.trackFps();
                 }
                 catch (InterruptedException exception) { Thread.currentThread().interrupt(); break; }
                 catch (Throwable exception) {
-                    if (!errorReported) { errorReported = true; exception.printStackTrace(); }
+                    if (!errorReported) { errorReported = true; Log.error(exception); }
                     try { Thread.sleep(5); }
                     catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
                     lastFrameTime = System.nanoTime();
@@ -428,6 +395,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (paused == isPaused) return;
         if (paused && isBusy()) return;
         isPaused = paused;
+        if (paused) pauseFreezesWorld = Project.Net.NetSession.current() == null;   // a race in a room cannot be paused for everybody
         notifyPause(paused);
         console.log(DevConsole.Level.INFO, paused ? "paused" : "resumed");
         if (paused) {
@@ -436,7 +404,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             pauseFilterName = currentFilterName();
             pauseMenu.open(hudVisible, pauseFilterName);
         } else {
-            pausedTime += System.currentTimeMillis() - pauseStartTime;
+            if (pauseFreezesWorld) pausedTime += System.currentTimeMillis() - pauseStartTime;
             hideCursor();
         }
     }
@@ -481,10 +449,14 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         } catch (Exception ignored) { }
         return 1_000_000_000L / refreshRate;
     }
+    private boolean paintErrorReported;   // game thread only: report a failing paint once, not every frame
     private void paintFrameSynchronously() {
         if (!SwingUtilities.isEventDispatchThread()) {
             try { SwingUtilities.invokeAndWait(() -> paintImmediately(0, 0, getWidth(), getHeight())); }
-            catch (Exception ignored) { }
+            catch (InterruptedException exception) { Thread.currentThread().interrupt(); }   // keep the stop request, the loop must see it
+            catch (java.lang.reflect.InvocationTargetException exception) {
+                if (!paintErrorReported) { paintErrorReported = true; exception.getCause().printStackTrace(); }
+            }
         }
         else paintImmediately(0, 0, getWidth(), getHeight());
     }
@@ -528,11 +500,11 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (KeyBindings.matches(KeyBindings.Action.LEFT, keyEvent)) a = !loading;
         if (KeyBindings.matches(KeyBindings.Action.RIGHT, keyEvent)) d = !loading;
         if (key == KeyEvent.VK_B) isDebugMode = !isDebugMode;
-        if (key == KeyEvent.VK_M && fogMinimap) fogMapVisible = !fogMapVisible;
+        if (key == KeyEvent.VK_M) miniMap.toggleFogVisible();
         if (KeyBindings.matches(KeyBindings.Action.SPRINT, keyEvent)) shift = !loading;
         if (key == KeyEvent.VK_F1) noClip = !noClip;
-        if (key == KeyEvent.VK_EQUALS || key == KeyEvent.VK_PLUS || key == KeyEvent.VK_ADD) miniMapCellPixels = Math.min(20, miniMapCellPixels + 1);
-        if (key == KeyEvent.VK_MINUS || key == KeyEvent.VK_SUBTRACT) miniMapCellPixels = Math.max(3, miniMapCellPixels - 1);
+        if (key == KeyEvent.VK_EQUALS || key == KeyEvent.VK_PLUS || key == KeyEvent.VK_ADD) MiniMap.zoomIn();
+        if (key == KeyEvent.VK_MINUS || key == KeyEvent.VK_SUBTRACT) MiniMap.zoomOut();
         if (pauseKey) {
             setPaused(!isPaused);
         }
@@ -616,7 +588,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     private void handleMouseLook(MouseEvent mouseEvent) {
         if (textMode || isPaused || isBusy() || console.isOpen()) return;
-        if (transitionLocksControls()) return;
+        if (transition.locksControls()) return;
         if (!isShowing()) return;
         Point origin;
         try { origin = getLocationOnScreen(); }
@@ -685,20 +657,17 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //region Player Movement
     private void update(double deltaTiime) {
         notifyUpdate(deltaTiime);
-        if (isFloorTransitioning) {
-            double speed = Math.max(0.05, STAIR_ANIMATION_SPEED);
-            floorTransitionTime += deltaTiime * speed;
-
-            if (!floorSwitchApplied && floorTransitionTime >= STEP_DURATION) {
-                currentFloor = transitionToFloor;
+        if (transition.active()) {
+            if (transition.advance(deltaTiime)) {
+                currentFloor = transition.toFloor();
                 map = map3D[currentFloor];
                 portals = floorPortalsAll[currentFloor];
-                floorSwitchApplied = true;
             }
-
-            if (floorTransitionTime >= transitionTotalDuration()) endFloorTransition();
-            advanceClimb();
-            if (transitionLocksControls()) return;
+            if (transition.climbing()) {
+                playerX = transition.climbX(cameraAngle);
+                playerY = transition.climbY(cameraAngle);
+            }
+            if (transition.locksControls()) return;
         }
 
         double speed = ((shift) ? runSpeed : moveSpeed) * deltaTiime;
@@ -763,7 +732,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         int cellX = Math.clamp((int) playerX, 0, mapWidth() - 1);
         int cellType = map[cellY][cellX];
 
-        if (fogMinimap || textMode) updateFog(deltaTiime);
+        syncMiniMap();
+        if (miniMap.fogEnabled() || textMode) miniMap.updateFog(deltaTiime);
         if (hasFloors()) handleStairs(cellType);
     }
     private boolean applyPortalStep(double startX, double startY, double moveX, double moveY) {
@@ -781,7 +751,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             currentFloor = portal.linkedFloor;
             map = map3D[currentFloor];
             portals = floorPortalsAll[currentFloor];
-            if (!isFloorTransitioning) startPortalTransition(fromFloor, currentFloor);
+            if (!transition.active()) transition.beginPortal(fromFloor, currentFloor);
         }
         playerX = Math.clamp(warped[0], 0.0001, mapWidth() - 0.0001);
         playerY = Math.clamp(warped[1], 0.0001, mapHeight() - 0.0001);
@@ -882,7 +852,9 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
         g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED);
         g2d.setColor(Color.BLACK);
-        g2d.fillRect(0, 0, panelWidth, panelHeight);
+        if (drawX > 0) { g2d.fillRect(0, 0, drawX, panelHeight); g2d.fillRect(drawX + drawWidth, 0, panelWidth - drawX - drawWidth, panelHeight); }
+        if (drawY > 0) { g2d.fillRect(drawX, 0, drawWidth, drawY); g2d.fillRect(drawX, drawY + drawHeight, drawWidth, panelHeight - drawY - drawHeight); }
+        if (drawWidth < panelWidth - 2 * drawX || drawHeight < panelHeight - 2 * drawY) g2d.fillRect(0, 0, panelWidth, panelHeight);   // rounding left a gap: clear everything once
         g2d.drawImage(bufferedImage, drawX, drawY, drawWidth, drawHeight, null);
         if (console.isOpen()) console.draw(g2d, panelWidth, panelHeight);
         g2d.dispose();
@@ -895,25 +867,19 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         applyRenderQuality();
         renderSelectedEngine();
         updateElapsed();
-        if (hudVisible) {
-            drawTimer();
-            int hudLine = 0;
-            if (!isCustomMap) drawSeedBadge(hudLine++);
-            if (GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG) drawGeometryBadge(hudLine++);
-            if (GEOMETRY_MODE == MazeGenerator.GeometryMode.LOOPED) drawGeometryBadge(hudLine++, NSLocalizedString.get("looped_geometry"));
-            if (hasFloors()) drawFloorIndicator(hudLine);
-        }
-        if (isDebugMode && !isPaused) { drawMiniMap(); drawFpsCounter(); drawOpenClBadge(); }
-        if (fogMinimap && fogMapVisible) drawFogMiniMap();
+        if (hudVisible) drawStatusHud();
+        syncMiniMap();
+        if (isDebugMode && !isPaused) { miniMap.drawMiniMap(); drawDebugHud(); }
+        if (miniMap.fogVisible()) miniMap.drawFogMiniMap();
         paintModules();
         if (isPaused) drawPauseMenu();
-        if (isFloorTransitioning) drawFloorTransitionEffects();
+        if (transition.active()) transition.drawEffects(bufferedImage, floorCount());
     }
     private void syncRenderer(RenderFrame renderFrame) {
         renderFrame.bufferedImage = bufferedImage;
-        renderFrame.cameraAngle = cameraAngle + landingShake();
-        renderFrame.cameraHeight = Math.clamp(cameraHeight + viewBob() + stepHeightOffset(), 0.05, 0.95);
-        renderFrame.cameraPitch = cameraPitch + stepPitchOffset();
+        renderFrame.cameraAngle = cameraAngle + transition.landingShake();
+        renderFrame.cameraHeight = Math.clamp(cameraHeight + viewBob() + transition.stepHeightOffset(), 0.05, 0.95);
+        renderFrame.cameraPitch = cameraPitch + transition.stepPitchOffset();
         renderFrame.skyCeiling = ceilingFreeActive();
         renderFrame.skyTime = System.nanoTime() / 1e9;
         renderFrame.cameraXCache = cameraXCache;
@@ -997,21 +963,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         RenderEngine engine = currentEngine();
         return engine == null ? new float[]{1f, 1f, 1f} : engine.spriteLight(distance, spriteHyperbolic);
     }
-    private static RenderEngine findEngine(String name) {
-        for (RenderEngine renderEngine : RenderEngines.all())
-            if (renderEngine.id().equalsIgnoreCase(name) || renderEngine.displayName().equalsIgnoreCase(name)) return renderEngine;
-        return null;
-    }
-    private static String nameOf(RenderEngine engine) {
-        return engine == null ? "none" : engine.displayName();
-    }
-    private void reportGpuState(RenderEngine engine) {
-        if (engine == null || !openClAcceleration || !engine.hasOpenCL()) return;
-        Project.OpenCl.GpuRuntime.Health health = Project.OpenCl.GpuRuntime.healthFor(engine.openClKey());
-        if (health == Project.OpenCl.GpuRuntime.Health.UNAVAILABLE)
-            console.log(DevConsole.Level.WARN, "GPU is not usable: " + Project.OpenCl.GpuRuntime.reasonFor(engine.openClKey()));
-        else if (health == Project.OpenCl.GpuRuntime.Health.PROBING) console.log(DevConsole.Level.INFO, "GPU is still being checked");
-    }
     private void logEngineState(RenderEngine engine) {
         String key = engine.id() + '|' + GEOMETRY_MODE + '|' + openClAcceleration + '|' + noCeiling + '|' + textMode
                 + '|' + renderFrame.renderWidth + 'x' + renderFrame.renderHeight + '|' + renderFrame.quality
@@ -1066,10 +1017,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         openClAcceleration = enabled;
         Project.OpenCl.GpuRuntime.setEnabled(enabled);
     }
-    static boolean resolveOpenClForSwap(boolean supported, Boolean requested, boolean savedOpenCl) {
-        boolean wanted = requested != null ? requested : savedOpenCl;
-        return wanted && supported;
-    }
     //endregion
     //region Showcase Frame
     public void setShowcaseCamera(double x, double y, double angle, double pitch, double eyeHeight) {
@@ -1096,16 +1043,6 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     public static void setNoCeiling(boolean enabled) { noCeiling = enabled; }
     public static boolean isTextMode() { return textMode; }
     public static void setTextMode(boolean enabled) { textMode = enabled; }
-    //endregion
-    //region Persistence
-    private void persistSettings(String engineId, boolean openCl) {
-        try {
-            SaveData.Data data = SaveData.load();
-            SaveData.saveSettings(data.language, data.theme, data.renderScale, data.vsync, engineId,
-                    data.renderEngineQuality, data.windowWidth, data.windowHeight, data.fullscreen, openCl);
-            console.log(DevConsole.Level.INFO, "saved to the settings file");
-        } catch (IOException exception) { throw new IllegalArgumentException("could not save settings: " + exception.getMessage()); }
-    }
     //endregion
     //endregion
 
@@ -1138,7 +1075,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         busyWorker = new Thread(() -> {
             Progress.bind(busyProgress);
             try { work.run(); }
-            catch (Throwable exception) { exception.printStackTrace(); }
+            catch (Throwable exception) { Log.error(exception); }
             finally { Progress.unbind(); }
         }, "game-background-work");
         busyWorker.setDaemon(true);
@@ -1154,105 +1091,26 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
 
     //region HUD
-    //region FPS and Timer
-    private void trackFps() {
-        frameCounter++;
-        if (System.currentTimeMillis() - fpsWindowStart >= 1000) {
-            currentFps = frameCounter;
-            frameCounter = 0;
-            fpsWindowStart = System.currentTimeMillis();
-        }
+    //region Overlay Data
+    private void updateElapsed() { elapsedSeconds = ((isPaused && pauseFreezesWorld ? pauseStartTime : System.currentTimeMillis()) - gameStartTime - pausedTime) / 1000; }
+    private void drawStatusHud() {
+        Hud.Badge seed = isCustomMap ? null : new Hud.Badge(NSLocalizedString.get("gv.seed") + ": " + mazeSeedText, Hud.SEED_COLOR);
+        Hud.Badge geometry = switch (GEOMETRY_MODE) {
+            case WRONG -> new Hud.Badge(NSLocalizedString.get("gv.wrong_geometry"), Hud.GEOMETRY_COLOR);
+            case LOOPED -> new Hud.Badge(NSLocalizedString.get("looped_geometry"), Hud.GEOMETRY_COLOR);
+            default -> null;
+        };
+        Hud.Badge floor = hasFloors() ? new Hud.Badge(NSLocalizedString.get("floor") + ": " + (currentFloor + 1) + "/" + map3D.length, Hud.FLOOR_COLOR) : null;
+        hud.drawStatus(bufferedImage, elapsedSeconds, seed, geometry, floor);
     }
-    private void drawFpsCounter() {
-        Graphics2D g2d = bufferedImage.createGraphics();
-        g2d.scale(uiScale(), uiScale());
+    private void drawDebugHud() {
         boolean auto = renderQualitySetting == RenderEngineConfig.QUALITY_AUTO;
-        String fpsText = "FPS: " + currentFps + (auto ? "  AUTO " + Math.round(renderHeight * 100.0 / RCJMS.GAME_HEIGHT) + "%" : "");
-
-        g2d.setFont(fpsFont);
-        g2d.setColor(Color.BLACK);
-        g2d.drawString(fpsText, 40, RCJMS.SCREEN_HEIGHT - 28);
-
-        g2d.setColor(Color.GREEN);
-        g2d.drawString(fpsText, 38, RCJMS.SCREEN_HEIGHT - 30);
-        g2d.dispose();
-    }
-    private void updateElapsed() { elapsedSeconds = ((isPaused ? pauseStartTime : System.currentTimeMillis()) - gameStartTime - pausedTime) / 1000; }
-    private void drawTimer() {
-        Graphics2D g2d = bufferedImage.createGraphics();
-        g2d.scale(uiScale(), uiScale());
-        long hours = elapsedSeconds / 3600;
-        long minutes = (elapsedSeconds % 3600) / 60;
-        long seconds = elapsedSeconds % 60;
-
-        String timerText = String.format("%02d:%02d:%02d", hours, minutes, seconds);
-
-        g2d.setFont(timerFont);
-        g2d.setColor(Color.BLACK);
-        g2d.drawString(timerText, RCJMS.SCREEN_WIDTH - 156, 34);
-
-        g2d.setColor(Color.WHITE);
-        g2d.drawString(timerText, RCJMS.SCREEN_WIDTH - 158, 32);
-        g2d.dispose();
-    }
-    //endregion
-    //region Badges
-    private void drawOpenClBadge() {
+        String fpsText = "FPS: " + hud.fps() + (auto ? "  AUTO " + Math.round(renderHeight * 100.0 / RCJMS.GAME_HEIGHT) + "%" : "");
         RenderEngine engine = RenderEngines.find(renderEngineId);
-        boolean supported = engine != null && engine.hasOpenCL();
-        boolean on = openClAcceleration && supported;
+        boolean on = openClAcceleration && engine != null && engine.hasOpenCL();
         Project.OpenCl.GpuRuntime.Health health = engine == null ? Project.OpenCl.GpuRuntime.Health.OFF : Project.OpenCl.GpuRuntime.healthFor(engine.openClKey());
-        Color color;
-        if (!on) color = Color.RED;
-        else if (health == Project.OpenCl.GpuRuntime.Health.READY) color = Color.GREEN;
-        else if (health == Project.OpenCl.GpuRuntime.Health.PROBING) color = new Color(0xF1C40F);
-        else color = Color.RED;
-
-        Graphics2D g2d = bufferedImage.createGraphics();
-        g2d.scale(uiScale(), uiScale());
-        String text = "OpenCL acceleration: " + (on ? "ON" : "OFF");
-        g2d.setFont(openClFont);
-        g2d.setColor(Color.BLACK);
-        g2d.drawString(text, 40, RCJMS.SCREEN_HEIGHT - 54);
-        g2d.setColor(color);
-        g2d.drawString(text, 38, RCJMS.SCREEN_HEIGHT - 56);
-        g2d.dispose();
-    }
-    private void drawGeometryBadge(int line) { drawGeometryBadge(line, NSLocalizedString.get("gv.wrong_geometry")); }
-    private void drawGeometryBadge(int line, String text) {
-        Graphics2D g2d = bufferedImage.createGraphics();
-        g2d.scale(uiScale(), uiScale());
-
-        g2d.setFont(BADGE_FONT);
-        g2d.setColor(Color.BLACK);
-        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 198, RCJMS.SCREEN_HEIGHT - (26 + line * 24) + 2);
-        g2d.setColor(new Color(150, 170, 255));
-        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 200, RCJMS.SCREEN_HEIGHT - (26 + line * 24));
-        g2d.dispose();
-    }
-    private void drawSeedBadge(int line) {
-        Graphics2D g2d = bufferedImage.createGraphics();
-        g2d.scale(uiScale(), uiScale());
-        String text = NSLocalizedString.get("gv.seed") + ": " + mazeSeedText;
-
-        g2d.setFont(BADGE_FONT);
-        g2d.setColor(Color.BLACK);
-        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 198, RCJMS.SCREEN_HEIGHT - (26 + line * 24) + 2);
-        g2d.setColor(new Color(170, 230, 170));
-        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 200, RCJMS.SCREEN_HEIGHT - (26 + line * 24));
-        g2d.dispose();
-    }
-    private void drawFloorIndicator(int line) {
-        Graphics2D g2d = bufferedImage.createGraphics();
-        g2d.scale(uiScale(), uiScale());
-        String text = NSLocalizedString.get("floor") + ": " + (currentFloor + 1) + "/" + map3D.length;
-
-        g2d.setFont(BADGE_FONT);
-        g2d.setColor(Color.BLACK);
-        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 198, RCJMS.SCREEN_HEIGHT - (26 + line * 24) + 2);
-        g2d.setColor(new Color(255, 200, 120));
-        g2d.drawString(text, RCJMS.SCREEN_WIDTH - 200, RCJMS.SCREEN_HEIGHT - (26 + line * 24));
-        g2d.dispose();
+        Color color = !on ? Color.RED : health == Project.OpenCl.GpuRuntime.Health.READY ? Color.GREEN : health == Project.OpenCl.GpuRuntime.Health.PROBING ? new Color(0xF1C40F) : Color.RED;
+        hud.drawDebug(bufferedImage, fpsText, "OpenCL acceleration: " + (on ? "ON" : "OFF"), color);
     }
     //endregion
     //region Pause Menu
@@ -1299,486 +1157,22 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     //endregion
     //endregion
 
-    //region Mini Map
-    private static double uiScale() { return RCJMS.GAME_WIDTH / (double) RCJMS.SCREEN_WIDTH; }
-    private void drawMiniMap() {
-        if (GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG) { drawCoolMiniMap(); return; }
-        double s = uiScale();
-        int miniMapWidth = Math.max(1, (int) Math.round(MINI_MAP_WIDTH * s));
-        int miniMapHeight = Math.max(1, (int) Math.round(MINI_MAP_HEIGHT * s));
-        int margin = Math.max(1, (int) Math.round(10 * s));
-        int mapWidth = map[0].length, mapHeight = map.length;
-        double scale = Math.min((double) miniMapWidth / mapWidth, (double) miniMapHeight / mapHeight);
-        if (scale < MINI_MAP_MIN_CELL_PIXELS * s) { drawLocalMiniMap(miniMapWidth, miniMapHeight, margin, s); return; }
-
-        int offsetX = margin + (miniMapWidth - (int) (mapWidth * scale)) / 2;
-        int offsetY = margin + (miniMapHeight - (int) (mapHeight * scale)) / 2;
-
-        for (int y = 0; y < mapHeight; y++) {
-            for (int x = 0; x < mapWidth; x++) {
-                int color = 0x000000;
-                if (map[y][x] == 1) color = 0xFFFFFF;
-                if (map[y][x] == 2) color = 0x00FF00;
-                if (map[y][x] == 3) color = 0x3399FF;
-                if (map[y][x] == 4) color = 0xFFAA33;
-                if (map[y][x] == MazeGenerator.PORTAL) color = 0xCC33FF;
-
-                int startX = offsetX + (int) (x * scale), startY = offsetY + (int) (y * scale);
-                int endX = offsetX + (int) ((x + 1) * scale), endY = offsetY + (int) ((y + 1) * scale);
-
-                for (int py = startY; py < endY; py++) for (int px = startX; px < endX; px++)
-                    if (px >= 0 && py >= 0 && px < RCJMS.GAME_WIDTH && py < RCJMS.GAME_HEIGHT) pixels[px + py * RCJMS.GAME_WIDTH] = color;
-            }
-        }
-
-        drawMiniMapMarkers(offsetX, offsetY, scale, offsetX, offsetY, offsetX + (int) (mapWidth * scale), offsetY + (int) (mapHeight * scale));
-        int playerSize = Math.max(1, (int)Math.floor(scale * 0.25));
-        for (int yy = -playerSize; yy <= playerSize; yy++) {
-            for (int xx = -playerSize; xx <= playerSize; xx++) {
-                int px = offsetX + (int)(playerX * scale) + xx;
-                int py = offsetY + (int)(playerY * scale) + yy;
-                if (px >= 0 && py >= 0 && px < RCJMS.GAME_WIDTH && py < RCJMS.GAME_HEIGHT) pixels[px + py * RCJMS.GAME_WIDTH] = 0xFF0000;
-            }
-        }
-    }
-    private void drawLocalMiniMap(int width, int height, int margin, double s) {
-        int cell = Math.max(2, (int) Math.round(miniMapCellPixels * s));
-        int mapWidth = map[0].length, mapHeight = map.length;
-        double visibleX = Math.min(mapWidth, (double) width / cell), visibleY = Math.min(mapHeight, (double) height / cell);
-        double viewLeft = Math.clamp(playerX - visibleX / 2.0, 0.0, mapWidth - visibleX);
-        double viewTop = Math.clamp(playerY - visibleY / 2.0, 0.0, mapHeight - visibleY);
-
-        int boxW = (int) Math.min(width, Math.ceil(visibleX * cell)), boxH = (int) Math.min(height, Math.ceil(visibleY * cell));
-        fillMiniRect(margin - 1, margin - 1, margin + boxW + 1, margin + boxH + 1, 0x8888FF, 0, 0, RCJMS.GAME_WIDTH, RCJMS.GAME_HEIGHT);
-        fillMiniRect(margin, margin, margin + boxW, margin + boxH, 0x000000, 0, 0, RCJMS.GAME_WIDTH, RCJMS.GAME_HEIGHT);
-
-        int firstX = (int) Math.floor(viewLeft), lastX = Math.min(mapWidth - 1, (int) Math.ceil(viewLeft + visibleX));
-        int firstY = (int) Math.floor(viewTop), lastY = Math.min(mapHeight - 1, (int) Math.ceil(viewTop + visibleY));
-        for (int y = firstY; y <= lastY; y++) {
-            for (int x = firstX; x <= lastX; x++) {
-                int type = map[y][x];
-                if (type == 0) continue;
-                int color = type == 2 ? 0x00FF00 : type == 3 ? 0x3399FF : type == 4 ? 0xFFAA33 : type == MazeGenerator.PORTAL ? 0xCC33FF : 0xFFFFFF;
-                int x0 = margin + (int) Math.round((x - viewLeft) * cell), x1 = margin + (int) Math.round((x + 1 - viewLeft) * cell);
-                int y0 = margin + (int) Math.round((y - viewTop) * cell), y1 = margin + (int) Math.round((y + 1 - viewTop) * cell);
-                x1 = Math.max(x0 + 1, x1); y1 = Math.max(y0 + 1, y1);
-                fillMiniRect(x0, y0, x1, y1, color, margin, margin, margin + boxW, margin + boxH);
-            }
-        }
-
-        int px = margin + (int) Math.round((playerX - viewLeft) * cell), py = margin + (int) Math.round((playerY - viewTop) * cell);
-        int tick = Math.max(cell, (int) Math.round(cell * 1.8));
-        drawMiniMapLine(px, py, px + (int) Math.round(Math.cos(cameraAngle) * tick), py + (int) Math.round(Math.sin(cameraAngle) * tick));
-        int half = Math.max(1, cell / 3);
-        fillMiniRect(px - half, py - half, px + half + 1, py + half + 1, 0xFF0000, margin, margin, margin + boxW, margin + boxH);
-        drawMiniMapMarkers(margin - viewLeft * cell, margin - viewTop * cell, cell, margin, margin, margin + boxW, margin + boxH);
-    }
-    //region Rival Markers
-    public static volatile java.util.function.IntFunction<java.util.List<MiniMapMarker>> miniMapMarkers;
-    private static final Font MINI_MARKER_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 10);
-    public record MiniMapMarker(double x, double y, int color, String label) {}
-    private java.util.List<MiniMapMarker> miniMapMarkersHere() {
-        java.util.function.IntFunction<java.util.List<MiniMapMarker>> source = miniMapMarkers;
-        if (source == null) return java.util.List.of();
-        try {
-            java.util.List<MiniMapMarker> markers = source.apply(currentFloor);
-            return markers == null ? java.util.List.of() : markers;
-        } catch (RuntimeException exception) {
-            return java.util.List.of();
-        }
-    }
-    private void drawMiniMapMarkers(double originX, double originY, double cell, int clipX0, int clipY0, int clipX1, int clipY1) {
-        java.util.List<MiniMapMarker> markers = miniMapMarkersHere();
-        if (markers.isEmpty()) return;
-        Graphics2D g = bufferedImage.createGraphics();
-        try {
-            setupMarkerPainting(g, clipX0, clipY0, clipX1, clipY1);
-            for (MiniMapMarker marker : markers) {
-                if (!Double.isFinite(marker.x()) || !Double.isFinite(marker.y())) continue;
-                double px = clampTo(originX + marker.x() * cell, clipX0 + 4, clipX1 - 4);
-                double py = clampTo(originY + marker.y() * cell, clipY0 + 4, clipY1 - 4);
-                paintMarker(g, marker, px, py);
-            }
-        } finally {
-            g.dispose();
-        }
-    }
-    private void drawCoolMiniMapMarkers(int centerX, int centerY, int radiusPx) {
-        java.util.List<MiniMapMarker> markers = miniMapMarkersHere();
-        if (markers.isEmpty()) return;
-        Graphics2D g = bufferedImage.createGraphics();
-        try {
-            setupMarkerPainting(g, centerX - radiusPx, centerY - radiusPx, centerX + radiusPx, centerY + radiusPx);
-            for (MiniMapMarker marker : markers) {
-                if (!Double.isFinite(marker.x()) || !Double.isFinite(marker.y())) continue;
-                double dx = marker.x() - playerX, dy = marker.y() - playerY;
-                double diskR = Math.min(HyperbolicMath.poincareRadius(Math.hypot(dx, dy), HYPERBOLIC_CURVATURE), 0.98);
-                double angle = Math.atan2(dy, dx);
-                paintMarker(g, marker, centerX + Math.cos(angle) * diskR * radiusPx, centerY + Math.sin(angle) * diskR * radiusPx);
-            }
-        } finally { g.dispose(); }
-    }
-
-    private static void setupMarkerPainting(Graphics2D g, int x0, int y0, int x1, int y1) {
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g.setClip(x0, y0, x1 - x0, y1 - y0);
-        g.setFont(MINI_MARKER_FONT);
-    }
-    private static void paintMarker(Graphics2D g, MiniMapMarker marker, double px, double py) {
-        int x = (int) Math.round(px), y = (int) Math.round(py);
-        g.setColor(Color.BLACK);
-        g.fillOval(x - 4, y - 4, 9, 9);
-        g.setColor(new Color(marker.color()));
-        g.fillOval(x - 3, y - 3, 7, 7);
-        g.setColor(Color.BLACK);
-        g.drawString(marker.label(), x + 6, y + 4);
-        g.setColor(Color.WHITE);
-        g.drawString(marker.label(), x + 5, y + 3);
-    }
-
-    private static double clampTo(double value, double min, double max) { return Math.min(Math.max(value, min), max); }
-    //endregion
-    private void fillMiniRect(int x0, int y0, int x1, int y1, int color, int clipX0, int clipY0, int clipX1, int clipY1) {
-        x0 = Math.max(x0, Math.max(clipX0, 0)); y0 = Math.max(y0, Math.max(clipY0, 0));
-        x1 = Math.min(x1, Math.min(clipX1, RCJMS.GAME_WIDTH)); y1 = Math.min(y1, Math.min(clipY1, RCJMS.GAME_HEIGHT));
-        for (int yy = y0; yy < y1; yy++) {
-            int row = yy * RCJMS.GAME_WIDTH;
-            for (int xx = x0; xx < x1; xx++) pixels[row + xx] = color;
-        }
-    }
-    private void drawCoolMiniMap() {
-        double s = uiScale();
-        int miniMapWidth = Math.max(1, (int) Math.round(MINI_MAP_WIDTH * s));
-        int miniMapHeight = Math.max(1, (int) Math.round(MINI_MAP_HEIGHT * s));
-        int margin = Math.max(1, (int) Math.round(10 * s));
-        int diskRadiusPx = Math.min(miniMapWidth, miniMapHeight) / 2;
-        int centerX = margin + diskRadiusPx, centerY = margin + diskRadiusPx;
-
-        for (int yy = -diskRadiusPx; yy <= diskRadiusPx; yy++) {
-            for (int xx = -diskRadiusPx; xx <= diskRadiusPx; xx++) {
-                if (xx * xx + yy * yy > diskRadiusPx * diskRadiusPx) continue;
-                int px = centerX + xx, py = centerY + yy;
-                if (px >= 0 && py >= 0 && px < RCJMS.GAME_WIDTH && py < RCJMS.GAME_HEIGHT) pixels[px + py * RCJMS.GAME_WIDTH] = 0x0A0A14;
-            }
-        }
-
-        for (int y = 0; y < map[0].length; y++) {
-            for (int x = 0; x < map.length; x++) {
-                if (map[y][x] == 0) continue;
-
-                double diskR = HyperbolicMath.poincareRadius(Math.hypot((x + 0.5) - playerX, (y + 0.5) - playerY), HYPERBOLIC_CURVATURE);
-                if (diskR >= 0.995) continue;
-
-                double angle = Math.atan2((y + 0.5) - playerY, (x + 0.5) - playerX);
-                int color = map[y][x] == 2 ? 0x00FF00 : map[y][x] == 3 ? 0x3399FF : map[y][x] == 4 ? 0xFFAA33 : map[y][x] == MazeGenerator.PORTAL ? 0xCC33FF : 0xFFFFFF;
-                int cellPixelSize = Math.max(1, (int) Math.round((1.0 - diskR) * 4 * s));
-
-                for (int oy = -cellPixelSize; oy <= cellPixelSize; oy++) {
-                    for (int ox = -cellPixelSize; ox <= cellPixelSize; ox++) {
-                        if (ox * ox + oy * oy > cellPixelSize * cellPixelSize) continue;
-                        int fx = centerX + (int)Math.round(Math.cos(angle) * diskR * diskRadiusPx) + ox;
-                        int fy = centerY + (int)Math.round(Math.sin(angle) * diskR * diskRadiusPx) + oy;
-                        if (fx < 0 || fy < 0 || fx >= RCJMS.GAME_WIDTH || fy >= RCJMS.GAME_HEIGHT) continue;
-                        if ((fx - centerX) * (fx - centerX) + (fy - centerY) * (fy - centerY) > diskRadiusPx * diskRadiusPx) continue;
-                        pixels[fx + fy * RCJMS.GAME_WIDTH] = color;
-                    }
-                }
-            }
-        }
-        drawCoolMiniMapMarkers(centerX, centerY, diskRadiusPx);
-        for (double a = 0; a < Math.PI * 2; a += 0.01) {
-            int px = centerX + (int) Math.round(Math.cos(a) * diskRadiusPx);
-            int py = centerY + (int) Math.round(Math.sin(a) * diskRadiusPx);
-            if (px >= 0 && py >= 0 && px < RCJMS.GAME_WIDTH && py < RCJMS.GAME_HEIGHT) pixels[px + py * RCJMS.GAME_WIDTH] = 0x8888FF;
-        }
-        int tickLen = diskRadiusPx - Math.max(1, (int) Math.round(4 * s));
-        drawMiniMapLine(centerX, centerY, centerX + (int)Math.round(Math.cos(cameraAngle) * tickLen),
-                centerY + (int)Math.round(Math.sin(cameraAngle) * tickLen));
-        int playerSize = Math.max(1, (int) Math.round(3 * s));
-        for (int yy = -playerSize; yy <= playerSize; yy++) {
-            for (int xx = -playerSize; xx <= playerSize; xx++) {
-                int px = centerX + xx, py = centerY + yy;
-                if (px >= 0 && py >= 0 && px < RCJMS.GAME_WIDTH && py < RCJMS.GAME_HEIGHT) pixels[px + py * RCJMS.GAME_WIDTH] = 0xFF0000;
-            }
-        }
-    }
-    private void drawMiniMapLine(int x0, int y0, int x1, int y1) {
-        int dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1, dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1, err = dx + dy;
-        while (true) {
-            if (x0 >= 0 && y0 >= 0 && x0 < RCJMS.GAME_WIDTH && y0 < RCJMS.GAME_HEIGHT) pixels[x0 + y0 * RCJMS.GAME_WIDTH] = 16755200;
-            if (x0 == x1 && y0 == y1) break;
-            int e2 = 2 * err;
-            if (e2 >= dy) { err += dy; x0 += sx; }
-            if (e2 <= dx) { err += dx; y0 += sy; }
-        }
-    }
-    //endregion
-
-    //region Fog Of War
-    public void setFogOfWarMinimap(boolean enabled) { fogMinimap = enabled; explored = null; fogMapVisible = true; }
-    private float[][] exploredGrid() {
-        int floors = floorCount(), h = mapHeight(), w = mapWidth();
-        if (explored == null || explored.length != floors || explored[0].length != h || explored[0][0].length != w) {
-            explored = new float[floors][h][w];
-            fogVisitStamp = new int[h][w];
-        }
-        return explored[currentFloor];
-    }
-    private void updateFog(double dt) {
-        float[][] grid = exploredGrid();
-        final int w = mapWidth(), h = mapHeight();
-        final int stamp = ++fogFrame;
-        final double ox = playerX, oy = playerY;
-        final int startX = Math.clamp((int) ox, 0, w - 1), startY = Math.clamp((int) oy, 0, h - 1);
-        revealFogCell(grid, startX, startY, 0, dt, stamp);
-        for (int i = 0; i < FOG_RAY_COUNT; i++) {
-            double angle = i * (2.0 * Math.PI / FOG_RAY_COUNT);
-            double dx = Math.cos(angle), dy = Math.sin(angle);
-            int lastX = startX, lastY = startY;
-            for (double dist = FOG_RAY_STEP; dist <= FOG_REVEAL_RADIUS; dist += FOG_RAY_STEP) {
-                int cx = (int) Math.floor(ox + dx * dist), cy = (int) Math.floor(oy + dy * dist);
-                if (cx < 0 || cy < 0 || cx >= w || cy >= h) break;
-                if (cx == lastX && cy == lastY) continue;
-                lastX = cx; lastY = cy;
-                revealFogCell(grid, cx, cy, dist, dt, stamp);
-                int type = map[cy][cx];
-                if (type == 1 || type == 2) break;
-            }
-        }
-    }
-    private void revealFogCell(float[][] grid, int x, int y, double distance, double dt, int stamp) {
-        if (fogVisitStamp[y][x] == stamp) return;
-        fogVisitStamp[y][x] = stamp;
-        double closeness = 1.0 - Math.min(1.0, distance / FOG_REVEAL_RADIUS);
-        grid[y][x] = Math.min(1f, grid[y][x] + (float) (dt * FOG_REVEAL_SPEED * (0.15 + 0.85 * closeness)));
-    }
-    private static int fogCellColor(int type) {
-        return type == 1 ? 0xD8D8E6 : type == 2 ? 0x00FF66 : type == 3 ? 0x3399FF : type == 4 ? 0xFFAA33 : type == MazeGenerator.PORTAL ? 0xCC33FF : 0x2E2E44;
-    }
-    private static int mixRgb(int from, int to, double amount) {
-        amount = Math.clamp(amount, 0.0, 1.0);
-        int r = (int) (((from >> 16) & 255) * (1 - amount) + ((to >> 16) & 255) * amount);
-        int g = (int) (((from >> 8) & 255) * (1 - amount) + ((to >> 8) & 255) * amount);
-        int b = (int) ((from & 255) * (1 - amount) + (to & 255) * amount);
-        return (r << 16) | (g << 8) | b;
-    }
-    private void drawFogMiniMap() {
-        float[][] grid = exploredGrid();
-        final int w = mapWidth(), h = mapHeight();
-        double s = uiScale();
-        int cell = Math.max(3, (int) Math.round(miniMapCellPixels * s));
-        int cells = Math.max(7, (int) Math.round(MINI_MAP_WIDTH * s) / cell);
-        if (cells % 2 == 0) cells++;
-        int box = cells * cell;
-        int margin = Math.max(1, (int) Math.round(10 * s));
-        double viewLeft = playerX - cells / 2.0, viewTop = playerY - cells / 2.0;
-
-        fillMiniRect(margin - 2, margin - 2, margin + box + 2, margin + box + 2, 0x5C5C8A, 0, 0, RCJMS.GAME_WIDTH, RCJMS.GAME_HEIGHT);
-        int firstX = (int) Math.floor(viewLeft), firstY = (int) Math.floor(viewTop);
-        for (int vy = 0; vy <= cells; vy++) {
-            for (int vx = 0; vx <= cells; vx++) {
-                int cx = firstX + vx, cy = firstY + vy;
-                int color;
-                if (cx < 0 || cy < 0 || cx >= w || cy >= h) color = 0x050509;
-                else {
-                    int fog = ((cx + cy) & 1) == 0 ? 0x16162A : 0x12121F;
-                    color = grid[cy][cx] <= 0 ? fog : mixRgb(fog, fogCellColor(map[cy][cx]), grid[cy][cx]);
-                }
-                int x0 = margin + (int) Math.round((cx - viewLeft) * cell), x1 = margin + (int) Math.round((cx + 1 - viewLeft) * cell);
-                int y0 = margin + (int) Math.round((cy - viewTop) * cell), y1 = margin + (int) Math.round((cy + 1 - viewTop) * cell);
-                fillMiniRect(x0, y0, x1, y1, color, margin, margin, margin + box, margin + box);
-            }
-        }
-
-        int px = margin + (int) Math.round((playerX - viewLeft) * cell), py = margin + (int) Math.round((playerY - viewTop) * cell);
-        int tick = Math.max(cell, (int) Math.round(cell * 1.8));
-        drawMiniMapLine(px, py, px + (int) Math.round(Math.cos(cameraAngle) * tick), py + (int) Math.round(Math.sin(cameraAngle) * tick));
-        int half = Math.max(1, cell / 3);
-        fillMiniRect(px - half, py - half, px + half + 1, py + half + 1, 0xFF0000, margin, margin, margin + box, margin + box);
-        drawMiniMapMarkers(margin - viewLeft * cell, margin - viewTop * cell, cell, margin, margin, margin + box, margin + box);
-
-        Graphics2D g2d = bufferedImage.createGraphics();
-        g2d.scale(s, s);
-        g2d.setFont(FOG_HINT_FONT);
-        g2d.setColor(new Color(150, 150, 190));
-        g2d.drawString("M", (float) ((margin + box) / s - 10), (float) ((margin + box) / s + 14));
-        g2d.dispose();
-    }
-    //endregion
-
     //region Floor Transitions
-    //region Stairs Climb
     private void handleStairs(int cellType) {
         boolean onStairsNow = cellType == 3 || cellType == 4;
 
-        if (onStairsNow && !onStairsLastFrame && !isFloorTransitioning) {
+        if (onStairsNow && !onStairsLastFrame && !transition.active()) {
             int targetFloor = currentFloor;
             if (cellType == 3 && currentFloor < map3D.length - 1) targetFloor = currentFloor + 1;
             else if (cellType == 4 && currentFloor > 0) targetFloor = currentFloor - 1;
 
             if (targetFloor != currentFloor) {
-                transitionFromFloor = currentFloor;
-                transitionToFloor = targetFloor;
-                transitionDirection = targetFloor > currentFloor ? 1 : -1;
-                climbStartX = playerX;
-                climbStartY = playerY;
-                isFloorTransitioning = true;
-                hasLastMousePos = floorSwitchApplied = false;
-                floorTransitionTime = 0;
+                transition.beginClimb(currentFloor, targetFloor, playerX, playerY);
+                hasLastMousePos = false;
             }
         }
         onStairsLastFrame = onStairsNow;
     }
-    private void advanceClimb() {
-        if (transitionDirection == 0 || floorSwitchApplied) return;
-        double walk = STEP_WALK * smooth(stepPhase());
-        int cellX = (int) Math.floor(climbStartX), cellY = (int) Math.floor(climbStartY);
-        playerX = Math.clamp(climbStartX + Math.cos(cameraAngle) * walk, cellX + 0.15, cellX + 0.85);
-        playerY = Math.clamp(climbStartY + Math.sin(cameraAngle) * walk, cellY + 0.15, cellY + 0.85);
-    }
-    private double stepHeightOffset() {
-        if (!isFloorTransitioning || transitionDirection == 0) return 0;
-        if (!floorSwitchApplied) {
-            double bob = FOOTFALL * Math.abs(Math.sin(Math.PI * STAIR_STEPS * stepPhase()));
-            return transitionDirection * STEP_HEIGHT * smooth(stepPhase()) + bob;
-        }
-        return transitionDirection * STEP_HEIGHT * (1 - smooth(crossPhase()));
-    }
-    private double stepPitchOffset() {
-        if (!isFloorTransitioning || transitionDirection == 0) return 0;
-        if (!floorSwitchApplied) return transitionDirection * STEP_LEAN * smooth(stepPhase());
-        return transitionDirection * STEP_LEAN * (1 - smooth(crossPhase()));
-    }
-    private double landingShake() {
-        if (!isFloorTransitioning || !floorSwitchApplied || transitionDirection == 0) return 0;
-        double t = crossPhase();
-        if (t >= 1) return 0;
-        return LAND_SHAKE * Math.exp(-4 * t) * Math.sin(26 * t);
-    }
-    private static double smooth(double t) { return t * t * (3 - 2 * t); }
-    private double stepPhase() { return Math.clamp(floorTransitionTime / STEP_DURATION, 0, 1); }
-    private double crossPhase() { return Math.clamp((floorTransitionTime - crossStart()) / CROSS_DURATION, 0, 1); }
-    private double crossStart() { return transitionDirection == 0 ? 0 : STEP_DURATION; }
-    private double transitionTotalDuration() {
-        return transitionDirection == 0 ? CROSS_DURATION
-                : STEP_DURATION + CROSS_DURATION + CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION + CAPTION_FADE_DURATION;
-    }
-    private boolean transitionLocksControls() {
-        return isFloorTransitioning && transitionDirection != 0 && floorTransitionTime < STEP_DURATION + CROSS_DURATION;
-    }
-    //endregion
-    //region Portal Transition
-    private void startPortalTransition(int fromFloor, int toFloor) {
-        transitionSnapshot = copyOfPicture();
-        transitionFromFloor = fromFloor;
-        transitionToFloor = toFloor;
-        transitionDirection = 0;
-        isFloorTransitioning = true;
-        floorSwitchApplied = true;
-        floorTransitionTime = 0;
-    }
-    private void endFloorTransition() {
-        isFloorTransitioning = false;
-        floorSwitchApplied = false;
-        floorTransitionTime = 0;
-        transitionDirection = 0;
-        transitionSnapshot = null;
-    }
-    private BufferedImage copyOfPicture() {
-        BufferedImage copy = new BufferedImage(bufferedImage.getWidth(), bufferedImage.getHeight(), BufferedImage.TYPE_INT_RGB);
-        Graphics2D g2d = copy.createGraphics();
-        g2d.drawImage(bufferedImage, 0, 0, null);
-        g2d.dispose();
-        return copy;
-    }
-    //endregion
-    //region Floor Caption and Effects
-    private void drawFloorTransitionEffects() {
-        if (transitionDirection == 0) return;
-        if (!floorSwitchApplied) {
-            drawDarkness(smooth(stepPhase()));
-            return;
-        }
-        drawDarkness(1 - smooth(crossPhase()));
-        double captionTime = floorTransitionTime - (STEP_DURATION + CROSS_DURATION);
-        if (captionTime >= 0 && captionTime < CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION + CAPTION_FADE_DURATION) drawFloorCaption(captionTime);
-    }
-    private void drawDarkness(double amount) {
-        float alpha = (float) Math.clamp(amount, 0, 1);
-        if (alpha <= 0.005f) return;
-        Graphics2D g2d = bufferedImage.createGraphics();
-        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
-        g2d.setColor(Color.BLACK);
-        g2d.fillRect(0, 0, bufferedImage.getWidth(), bufferedImage.getHeight());
-        g2d.dispose();
-    }
-    private void drawFloorCaption(double captionTime) {
-        Graphics2D g2d = bufferedImage.createGraphics();
-        g2d.scale(uiScale(), uiScale());
-        g2d.setFont(BIG_MONO_FONT);
-        FontMetrics fontMetrics = g2d.getFontMetrics();
-
-        float alpha;
-        double rollProgress;
-
-        if (captionTime < CAPTION_ROLL_DURATION) {
-            alpha = Math.clamp((float) (captionTime / Math.max(0.001, CAPTION_ROLL_DURATION * 0.4)), 0f, 1f);
-            rollProgress = 1f - Math.pow(1f - Math.clamp((float) (captionTime / CAPTION_ROLL_DURATION), 0f, 1f), 3);
-        }
-        else if (captionTime < (CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION)) {
-            alpha = 1f;
-            rollProgress = 1;
-        }
-        else {
-            alpha = Math.clamp((float) (1.0 - (captionTime - (CAPTION_ROLL_DURATION + CAPTION_HOLD_DURATION)) / CAPTION_FADE_DURATION), 0f, 1f);
-            rollProgress = 1;
-        }
-
-        String prefix = NSLocalizedString.get("floor") + ": ";
-        String suffix = "/" + map3D.length;
-        String oldNumber = String.valueOf(transitionFromFloor + 1);
-        String newNumber = String.valueOf(transitionToFloor + 1);
-
-        int prefixWidth = fontMetrics.stringWidth(prefix);
-        int numWidth = Math.max(fontMetrics.stringWidth(oldNumber), fontMetrics.stringWidth(newNumber));
-
-        int baseX = (RCJMS.SCREEN_WIDTH - (prefixWidth + numWidth +  fontMetrics.stringWidth(suffix))) / 2;
-        int rowHeight = fontMetrics.getHeight();
-
-        Composite oldComposite = g2d.getComposite();
-        g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
-
-        g2d.setColor(Color.BLACK);
-        g2d.drawString(prefix, baseX + 2, 112);
-        g2d.setColor(Color.WHITE);
-        g2d.drawString(prefix, baseX, 110);
-
-        int numX = baseX + prefixWidth;
-        Shape oldClip = g2d.getClip();
-        g2d.clipRect(numX, 110 - fontMetrics.getAscent(), numWidth, rowHeight);
-
-        int slideOffset = (int) (rollProgress * rowHeight);
-        g2d.setColor(Color.BLACK);
-        g2d.drawString(oldNumber, numX + 2, 112 - slideOffset);
-        g2d.setColor(Color.WHITE);
-        g2d.drawString(oldNumber, numX, 110 - slideOffset);
-
-        g2d.setColor(Color.BLACK);
-        g2d.drawString(newNumber, numX + 2, 112 + rowHeight - slideOffset);
-        g2d.setColor(Color.WHITE);
-        g2d.drawString(newNumber, numX, 110 + rowHeight - slideOffset);
-
-        g2d.setClip(oldClip);
-
-        g2d.setColor(Color.BLACK);
-        g2d.drawString(suffix, numX + numWidth + 2, 110 + 2);
-        g2d.setColor(Color.WHITE);
-        g2d.drawString(suffix, numX + numWidth, 110);
-
-        g2d.setComposite(oldComposite);
-        g2d.dispose();
-    }
-    //endregion
     //endregion
 
     //region Maze
@@ -1862,9 +1256,9 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
 
         playerX = playerY = 1.5;
         cameraAngle = cameraPitch = 0;
-        explored = null;
+        miniMap.resetFog();
         onStairsLastFrame = false;
-        endFloorTransition();
+        transition.end();
         gameStartTime = System.currentTimeMillis();
         pausedTime = 0;
         renderPrepPending = true;
@@ -1885,8 +1279,9 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         if (isCustomMap) {
             try {
                 isGameRunning = false;
-                GameView gameView = hasFloors() ? new GameView(customFloorsForRestart, customPortalsForRestart, customGeometryModeForRestart) : new GameView(map);
-                gameView.setFogOfWarMinimap(fogMinimap);
+                GameView gameView = sharedMaze != null ? new GameView(sharedMaze)
+                        : hasFloors() ? new GameView(customFloorsForRestart, customPortalsForRestart, customGeometryModeForRestart) : new GameView(map);
+                gameView.setFogOfWarMinimap(miniMap.fogEnabled());
                 RCJMS.instance.changeView(gameView, "Raycast Me!");
                 gameThread.interrupt();
                 gameView.start();
@@ -1897,13 +1292,23 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         pendingWork = this::regenerateMaze;
         if (level == null) console.log(DevConsole.Level.INFO, "restarting the level");
     }
-    private record LevelSpec(int width, int height, int floors, String seed, MazeGenerator.GeometryMode geometry,
+    record LevelSpec(int width, int height, int floors, String seed, MazeGenerator.GeometryMode geometry,
                              String algorithm, MazeGenerator.FinishMode finish) {
         LevelSpec(int width, int height, int floors, String seed, MazeGenerator.GeometryMode geometry) {
             this(width, height, floors, seed, geometry, null, null);
         }
     }
     //endregion
+    //endregion
+
+    //region Mini Map Bridge
+    static double uiScale() { return RCJMS.GAME_WIDTH / (double) RCJMS.SCREEN_WIDTH; }
+    public void setFogOfWarMinimap(boolean enabled) { miniMap.setFogEnabled(enabled); }
+    private void syncMiniMap() {
+        miniMap.sync(pixels, bufferedImage, map, playerX, playerY, cameraAngle, GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG, currentFloor, floorCount());
+    }
+    public static volatile java.util.function.IntFunction<java.util.List<MiniMapMarker>> miniMapMarkers;
+    public record MiniMapMarker(double x, double y, int color, String label) {}
     //endregion
 
     //region Module Hooks
@@ -1921,10 +1326,17 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     private void eachModule(java.util.function.Consumer<GameModule> action) {
         for (GameModule feature : features) {
             if (brokenModules.contains(feature)) continue;
-            try { action.accept(feature); }
+            try {
+                action.accept(feature);
+                moduleFailures.remove(feature);
+            }
             catch (RuntimeException exception) {
-                brokenModules.add(feature);
-                console.log(DevConsole.Level.WARN, "feature " + feature.id() + " was switched off: " + exception);
+                int failures = moduleFailures.merge(feature, 1, Integer::sum);
+                if (failures == 1) console.log(DevConsole.Level.WARN, "feature " + feature.id() + " failed: " + exception);
+                if (failures >= MODULE_FAILURE_LIMIT) {
+                    brokenModules.add(feature);
+                    console.log(DevConsole.Level.WARN, "feature " + feature.id() + " was switched off after repeated failures: " + exception);
+                }
             }
         }
     }
@@ -1953,8 +1365,8 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         @Override public double playerX() { return playerX; }
         @Override public double playerY() { return playerY; }
         @Override public double cameraAngle() { return cameraAngle; }
-        @Override public double cameraPitch() { return cameraPitch + stepPitchOffset(); }
-        @Override public double eyeHeight() { return Math.clamp(cameraHeight + viewBob() + stepHeightOffset(), 0.05, 0.95); }
+        @Override public double cameraPitch() { return cameraPitch + transition.stepPitchOffset(); }
+        @Override public double eyeHeight() { return Math.clamp(cameraHeight + viewBob() + transition.stepHeightOffset(), 0.05, 0.95); }
         @Override public void moveTo(double x, double y, double angle) { playerX = x; playerY = y; cameraAngle = angle; }
         @Override public int[][] map() { return map; }
         @Override public int[][] floorMap(int floor) { return map3D == null ? map : map3D[floor]; }
@@ -1971,7 +1383,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         @Override public String seed() { return isCustomMap ? "" : mazeSeedText; }
         @Override public boolean isCustomMap() { return isCustomMap; }
         @Override public int geometry() { return GEOMETRY_MODE.ordinal(); }
-        @Override public boolean fogOfWar() { return fogMinimap; }
+        @Override public boolean fogOfWar() { return miniMap.fogEnabled(); }
         @Override public String algorithm() { return mazeAlgorithmId; }
         @Override public int finishMode() { return MAZE_MODE.ordinal(); }
         @Override public void startSeeded(String seed, int width, int height, int floors, int geometry, boolean hasFloors, boolean fog,
@@ -1982,8 +1394,7 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
             MazeGenerator.GeometryMode mode = MazeGenerator.GeometryMode.values()[Math.clamp(geometry, 0, MazeGenerator.GeometryMode.values().length - 1)];
             setFogOfWarMinimap(fog);
             MazeGenerator.FinishMode finish = MazeGenerator.FinishMode.values()[Math.clamp(finishMode, 0, MazeGenerator.FinishMode.values().length - 1)];
-            restartGame(new LevelSpec(width, height, hasFloors ? Math.max(2, floors) : 1, normalized.isEmpty() ? null : normalized, mode,
-                    MazeAlgorithms.find(algorithm).id(), finish));
+            restartGame(new LevelSpec(width, height, hasFloors ? Math.max(2, floors) : 1, normalized.isEmpty() ? null : normalized, mode, MazeAlgorithms.find(algorithm).id(), finish));
         }
         @Override public void flash(String text) {
             flashText = text == null ? "" : text;
@@ -1991,12 +1402,22 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
         }
         @Override public void restart() { restartGame(); }
         @Override public void useMaze(MazeData maze, boolean fog) {
-            if (isCustomMap) return;
             setFogOfWarMinimap(fog);
             sharedMaze = maze;
             restartGame();
         }
         @Override public void clearMaze() { sharedMaze = null; }
+        @Override public MazeData currentMaze() {
+            if (!isCustomMap && sharedMaze == null) return null;
+            int[][][] cells = map3D != null ? map3D : new int[][][]{map};
+            PortalData[] linked = floorPortalsAll != null ? floorPortalsAll : new PortalData[]{portals};
+            int[][][] cellCopy = new int[cells.length][][];
+            for (int f = 0; f < cells.length; f++) cellCopy[f] = copyCells(cells[f]);
+            PortalData[] portalCopy = new PortalData[linked.length];
+            for (int f = 0; f < linked.length; f++) portalCopy[f] = linked[f].copy();
+            return new MazeData(isCustomMap ? MazeData.CUSTOM_SEED : mazeSeedText, mapWidth(), mapHeight(), cellCopy.length,
+                    cellCopy.length > 1, GEOMETRY_MODE.ordinal(), mazeAlgorithmId, MAZE_MODE.ordinal(), cellCopy, portalCopy);
+        }
         @Override public void command(String name, String usage, DevConsole.Command command) { console.register(name, usage, command); }
         @Override public boolean hudVisible() { return hudVisible; }
         @Override public void setHudVisible(boolean visible) { hudVisible = visible; }
@@ -2078,8 +1499,9 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     private void renderText() {
         snapToTile();
+        syncMiniMap();
         int w = bufferedImage.getWidth(), h = bufferedImage.getHeight();
-        textScreen = TextMode.build(w, h, map, exploredGrid(), playerX, playerY, cameraAngle, textInput.toString(), textStatus);
+        textScreen = TextMode.build(w, h, map, miniMap.exploredGrid(), playerX, playerY, cameraAngle, textInput.toString(), textStatus);
         Graphics2D g2d = bufferedImage.createGraphics();
         g2d.drawImage(textScreen, 0, 0, null);
         g2d.dispose();
@@ -2087,243 +1509,56 @@ public class GameView extends JPanel implements Runnable, KeyListener, MouseMoti
     }
     //endregion
 
+    //region Console Bridge
+    private final class ConsoleBridge implements GameConsoleCommands.Host {
+        @Override public DevConsole console() { return console; }
+        @Override public boolean busy() { return isBusy(); }
+        @Override public boolean paused() { return isPaused; }
+        @Override public void setPaused(boolean paused) { GameView.this.setPaused(paused); }
+        @Override public boolean customMap() { return isCustomMap; }
+        @Override public int mapWidth() { return GameView.this.mapWidth(); }
+        @Override public int mapHeight() { return GameView.this.mapHeight(); }
+        @Override public boolean hasFloors() { return GameView.this.hasFloors(); }
+        @Override public int floorCount() { return GameView.this.floorCount(); }
+        @Override public int[][][] floorLayers() { return hasFloors() ? map3D : new int[][][]{map}; }
+        @Override public MazeGenerator.GeometryMode geometry() { return GEOMETRY_MODE; }
+        @Override public MazeGenerator.FinishMode finishMode() { return MAZE_MODE; }
+        @Override public String seedText() { return mazeSeedText; }
+        @Override public RenderEngine currentEngine() { return GameView.currentEngine(); }
+        @Override public String renderEngineId() { return renderEngineId; }
+        @Override public void setRenderEngineId(String id) { renderEngineId = id; }
+        @Override public boolean openClAcceleration() { return openClAcceleration; }
+        @Override public void setOpenClAcceleration(boolean enabled) { GameView.setOpenClAcceleration(enabled); }
+        @Override public void setDetailedLog(boolean enabled) {
+            verboseLog = enabled;
+            detailKey = null;
+            detailFrames = 0;
+            detailNanos = 0;
+        }
+        @Override public void restart(LevelSpec level) { restartGame(level); }
+    }
+    //endregion
     //region Console
     //region Console Toggle
     private void toggleConsole() {
+        boolean wasOpen = console.isOpen();
         console.toggle();
         if (console.isOpen()) {
             releaseInput();
             showCursor();
         }
-        else if (!isPaused) hideCursor();
+        applyConsoleClosed(wasOpen);
         repaint();
     }
     private void consoleKey(KeyEvent keyEvent) {
+        boolean wasOpen = console.isOpen();
         console.handleKey(keyEvent);
         String line = console.takeSubmitted();
         if (line != null) console.execute(line);
+        applyConsoleClosed(wasOpen);
         repaint();
     }
-    //endregion
-    //region Command Registration
-    private void registerConsoleCommands() {
-        console.register("--help", "--help", args -> {
-            args.info("commands:");
-            for (String line : console.helpLines()) args.info("  " + line);
-            args.info("options start with a dash; -s saves a change to the settings file");
-        });
-        console.register("engine", "engine [<name>] [-l] [-on|-off](openCL) [-s]  (no name: current engine, -l: list engines)", this::engineCommand);
-        console.register("log", "log [-s] [-c] [-f [-off]]  (-s: save the terminal to a file, -c: clear the terminal, -f: detailed logs on, -f -off: off)", this::logCommand);
-        console.register("openCL", "openCL [-on|-off] [-s]  (no option: show the state)", this::openClCommand);
-        console.register("pause", "pause", args -> {
-            if (isBusy()) throw new IllegalArgumentException("the level is still loading");
-            if (isPaused) args.info("already paused");
-            else setPaused(true);
-        });
-        console.alias("--p", "pause");
-        console.register("resume", "resume", args -> {
-            if (!isPaused) args.info("the game is not paused");
-            else setPaused(false);
-        });
-        console.alias("--r", "resume");
-        console.register("restart", "restart [W [H]] [-fN] [-sSEED] [-g1|-g2|-g3]  (no options: same level)", this::restartCommand);
-        console.alias("--rs", "restart");
-        console.register("status", "status", args -> {
-            RenderEngine engine = currentEngine();
-            args.info("engine: " + (engine == null ? "none" : engine.id() + " (" + engine.displayName() + ")"));
-            args.info("OpenCL acceleration: " + (openClAcceleration ? "ON" : "OFF"));
-            if (engine != null && openClAcceleration && engine.hasOpenCL()) {
-                Project.OpenCl.GpuRuntime.Health health = Project.OpenCl.GpuRuntime.healthFor(engine.openClKey());
-                String reason = Project.OpenCl.GpuRuntime.reasonFor(engine.openClKey());
-                args.info("GPU: " + health + (reason.isEmpty() ? "" : " (" + reason + ")"));
-            }
-            args.info("paused: " + (isPaused ? "yes" : "no") + ", loading: " + (isBusy() ? "yes" : "no"));
-        });
-        console.alias("--s", "status");
-        console.register("maze", "maze  (size, floors, finish, geometry, seed, finish position)", this::mazeCommand);
-        console.alias("--m", "maze");
-    }
-    //endregion
-    //region Command Handlers
-    private void restartCommand(DevConsole.Args args) {
-        if (isBusy()) throw new IllegalArgumentException("the level is still loading, try again");
-        java.util.List<String> values = args.values();
-        String floorsText = args.optionValue("-f");
-        String seedText = args.optionValue("-s");
-        String geometryText = args.optionValue("-g");
-        if (values.isEmpty() && floorsText == null && seedText == null && geometryText == null) {
-            restartGame(null);
-            return;
-        }
-        if (isCustomMap) throw new IllegalArgumentException("a custom map keeps its own size: restart it without options");
-        if (values.size() > 2) throw new IllegalArgumentException("restart takes a width and an optional height: restart 90 [70]");
-
-        int width = values.isEmpty() ? mapWidth() : parseSize(values.get(0), "width");
-        int height = values.size() == 2 ? parseSize(values.get(1), "height") : (values.isEmpty() ? mapHeight() : width);
-        int floors = floorsText == null ? 1 : parseFloors(floorsText);
-        String seed = seedText == null ? null : seedFrom(seedText, args);
-        MazeGenerator.GeometryMode geometry = geometryText == null ? MazeGenerator.GeometryMode.EUCLIDEAN : geometryFrom(geometryText);
-
-        RenderEngine engine = currentEngine();
-        if (geometry == MazeGenerator.GeometryMode.WRONG && (engine == null || !engine.hasHyperbolicGeometry()))
-            throw new IllegalArgumentException("engine " + nameOf(engine) + " does not support WRONG geometry (-g2)");
-        if (geometry == MazeGenerator.GeometryMode.WRONG && openClAcceleration)
-            args.warn("OpenCL is not used in WRONG geometry; it applies again in other geometries");
-        if (engine != null && !engine.supportsMapSize(width, height))
-            args.warn("engine " + engine.displayName() + " does not support " + width + "x" + height + ", another engine may draw the frame");
-        args.info("restarting: " + width + "x" + height + ", " + (floors > 1 ? floors + " floors" : "one floor") + ", "
-                + geometry + (seed != null ? ", seed " + seed : ", random seed"));
-        restartGame(new LevelSpec(width, height, floors, seed, geometry));
-    }
-    private void mazeCommand(DevConsole.Args args) {
-        boolean multiFloor = hasFloors();
-        args.info("size: " + mapWidth() + " x " + mapHeight() + (multiFloor ? ", " + floorCount() + " floors" : ", one floor"));
-        args.info("finish mode: " + MAZE_MODE);
-        args.info("geometry: " + GEOMETRY_MODE);
-        args.info("seed: " + (isCustomMap ? "none (custom map)" : mazeSeedText));
-        int[][][] layers = multiFloor ? map3D : new int[][][]{map};
-        int found = 0;
-        for (int f = 0; f < layers.length; f++)
-            for (int y = 0; y < layers[f].length; y++)
-                for (int x = 0; x < layers[f][y].length; x++)
-                    if (layers[f][y][x] == 2) {
-                        found++;
-                        args.info("finish: " + (multiFloor ? "floor " + (f + 1) + ", " : "") + "x " + x + ", y " + y);
-                    }
-        if (found == 0) args.info("finish: none");
-    }
-    private void logCommand(DevConsole.Args args) {
-        boolean save = args.flag("-s");
-        boolean clear = args.flag("-c");
-        boolean detailed = args.flag("-f");
-        boolean off = args.flag("-off");
-        if (detailed) {
-            if (save || clear || !args.values().isEmpty()) throw new IllegalArgumentException("-f works alone, add -off to stop");
-            verboseLog = !off;
-            detailKey = null;
-            detailFrames = 0;
-            detailNanos = 0;
-            args.info("detailed log: " + (verboseLog ? "ON (engine, geometry and frame timing are printed)" : "OFF"));
-            return;
-        }
-        if (off) throw new IllegalArgumentException("-off only works with -f");
-        if (!args.values().isEmpty()) throw new IllegalArgumentException("unexpected argument: " + args.values().getFirst());
-        if (!save && !clear) {
-            args.info("usage: log [-s] [-c]");
-            return;
-        }
-        String text = console.transcript();
-        java.nio.file.Path file = null;
-        if (save) {
-            String stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
-            file = Project.Helpers.AppPaths.file("log_" + stamp + ".txt");
-            try { java.nio.file.Files.writeString(file, text, java.nio.charset.StandardCharsets.UTF_8); }
-            catch (IOException exception) { throw new IllegalArgumentException("could not save the log: " + exception.getMessage()); }
-        }
-        if (clear) console.clearLog();
-        if (file != null) args.info("terminal saved to " + file);
-    }
-    private void openClCommand(DevConsole.Args args) {
-        boolean on = args.flag("-on");
-        boolean off = args.flag("-off");
-        boolean save = args.flag("-s");
-        if (!args.values().isEmpty()) throw new IllegalArgumentException("unexpected argument: " + args.values().getFirst());
-        if (on && off) throw new IllegalArgumentException("use either -on or -off, not both");
-        RenderEngine engine = currentEngine();
-        if (on && GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG) {
-            args.warn("OpenCL is not used in WRONG geometry: the GPU path renders only Euclidean and looped maps");
-            throw new IllegalArgumentException("cannot turn OpenCL ON in WRONG geometry (-g2)");
-        }
-        if (!on && !off) {
-            if (save) throw new IllegalArgumentException("-s needs -on or -off");
-            args.info("OpenCL acceleration: " + (openClAcceleration ? "ON" : "OFF"));
-            reportGpuState(engine);
-            return;
-        }
-        if (on && (engine == null || !engine.hasOpenCL()))
-            throw new IllegalArgumentException("engine " + nameOf(engine) + " has no OpenCL path, OpenCL stays OFF");
-        setOpenClAcceleration(on);
-        args.info("OpenCL acceleration " + (on ? "ON" : "OFF"));
-        reportGpuState(engine);
-        if (save) persistSettings(renderEngineId, on);
-    }
-    private void engineCommand(DevConsole.Args args) {
-        boolean list = args.flag("-l");
-        boolean on = args.flag("-on");
-        boolean off = args.flag("-off");
-        boolean save = args.flag("-s");
-        java.util.List<String> values = args.values();
-        RenderEngine current = currentEngine();
-
-        if (list) {
-            if (!values.isEmpty() || on || off || save) throw new IllegalArgumentException("-l only lists the engines");
-            for (RenderEngine renderEngine : RenderEngines.all())
-                args.info((renderEngine == current ? "* " : "  ") + renderEngine.id() + " = " + renderEngine.displayName() + (renderEngine.hasOpenCL() ? "  [OpenCL]" : ""));
-            return;
-        }
-        if (values.isEmpty() && !on && !off && !save) {
-            if (current == null) { args.info("engine: none"); return; }
-            args.info("engine: " + current.id() + " (" + current.displayName() + "), OpenCL acceleration " + (openClAcceleration ? "ON" : "OFF"));
-            reportGpuState(current);
-            return;
-        }
-        if (values.size() > 1) throw new IllegalArgumentException("too many arguments for engine: " + values.subList(1, values.size()));
-        if (on && off) throw new IllegalArgumentException("use either -on or -off, not both");
-        RenderEngine target = values.isEmpty() ? current : findEngine(values.getFirst());
-        if (target == null && values.isEmpty()) throw new IllegalArgumentException("no engine is selected (use engine <name>, see engine -l)");
-        if (target == null) throw new IllegalArgumentException("unknown engine: " + values.getFirst() + " (see engine -l)");
-        Boolean requested = on ? Boolean.TRUE : off ? Boolean.FALSE : null;
-        if (on && GEOMETRY_MODE == MazeGenerator.GeometryMode.WRONG) {
-            args.warn("OpenCL is not used in WRONG geometry: the GPU path renders only Euclidean and looped maps");
-            throw new IllegalArgumentException("cannot turn OpenCL ON in WRONG geometry (-g2)");
-        }
-
-        renderEngineId = target.id();
-        boolean savedOpenCl = SaveData.load().openCl;
-        boolean resolved = resolveOpenClForSwap(target.hasOpenCL(), requested, savedOpenCl);
-        if (requested != null && requested && !target.hasOpenCL())
-            args.warn("engine " + target.displayName() + " has no OpenCL path, OpenCL stays OFF");
-        else if (requested == null && savedOpenCl && !target.hasOpenCL())
-            args.info("saved OpenCL setting is ON, but engine " + target.displayName() + " has no OpenCL path: OFF");
-        setOpenClAcceleration(resolved);
-        if (!target.supportsMapSize(mapWidth(), mapHeight()))
-            args.warn("engine " + target.displayName() + " does not support this map size, another engine may draw the frame");
-        args.info("engine: " + target.id() + " (" + target.displayName() + "), OpenCL acceleration " + (openClAcceleration ? "ON" : "OFF"));
-        reportGpuState(target);
-        if (save) persistSettings(target.id(), openClAcceleration);
-    }
-    //endregion
-    //region Argument Parsing
-    private static int parseSize(String text, String what) {
-        int value;
-        try { value = Integer.parseInt(text); }
-        catch (NumberFormatException exception) { throw new IllegalArgumentException(what + " must be a number, got " + text); }
-        if (value < 5 || value > 200) throw new IllegalArgumentException(what + " must be between 5 and 200");
-        return value;
-    }
-    private static int parseFloors(String text) {
-        int value;
-        try { value = Integer.parseInt(text); }
-        catch (NumberFormatException exception) { throw new IllegalArgumentException("-f needs a number of floors, for example -f15"); }
-        if (value != 1 && (value < 2 || value > 20)) throw new IllegalArgumentException("floors must be 1 or 2..20");
-        return value;
-    }
-    private static String seedFrom(String text, DevConsole.Args args) {
-        String trimmed = text.trim();
-        if (trimmed.isEmpty()) throw new IllegalArgumentException("-s needs a seed, for example -sABC123");
-        String seed = SeedUtil.normalize(trimmed);
-        if (seed.length() < trimmed.replaceAll("\\s", "").length())
-            args.warn("seed is longer than " + SeedUtil.LENGTH + " characters, shortened to " + seed);
-        return seed;
-    }
-    private static MazeGenerator.GeometryMode geometryFrom(String text) {
-        return switch (text.trim()) {
-            case "1" -> MazeGenerator.GeometryMode.EUCLIDEAN;
-            case "2" -> MazeGenerator.GeometryMode.WRONG;
-            case "3" -> MazeGenerator.GeometryMode.LOOPED;
-            default -> throw new IllegalArgumentException("geometry must be -g1 (Euclidean), -g2 (wrong) or -g3 (looped)");
-        };
-    }
+    private void applyConsoleClosed(boolean wasOpen) { if (wasOpen && !console.isOpen() && !isPaused) hideCursor(); }
     //endregion
     //endregion
 }

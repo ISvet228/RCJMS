@@ -20,6 +20,7 @@ public final class CodeGen {
     //region Prelude Sources
     private static final List<String> JAVA_PRELUDE = List.of(
             "static double rf_div(double a, double b) { return b == 0.0 ? 0.0 : a / b; }",
+            "static int rf_skyColor(double x, double y, double z, double t) { return Project.Game.SkyCeiling.colorDir(x, y, z, t); }",
             "static double rf_sin(double x) { return Math.sin(x); }",
             "static double rf_cos(double x) { return Math.cos(x); }",
             "static double rf_tan(double x) { return Math.tan(x); }",
@@ -73,6 +74,7 @@ public final class CodeGen {
             "}"
     );
     private static final List<String> C_PRELUDE = List.of(
+            Project.Game.SkyCeiling.GPU_SOURCE,
             "inline float rf_div(float a, float b) { return b == 0.0f ? 0.0f : a / b; }",
             "inline float rf_sin(float x) { return sin(x); }",
             "inline float rf_cos(float x) { return cos(x); }",
@@ -105,6 +107,7 @@ public final class CodeGen {
             "\tint bl = rf_lerpc(a & 255, b & 255, k);",
             "\treturn 0xFF000000 | (r << 16) | (g << 8) | bl;",
             "}",
+            "inline int rf_skyColor(float x, float y, float z, float t) { return skyDirGpu(x, y, z, t); }",
             "inline int rf_brightness(int c, float k) {",
             "\treturn 0xFF000000 | (rf_scale((c >> 16) & 255, k) << 16) | (rf_scale((c >> 8) & 255, k) << 8) | rf_scale(c & 255, k);",
             "}",
@@ -258,7 +261,7 @@ public final class CodeGen {
         stringBuilder.append("\t\t\tpi[b + 4] = p.linkedDirX; pi[b + 5] = p.linkedDirY;\n");
         stringBuilder.append("\t\t}\n");
         stringBuilder.append("\t\tfinal double[] pf = { f.cameraAngle, f.cameraHeight, f.cameraPitch, f.playerX, f.playerY,\n");
-        stringBuilder.append("\t\t\t\tf.curvature, (System.nanoTime() - T0) / 1e9 };\n");
+        stringBuilder.append("\t\t\t\tf.curvature, (System.nanoTime() - T0) / 1e9, f.skyCeiling ? 1.0 : 0.0, Project.Game.Fov.tanHalf() };\n");
         stringBuilder.append("\t\tfinal boolean hyp = f.geometry == MazeGenerator.GeometryMode.WRONG;\n");
         stringBuilder.append("\t\tint active = 0;\n");
         stringBuilder.append("\t\tfor (int g : PASS_GEOM) if (g == 0 || g == (hyp ? 2 : 1)) active++;\n");

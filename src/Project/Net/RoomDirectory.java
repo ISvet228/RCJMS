@@ -1,5 +1,6 @@
 package Project.Net;
 
+import Project.Helpers.Log;
 import java.io.*;
 import java.net.*;
 import java.time.Duration;
@@ -51,7 +52,7 @@ public final class RoomDirectory {
         byte[] probe = probeBytes();
         for (InetAddress target : targets()) {
             try { socket.send(new DatagramPacket(probe, probe.length, target, DISCOVERY_PORT)); }
-            catch (IOException ignored) { }
+            catch (IOException ignored) { Log.debug(ignored); }
         }
     }
     private static Set<InetAddress> targets() {
@@ -64,7 +65,7 @@ public final class RoomDirectory {
                 for (InterfaceAddress address : network.getInterfaceAddresses())
                     if (address.getBroadcast() != null) targets.add(address.getBroadcast());
             }
-        } catch (IOException | RuntimeException ignored) { }
+        } catch (IOException | RuntimeException ignored) { Log.debug(ignored); }
         return targets;
     }
     private static byte[] probeBytes() {

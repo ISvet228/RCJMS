@@ -347,15 +347,10 @@ public class TextureEditorView extends JPanel {
 
     //region Image Import
     private void importImage() {
-        JFileChooser chooser = new JFileChooser();
-        java.util.List<String> extensions = new ArrayList<>();
-        for (String ext : ImageIO.getReaderFileSuffixes()) if (ext != null && !ext.isBlank() && !extensions.contains(ext.toLowerCase(Locale.ROOT))) extensions.add(ext.toLowerCase(Locale.ROOT));
-        if (extensions.isEmpty()) extensions.add("png");
-        chooser.setFileFilter(new FileNameExtensionFilter(L("te.import_image") + " (" + String.join(", ", extensions) + ")", extensions.toArray(new String[0])));
-        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        File chosen = ImagePicker.choose(this, currentStyle);
+        if (chosen == null) return;
         try {
-            BufferedImage source = ImageIO.read(chooser.getSelectedFile());
-            if (source == null) throw new IOException(L("te.bad_image"));
+            BufferedImage source = ImageLoader.read(chosen);
             BufferedImage fitted = fitImageToBounds(source, maxHeightForMode(mode));
             int m = mode.ordinal();
             pushUndo(new Snapshot(m, copyTexture(textures[m])));
