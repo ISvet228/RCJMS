@@ -17,7 +17,7 @@ public final class GameUpdater {
     static final String WINDOWS_SCRIPT = "rcjms-update.ps1";
     static final String WINDOWS_PLAN = "rcjms-update.json";
     static final String UNIX_SCRIPT = "rcjms-update.sh";
-    static final String DEFAULT_JAR_URL = "https://github.com/ISvet228/RCJMS/releases/download/Complete-Ver/RCJMS.jar";
+    static final String DEFAULT_JAR_URL = "https://github.com/ISvetUNot/RCJMS/releases/download/Complete-Ver/RCJMS.jar";
     private static final String PENDING_NAME = "RCJMS.jar.new";
     private static final long CHECK_MILLIS = 30L * 60 * 1000;
     private static final long RACE_WAIT_MILLIS = 5000;
